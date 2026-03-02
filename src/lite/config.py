@@ -26,6 +26,9 @@ class LiteConfig:
     dedup_content_hours: int = 24
     default_reply: str = "在的，可以直接下单，拍下后我会尽快处理。"
     virtual_default_reply: str = "在的，这是虚拟商品，付款后会尽快给你处理。"
+    cookie_file: str = ""
+    cookie_check_interval_seconds: int = 300
+    cookie_audit_log_path: str = "logs/lite_cookie_renewal_audit.log"
 
 
 def load_lite_config() -> LiteConfig:
@@ -54,4 +57,7 @@ def load_lite_config() -> LiteConfig:
         virtual_default_reply=(
             os.getenv("LITE_VIRTUAL_DEFAULT_REPLY") or "在的，这是虚拟商品，付款后会尽快给你处理。"
         ).strip(),
+        cookie_file=(os.getenv("LITE_COOKIE_FILE", "") or "").strip(),
+        cookie_check_interval_seconds=int(os.getenv("LITE_COOKIE_CHECK_INTERVAL_SECONDS", "300")),
+        cookie_audit_log_path=(os.getenv("LITE_COOKIE_AUDIT_LOG_PATH", "logs/lite_cookie_renewal_audit.log")).strip(),
     )

@@ -64,6 +64,7 @@ class LiteWsClient:
         self._session_peer: dict[str, str] = {}
         self._last_heartbeat_send = 0.0
         self._last_heartbeat_ack = 0.0
+        self._reconnect_requested = asyncio.Event()
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -76,6 +77,24 @@ class LiteWsClient:
                 "Chrome/133.0.0.0 Safari/537.36"
             ),
         }
+
+    def update_cookie(self, cookie: str) -> None:
+        self.cookie = str(cookie or "").strip()
+
+    def update_auth_context(self, *, cookie: str, device_id: str, my_user_id: str) -> None:
+        """Hot update websocket auth context after cookie recovery."""
+
+        self.cookie = str(cookie or "").strip()
+        self.device_id = str(device_id or "").strip()
+        self.my_user_id = str(my_user_id or "").strip()
+
+    async def force_reconnect(self, reason: str = "manual") -> None:
+        self._reconnect_requested.set()
+        if self._ws is not None:
+            try:
+                await self._ws.close()
+            except Exception:
+                pass
 
     async def _register(self) -> None:
         if self._ws is None:
@@ -237,6 +256,9 @@ class LiteWsClient:
 
                 while not self._stop.is_set():
                     now = time.time()
+                    if self._reconnect_requested.is_set():
+                        self._reconnect_requested.clear()
+                        raise RuntimeError("reconnect requested")
                     if now - self._last_heartbeat_send >= float(self.heartbeat_interval):
                         await self._send_heartbeat()
                     if now - self._last_heartbeat_ack > float(self.heartbeat_interval + self.heartbeat_timeout):

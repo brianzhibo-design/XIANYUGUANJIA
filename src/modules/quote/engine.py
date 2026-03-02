@@ -60,8 +60,11 @@ class AutoQuoteEngine:
         )
         self.remote_provider: IQuoteProvider = RemoteQuoteProvider(
             enabled=bool(providers_cfg.get("remote", {}).get("enabled", False)),
+            api_url=str(cfg.get("remote_api_url", "")),
+            api_key_env=self._resolve_remote_api_key_env_name(cfg),
             simulated_latency_ms=int(providers_cfg.get("remote", {}).get("simulated_latency_ms", 120)),
             failure_rate=float(providers_cfg.get("remote", {}).get("failure_rate", 0.0)),
+            allow_mock=bool(providers_cfg.get("remote", {}).get("allow_mock", False)),
         )
 
         self.cache = QuoteCache(
@@ -280,6 +283,17 @@ class AutoQuoteEngine:
         if raw.startswith("${") and raw.endswith("}") and len(raw) > 3:
             return raw[2:-1]
         return "QUOTE_COST_API_KEY"
+
+    @staticmethod
+    def _resolve_remote_api_key_env_name(cfg: dict[str, Any]) -> str:
+        explicit = str(cfg.get("remote_api_key_env", "")).strip()
+        if explicit:
+            return explicit
+
+        raw = str(cfg.get("remote_api_key", "")).strip()
+        if raw.startswith("${") and raw.endswith("}") and len(raw) > 3:
+            return raw[2:-1]
+        return "QUOTE_API_KEY"
 
     @staticmethod
     def _classify_failure(error: Exception | None) -> str:

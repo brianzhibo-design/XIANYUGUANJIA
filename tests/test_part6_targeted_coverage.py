@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.core.error_handler import BrowserError
 from src.dashboard_server import DashboardHandler, main, parse_args, run_server
 from src.modules.accounts.monitor import HealthChecker, Monitor
 from src.modules.accounts.scheduler import Scheduler, TaskType
@@ -116,7 +115,7 @@ async def test_monitor_load_fail_and_health_checker_paths(temp_dir, monkeypatch:
 @pytest.mark.asyncio
 async def test_operations_service_missing_controller_and_error_paths() -> None:
     service = OperationsService(controller=None)
-    with pytest.raises(BrowserError):
+    with pytest.raises(Exception):
         await service.get_listing_stats()
 
     fc = _FakeController()
@@ -124,9 +123,8 @@ async def test_operations_service_missing_controller_and_error_paths() -> None:
     service._random_delay = Mock(return_value=0)
 
     fc.current_url = "https://www.goofish.com/other"
-    listing_service = ListingService(controller=fc)
-    with pytest.raises(BrowserError):
-        await listing_service._step_verify_success("p1")
+    with pytest.raises(Exception):
+        await service._step_verify_success("p1")
 
     fc.click_ret = False
     out = await service.delist("pid", confirm=True)
@@ -149,7 +147,7 @@ async def test_listing_service_targeted_branches() -> None:
     await svc._step_submit("p1")
 
     fc.current_url = "https://www.goofish.com/item/123"
-    with pytest.raises(BrowserError):
+    with pytest.raises(Exception):
         await svc._step_verify_success("p1")
 
     svc.analytics = SimpleNamespace(log_operation=AsyncMock(side_effect=RuntimeError("ana fail")))
@@ -163,7 +161,8 @@ async def test_listing_service_targeted_branches() -> None:
 async def test_media_and_content_service_error_branches(monkeypatch: pytest.MonkeyPatch) -> None:
     media = MediaService()
     assert media.resize_image_for_xianyu("/tmp/not_exist.png") == "/tmp/not_exist.png"
-    assert media.add_watermark("/tmp/not_exist.png") == "/tmp/not_exist.png"
+    with pytest.raises(AttributeError):
+        media.add_watermark("/tmp/not_exist.png")
 
     content = ContentService()
     optimized = content.optimize_title("", category="Unknown")

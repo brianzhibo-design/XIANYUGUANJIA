@@ -268,12 +268,15 @@ class Config:
                 "markup_rules": {},
                 "cost_api_url": "",
                 "cost_api_key_env": "QUOTE_COST_API_KEY",
+                "remote_api_url": "",
+                "remote_api_key_env": "QUOTE_API_KEY",
                 "api_fallback_to_table_parallel": True,
                 "api_prefer_max_wait_seconds": 1.2,
                 "volume_divisor_default": 6000,
                 "providers": {
                     "remote": {
                         "enabled": False,
+                        "allow_mock": False,
                         "simulated_latency_ms": 120,
                         "failure_rate": 0.0,
                     }

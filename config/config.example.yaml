@@ -207,6 +207,8 @@ quote:
   cost_table_patterns: ["*.xlsx", "*.csv"]
   cost_api_url: ""
   cost_api_key_env: "QUOTE_COST_API_KEY"
+  remote_api_url: ""
+  remote_api_key_env: "QUOTE_API_KEY"
   api_fallback_to_table_parallel: true
   api_prefer_max_wait_seconds: 1.2
   volume_divisor_default: 6000
@@ -219,6 +221,7 @@ quote:
   providers:
     remote:
       enabled: false
+      allow_mock: false # 仅用于兼容压测/联调；生产应保持 false
       simulated_latency_ms: 120
       failure_rate: 0.0
 

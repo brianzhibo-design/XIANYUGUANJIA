@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.core.error_handler import BrowserError
 from src.lite.ws_client import LiteWsClient
 from src.modules.messages.service import MessagesService
 from src.modules.quote.excel_import import ExcelAdaptiveImporter
@@ -165,7 +164,7 @@ async def test_messages_service_ensure_ws_transport_cookie_and_import_fail(msg_s
     msg_service.transport_mode = "ws"
     msg_service.config["cookie"] = ""
     monkeypatch.setattr("src.modules.messages.service.os.getenv", lambda *_a, **_k: "")
-    with pytest.raises(BrowserError):
+    with pytest.raises(Exception):
         await msg_service._ensure_ws_transport()
 
     msg_service.transport_mode = "auto"

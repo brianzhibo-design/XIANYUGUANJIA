@@ -304,23 +304,107 @@ class ApiCostMarkupQuoteProvider(IQuoteProvider):
 
 
 class RemoteQuoteProvider(IQuoteProvider):
-    """外部运价 provider 占位实现（mock）。"""
+    """外部运价 provider（默认要求真实远程 API，legacy mock 仅兼容保留）。"""
 
     def __init__(
         self,
         *,
         enabled: bool = True,
+        api_url: str = "",
+        api_key_env: str = "QUOTE_API_KEY",
         simulated_latency_ms: int = 120,
         failure_rate: float = 0.0,
+        allow_mock: bool = False,
     ):
         self.enabled = enabled
+        self.api_url = str(api_url or "").strip()
+        self.api_key_env = str(api_key_env or "").strip()
         self.simulated_latency_ms = max(0, simulated_latency_ms)
         self.failure_rate = min(max(failure_rate, 0.0), 1.0)
+        self.allow_mock = bool(allow_mock)
 
     async def get_quote(self, request: QuoteRequest, timeout_ms: int = 3000) -> QuoteResult:
         if not self.enabled:
             raise QuoteProviderError("Remote provider disabled")
 
+        if self.api_url:
+            return await self._get_quote_from_remote_api(request, timeout_ms=timeout_ms)
+
+        if self.allow_mock:
+            return await self._get_quote_from_legacy_mock(request, timeout_ms=timeout_ms)
+
+        raise QuoteProviderError("Remote provider api_url is empty")
+
+    async def _get_quote_from_remote_api(self, request: QuoteRequest, timeout_ms: int = 3000) -> QuoteResult:
+        headers = {"Content-Type": "application/json"}
+        api_key = os.getenv(self.api_key_env, "").strip() if self.api_key_env else ""
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+            headers["X-API-Key"] = api_key
+
+        payload = {
+            "origin": request.origin,
+            "destination": request.destination,
+            "weight": request.weight,
+            "volume": request.volume,
+            "courier": request.courier,
+            "service_level": request.service_level,
+            "item_type": request.item_type,
+            "time_window": request.time_window,
+        }
+
+        timeout_seconds = max(0.2, float(timeout_ms) / 1000.0)
+        try:
+            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+                response = await client.post(self.api_url, json=payload, headers=headers)
+        except Exception as exc:
+            raise QuoteProviderError(f"Remote quote api request failed: {exc}") from exc
+
+        if response.status_code >= 400:
+            raise QuoteProviderError(f"Remote quote api http {response.status_code}")
+
+        try:
+            body = response.json()
+        except Exception as exc:
+            raise QuoteProviderError(f"Remote quote api invalid json: {exc}") from exc
+
+        parsed = _parse_remote_quote_response(body)
+        total_fee = _to_float(parsed.get("total_fee"))
+        base_fee = _to_float(parsed.get("base_fee"))
+        if total_fee is None and base_fee is None:
+            raise QuoteProviderError("Remote quote api missing total_fee/base_fee")
+
+        surcharges = parsed.get("surcharges") if isinstance(parsed.get("surcharges"), dict) else {}
+        normalized_surcharges = {
+            str(k): round(float(v), 2)
+            for k, v in surcharges.items()
+            if _to_float(v) is not None
+        }
+        fallback_base = max(0.0, float(total_fee or 0.0) - sum(normalized_surcharges.values()))
+        resolved_base = float(base_fee if base_fee is not None else fallback_base)
+        resolved_total = float(total_fee if total_fee is not None else (resolved_base + sum(normalized_surcharges.values())))
+
+        provider_name = str(parsed.get("provider") or "remote_api")
+        explain = parsed.get("explain") if isinstance(parsed.get("explain"), dict) else {}
+
+        return QuoteResult(
+            provider=provider_name,
+            base_fee=round(resolved_base, 2),
+            surcharges=normalized_surcharges,
+            total_fee=round(resolved_total, 2),
+            eta_minutes=int(parsed.get("eta_minutes") or _eta_by_service_level(request.service_level)),
+            confidence=float(parsed.get("confidence") or 0.93),
+            explain={
+                **explain,
+                "source": provider_name,
+                "api_url": self.api_url,
+                "origin": request.origin,
+                "destination": request.destination,
+                "weight_kg": request.weight,
+            },
+        )
+
+    async def _get_quote_from_legacy_mock(self, request: QuoteRequest, timeout_ms: int = 3000) -> QuoteResult:
         budget_ms = max(50, timeout_ms)
         await asyncio.sleep(min(self.simulated_latency_ms, budget_ms) / 1000)
 
@@ -351,7 +435,9 @@ class RemoteQuoteProvider(IQuoteProvider):
         )
 
     async def health_check(self) -> bool:
-        return self.enabled
+        if not self.enabled:
+            return False
+        return bool(self.api_url) or self.allow_mock
 
 
 def _requested_courier(courier: str | None) -> str | None:
@@ -445,6 +531,36 @@ def _parse_cost_api_response(data: Any) -> dict[str, Any]:
         or payload.get("weight_billable"),
         "eta_minutes": payload.get("eta_minutes") or payload.get("eta"),
         "confidence": payload.get("confidence"),
+    }
+
+
+def _parse_remote_quote_response(data: Any) -> dict[str, Any]:
+    if isinstance(data, dict):
+        payload = data.get("data") if isinstance(data.get("data"), dict) else data
+    elif isinstance(data, list) and data:
+        payload = data[0] if isinstance(data[0], dict) else {}
+    else:
+        payload = {}
+
+    if not isinstance(payload, dict):
+        payload = {}
+
+    surcharges = payload.get("surcharges")
+    if not isinstance(surcharges, dict):
+        surcharges = payload.get("fees") if isinstance(payload.get("fees"), dict) else {}
+
+    explain = payload.get("explain")
+    if not isinstance(explain, dict):
+        explain = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+
+    return {
+        "provider": payload.get("provider") or payload.get("source") or payload.get("vendor"),
+        "base_fee": payload.get("base_fee") or payload.get("base_price") or payload.get("first_price"),
+        "total_fee": payload.get("total_fee") or payload.get("total_price") or payload.get("price"),
+        "surcharges": surcharges,
+        "eta_minutes": payload.get("eta_minutes") or payload.get("eta"),
+        "confidence": payload.get("confidence"),
+        "explain": explain,
     }
 
 

@@ -12,27 +12,36 @@ from src.modules.quote.engine import AutoQuoteEngine
 from src.modules.quote.models import QuoteRequest
 
 from .config import load_lite_config
+from .cookie_renewal import CookieRenewalManager, build_cookie_loader
+from .cookie_source_adapter import BrowserSessionCookieSource, CookieSourceAdapter, FileEnvCookieSource
 from .dedup import DualLayerDedup
 from .ws_client import LiteWsClient
 from .xianyu_api import XianyuApiClient
 
 
 def _try_parse_quote_request(text: str) -> QuoteRequest | None:
-    """Best-effort parsing for basic route+weight messages."""
-
     raw = str(text or "")
     city_match = re.search(r"([\u4e00-\u9fa5]{2,})\s*(?:到|->|至)\s*([\u4e00-\u9fa5]{2,})", raw)
     weight_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:kg|公斤|斤)", raw, flags=re.IGNORECASE)
     if not city_match or not weight_match:
         return None
 
-    origin = city_match.group(1)
-    destination = city_match.group(2)
     weight = float(weight_match.group(1))
     if "斤" in weight_match.group(0):
         weight = weight / 2.0
+    return QuoteRequest(origin=city_match.group(1), destination=city_match.group(2), weight=max(0.1, weight))
 
-    return QuoteRequest(origin=origin, destination=destination, weight=max(0.1, weight))
+
+async def _token_provider(api_client: XianyuApiClient, cookie_renewal: CookieRenewalManager) -> str:
+    """Token 获取失败时触发自动续期闭环，再重试一次。"""
+
+    try:
+        return await api_client.get_token()
+    except Exception as exc:
+        ok = await cookie_renewal.handle_auth_failure(reason=f"token_fetch_failed:{exc}")
+        if not ok:
+            raise
+        return await api_client.get_token(force_refresh=True)
 
 
 async def _process_loop(
@@ -90,25 +99,29 @@ async def _amain() -> None:
     await api_client.has_login()
     await api_client.get_token(force_refresh=True)
 
-    dedup = DualLayerDedup(
-        cfg.dedup_db_path,
-        exact_days=cfg.dedup_exact_days,
-        content_hours=cfg.dedup_content_hours,
-    )
+    dedup = DualLayerDedup(cfg.dedup_db_path, exact_days=cfg.dedup_exact_days, content_hours=cfg.dedup_content_hours)
     await dedup.init()
 
-    reply_engine = ReplyStrategyEngine(
-        default_reply=cfg.default_reply,
-        virtual_default_reply=cfg.virtual_default_reply,
-    )
+    reply_engine = ReplyStrategyEngine(default_reply=cfg.default_reply, virtual_default_reply=cfg.virtual_default_reply)
     quote_engine = AutoQuoteEngine()
 
+    cookie_loader = build_cookie_loader(
+        inline_cookie=cfg.cookie,
+        cookie_file=str(getattr(cfg, "cookie_file", "") or "").strip(),
+    )
+    cookie_source_adapter = CookieSourceAdapter(
+        browser_source=BrowserSessionCookieSource(),
+        fallback_source=FileEnvCookieSource(
+            inline_cookie=cfg.cookie,
+            cookie_file=str(getattr(cfg, "cookie_file", "") or "").strip(),
+        ),
+    )
     ws_client = LiteWsClient(
         ws_url=cfg.ws_url,
         cookie=cfg.cookie,
         device_id=api_client.device_id,
         my_user_id=api_client.user_id,
-        token_provider=api_client.get_token,
+        token_provider=lambda: _token_provider(api_client, cookie_renewal),
         heartbeat_interval=cfg.heartbeat_interval,
         heartbeat_timeout=cfg.heartbeat_timeout,
         reconnect_base_delay=cfg.reconnect_base_delay,
@@ -116,20 +129,31 @@ async def _amain() -> None:
         reconnect_max_delay=cfg.reconnect_max_delay,
         message_expire_ms=cfg.message_expire_ms,
     )
+    cookie_renewal = CookieRenewalManager(
+        api_client=api_client,
+        ws_client=ws_client,
+        cookie_loader=cookie_loader,
+        cookie_source_adapter=cookie_source_adapter,
+        cookie_file_path=str(getattr(cfg, "cookie_file", "") or "").strip(),
+        audit_log_path=str(getattr(cfg, "cookie_audit_log_path", "logs/lite_cookie_renewal_audit.log")),
+        check_interval_seconds=int(getattr(cfg, "cookie_check_interval_seconds", 300) or 300),
+    )
 
     logger.info("🐟 xianyu-openclaw Lite Mode starting...")
+    logger.info(f"lite_cookie_renewal_status={cookie_renewal.status()}")
     runner = asyncio.create_task(ws_client.run_forever())
     processor = asyncio.create_task(_process_loop(ws_client, dedup, reply_engine, quote_engine))
+    renewal_task = asyncio.create_task(cookie_renewal.run_forever())
 
     try:
-        await asyncio.gather(runner, processor)
+        await asyncio.gather(runner, processor, renewal_task)
     finally:
+        cookie_renewal.stop()
+        renewal_task.cancel()
         await ws_client.stop()
 
 
 def main() -> None:
-    """Program entrypoint."""
-
     asyncio.run(_amain())
 
 

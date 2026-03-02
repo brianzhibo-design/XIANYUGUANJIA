@@ -43,14 +43,48 @@ async def test_remote_provider_edges(monkeypatch):
     with pytest.raises(QuoteProviderError):
         await p.get_quote(req)
 
-    p2 = RemoteQuoteProvider(enabled=True, simulated_latency_ms=500, failure_rate=0)
+    p2 = RemoteQuoteProvider(enabled=True, simulated_latency_ms=500, failure_rate=0, allow_mock=True)
     with pytest.raises(QuoteProviderError):
         await p2.get_quote(req, timeout_ms=50)
 
     monkeypatch.setattr("random.random", lambda: 0.0)
-    p3 = RemoteQuoteProvider(enabled=True, simulated_latency_ms=1, failure_rate=1.0)
+    p3 = RemoteQuoteProvider(enabled=True, simulated_latency_ms=1, failure_rate=1.0, allow_mock=True)
     with pytest.raises(QuoteProviderError):
         await p3.get_quote(req, timeout_ms=100)
+
+    p4 = RemoteQuoteProvider(enabled=True)
+    with pytest.raises(QuoteProviderError):
+        await p4.get_quote(req, timeout_ms=100)
+
+    captured = {}
+
+    class RespOk:
+        status_code = 200
+
+        def json(self):
+            return {"data": {"provider": "remote_vendor", "base_fee": 10, "total_fee": 12.5, "surcharges": {"fuel": 2.5}}}
+
+    class ClientOk:
+        def __init__(self, timeout=None):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_a):
+            return False
+
+        async def post(self, _url, json=None, headers=None):
+            captured["headers"] = headers
+            captured["json"] = json
+            return RespOk()
+
+    monkeypatch.setattr("httpx.AsyncClient", ClientOk)
+    monkeypatch.setenv("QUOTE_API_KEY", "k")
+    p5 = RemoteQuoteProvider(enabled=True, api_url="http://remote", api_key_env="QUOTE_API_KEY")
+    r = await p5.get_quote(req, timeout_ms=120)
+    assert r.provider == "remote_vendor"
+    assert captured["headers"]["X-API-Key"] == "k"
 
 
 @pytest.mark.asyncio

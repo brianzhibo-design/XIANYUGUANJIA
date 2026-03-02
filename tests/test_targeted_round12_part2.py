@@ -252,7 +252,7 @@ async def test_messages_service_ws_quote_and_send_branches(monkeypatch, tmp_path
     s.compliance_guard = SimpleNamespace(evaluate_content=lambda _text: {"blocked": False})
     s._get_quote_context = lambda sid: {"courier_choice": "圆通"}
     s._has_quote_context = lambda sid: True
-    _reply1, meta1 = await s._generate_reply_with_quote("我要下单", session_id="sid")
+    reply1, meta1 = await s._generate_reply_with_quote("我要下单", session_id="sid")
     assert meta1["quote_need_info"] is True and meta1["is_quote"] is True
 
     s.strict_format_reply_enabled = True
@@ -378,8 +378,8 @@ async def test_quote_engine_and_provider_extra_branches(monkeypatch, tmp_path):
     async def slow_api(*_a, **_k):
         try:
             await asyncio.sleep(0.05)
-        except asyncio.CancelledError as err:
-            raise RuntimeError("cancelled") from err
+        except asyncio.CancelledError:
+            raise RuntimeError("cancelled")
         return _quote_result("api")
 
     monkeypatch.setattr(engine7.api_cost_provider, "get_quote", slow_api)
@@ -463,7 +463,7 @@ async def test_quote_engine_and_provider_extra_branches(monkeypatch, tmp_path):
     assert captured["headers"]["X-API-Key"] == "abc"
     assert await api_provider.health_check() is True
 
-    remote_provider = RemoteQuoteProvider(enabled=True, simulated_latency_ms=0, failure_rate=0.0)
+    remote_provider = RemoteQuoteProvider(enabled=True, simulated_latency_ms=0, failure_rate=0.0, allow_mock=True)
     urgent_quote = await remote_provider.get_quote(QuoteRequest(origin="A", destination="B", weight=1.0, service_level="urgent"))
     assert urgent_quote.base_fee == 16.0
     assert await remote_provider.health_check() is True

@@ -6,7 +6,6 @@ import sqlite3
 import sys
 import types
 import zipfile
-from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -15,7 +14,7 @@ from src.dashboard_server import DASHBOARD_HTML, MIMIC_COOKIE_HTML, DashboardRep
 
 
 def _init_db(path: str) -> None:
-    with closing(sqlite3.connect(path)) as conn, conn:
+    with sqlite3.connect(path) as conn:
         conn.execute(
             """
             CREATE TABLE operation_logs (
@@ -855,7 +854,7 @@ def test_service_auto_fix_returns_cookie_update_required_when_validate_failed(te
 
 def test_query_message_stats_from_workflow_success(monkeypatch, temp_dir) -> None:
     db_path = temp_dir / "workflow.db"
-    with closing(sqlite3.connect(db_path)) as conn, conn:
+    with sqlite3.connect(db_path) as conn:
         conn.execute("CREATE TABLE session_state_transitions (status TEXT, to_state TEXT, created_at TEXT)")
         conn.execute("CREATE TABLE session_tasks (id INTEGER)")
         conn.execute("CREATE TABLE workflow_jobs (id INTEGER)")
@@ -869,6 +868,8 @@ def test_query_message_stats_from_workflow_success(monkeypatch, temp_dir) -> Non
         )
         conn.executemany("INSERT INTO session_tasks (id) VALUES (?)", [(1,), (2,)])
         conn.executemany("INSERT INTO workflow_jobs (id) VALUES (?)", [(1,), (2,), (3,)])
+        conn.commit()
+
     class _Cfg:
         def get_section(self, name: str, default=None):
             _ = default

@@ -42,6 +42,8 @@ async def test_cmd_messages_unknown_action(monkeypatch):
 
 
 def test_main_without_command(monkeypatch):
+    parser = cli.build_parser()
+
     class P:
         def parse_args(self):
             return argparse.Namespace(command=None)

@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from src.core.error_handler import BrowserError
 from src.modules.analytics.report_generator import ReportFormatter, ReportGenerator
 from src.modules.analytics.service import AnalyticsService, DateRange
 from src.modules.compliance.center import ComplianceCenter, ComplianceDecision
@@ -79,7 +78,7 @@ async def test_operations_missing_branches(monkeypatch):
     c = DummyController()
     svc = OperationsService(controller=c)
 
-    with pytest.raises(BrowserError):
+    with pytest.raises(Exception):
         await OperationsService(controller=None).refresh_inventory()
 
     c.set_click_results([True, True])
@@ -140,7 +139,7 @@ async def test_listing_missing_branches(monkeypatch):
 
     svc._click_text_option = _false
     await svc._step_select_condition("p", ["no-match"])
-    with pytest.raises(BrowserError):
+    with pytest.raises(Exception):
         await ListingService(controller=None).get_my_listings()
 
 

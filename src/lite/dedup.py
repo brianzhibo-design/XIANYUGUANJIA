@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import time
-from pathlib import Path
 
 import aiosqlite
 
@@ -20,7 +19,6 @@ class DualLayerDedup:
     async def init(self) -> None:
         """Create tables if absent."""
 
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """

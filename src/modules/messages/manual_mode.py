@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from collections.abc import Iterator
-from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,11 +38,10 @@ class ManualModeStore:
         self.timeout_seconds = max(1, int(timeout_seconds))
         self._ensure_schema()
 
-    @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
-            conn.row_factory = sqlite3.Row
-            yield conn
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
 
     def _ensure_schema(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

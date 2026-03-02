@@ -189,7 +189,7 @@ def test_config_missing_lines(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_config_models_validation_errors() -> None:
-    with pytest.raises(ValueError, match=r"dom\|ws\|auto"):
+    with pytest.raises(ValueError, match="dom\|ws\|auto"):
         MessagesConfig(transport="xxx")
     with pytest.raises(ValueError, match="runtime must be one of"):
         AppConfig(runtime="bad")

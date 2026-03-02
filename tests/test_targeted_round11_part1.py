@@ -45,9 +45,9 @@ def test_cli_module_helpers_runtime_files_and_commands(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_MODULE_RUNTIME_DIR", tmp_path)
 
     p = cli._module_state_path("presales")
-    log_path = cli._module_log_path("presales")
+    l = cli._module_log_path("presales")
     assert p.parent == tmp_path
-    assert log_path.parent == tmp_path
+    assert l.parent == tmp_path
 
     args = _ns(max_loops=2, interval=9, workflow_db="wf.db", dry_run=True)
     cmd = cli._build_module_start_command("presales", args)

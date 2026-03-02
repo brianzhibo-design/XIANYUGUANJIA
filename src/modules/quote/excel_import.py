@@ -6,12 +6,7 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.modules.quote.cost_table import (
-    CostRecord,
-    CostTableRepository,
-    normalize_courier_name,
-    normalize_location_name,
-)
+from src.modules.quote.cost_table import CostRecord, CostTableRepository, normalize_courier_name
 from src.modules.quote.geo_resolver import GeoResolver
 
 
@@ -32,8 +27,6 @@ class ExcelAdaptiveImporter:
     }
 
     def __init__(self) -> None:
-        # Kept for test/backward compatibility even though normalization now
-        # reuses cost_table's canonical helper.
         self.geo = GeoResolver()
 
     def import_file(self, excel_path: str | Path) -> ImportResult:
@@ -58,10 +51,8 @@ class ExcelAdaptiveImporter:
 
             for row in rows[head_idx + 1 :]:
                 courier = normalize_courier_name(self._cell(row, header_map.get("courier")) or sheet_courier)
-                # Reuse repository normalization so full province names map cleanly
-                # to canonical short names without truncating autonomous regions.
-                origin = normalize_location_name(self._cell(row, header_map.get("origin")))
-                destination = normalize_location_name(self._cell(row, header_map.get("destination")))
+                origin = self.geo.normalize(self._cell(row, header_map.get("origin")))
+                destination = self.geo.normalize(self._cell(row, header_map.get("destination")))
                 first_cost = self._to_float(self._cell(row, header_map.get("first_cost")))
                 extra_cost = self._to_float(self._cell(row, header_map.get("extra_cost")))
                 throw_ratio = self._to_float(self._cell(row, header_map.get("throw_ratio")))
