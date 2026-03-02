@@ -12,11 +12,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Dashboard 新增 `/api/orders/callback`，支持接收订单推送并在支付后自动同步订单状态
   - 当已配置闲管家且开启自动履约时，实物订单可在支付后自动触发物流发货
 - **Dashboard 闲管家控制面板**：
-  - 首页新增闲管家可视化配置区，可保存 AppKey/AppSecret、自动改价、自动发货与“支付后自动触发”开关
+  - 首页新增闲管家可视化配置区，可保存 AppKey/AppSecret、自动改价、自动发货与"支付后自动触发"开关
   - 新增 Dashboard 手动重试入口：API 改价、API 发货
 
 ### Changed
 - 实物订单在未真正提交物流单、仅降级为人工发货任务时，状态保持为 `processing`，避免误标记为 `shipping`
+
+## [6.1.0] - 2026-03-02
+
+### Added
+- **Workflow 并发安全加固**：
+  - `claim_jobs` 使用 `BEGIN IMMEDIATE` + `rowcount` 双重校验，防止多 worker 重复领取
+  - `complete_job` / `fail_job` 新增 `expected_lease_until` 参数，lease 不匹配时拒绝操作并记录警告
+  - `WorkflowJob` 新增 `lease_until` 字段，全链路透传租约信息
+- **议价改价执行链路**（`PriceExecutionService`）：
+  - 策略决策（底价保护）→ 真实改价 → 回写追溯 → 失败飞书告警
+  - 完整事件溯源：`strategy_decided → execution_started → execution_finished`
+- **最小 E2E 闭环门禁**：
+  - `tests/test_e2e_minimal_closed_loop.py`：询价 → 改价 → 回调 → 结果回写全链路验证
+  - `docs/qa/minimal-e2e-gate-template.md`：统一放行证据模板
+- **README 路线图**：新增模块化实施总览（M1~M12）与分期路线图
+
+### Changed
+- `run_once` 中 `complete_job` / `fail_job` 调用改为检查返回值，lease 不匹配时记录 warning 日志
 
 ## [6.0.0] - 2026-03-02
 
