@@ -121,7 +121,9 @@ class MediaService:
         Returns:
             处理后的图片路径
         """
-        watermark_config = self.config.get("watermark", {})
+        watermark_config = self.config.get("watermark") or {}
+        if not isinstance(watermark_config, dict):
+            return image_path
         if not watermark_config.get("enabled", False):
             return image_path
 
