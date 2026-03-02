@@ -664,7 +664,9 @@ class MimicOps:
             result = service.process_callback(
                 data,
                 dry_run=self._to_bool(data.get("dry_run"), default=False),
-                auto_deliver=bool(settings["configured"] and settings["auto_ship_enabled"] and settings["auto_ship_on_paid"]),
+                auto_deliver=bool(
+                    settings["configured"] and settings["auto_ship_enabled"] and settings["auto_ship_on_paid"]
+                ),
             )
         except Exception as exc:
             return {"success": False, "error": str(exc)}

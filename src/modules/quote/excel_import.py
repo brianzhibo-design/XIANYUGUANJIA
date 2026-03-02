@@ -125,7 +125,11 @@ class ExcelAdaptiveImporter:
             for key, aliases in cleaned_aliases.items():
                 if key in mapped:
                     continue
-                if cell in aliases or (key == "first_cost" and "首重" in cell) or (key == "extra_cost" and "续重" in cell):
+                if (
+                    cell in aliases
+                    or (key == "first_cost" and "首重" in cell)
+                    or (key == "extra_cost" and "续重" in cell)
+                ):
                     mapped[key] = idx
         return mapped
 

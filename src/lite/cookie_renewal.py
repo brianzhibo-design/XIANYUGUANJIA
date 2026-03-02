@@ -116,7 +116,11 @@ class CookieRenewalManager:
 
             # 触发式：失败时先尝试统一 cookie source adapter（浏览器优先，失败降级）
             snap = await self._get_latest_cookie_snapshot(reason=f"triggered_cookie_probe:{reason}")
-            auto_cookie = str((getattr(snap, "cookie_text", "") if snap is not None else "") or (snap.get("cookie_text", "") if isinstance(snap, dict) else "") or "").strip()
+            auto_cookie = str(
+                (getattr(snap, "cookie_text", "") if snap is not None else "")
+                or (snap.get("cookie_text", "") if isinstance(snap, dict) else "")
+                or ""
+            ).strip()
             cookie_text = str(auto_cookie or self.cookie_loader() or "").strip()
             if not cookie_text:
                 self._consecutive_failures += 1
@@ -153,7 +157,9 @@ class CookieRenewalManager:
 
             try:
                 self._state = "detected_invalid"
-                await self._audit(event="renew_start", ok=True, reason=reason, changed=changed, state="detected_invalid")
+                await self._audit(
+                    event="renew_start", ok=True, reason=reason, changed=changed, state="detected_invalid"
+                )
 
                 # 先校验 token，再提交替换（避免脏 cookie 覆盖现网）
                 await self._validate_candidate_cookie(cookie_text)
@@ -261,13 +267,16 @@ class CookieRenewalManager:
         except Exception:
             return
 
-
     async def _get_latest_cookie_snapshot(self, *, reason: str) -> Any | None:
         adapter_getter = getattr(self.cookie_source_adapter, "get_latest_cookie", None)
         if callable(adapter_getter):
             try:
                 snap = await adapter_getter()
-                cookie_text = str((getattr(snap, "cookie_text", "") if snap is not None else "") or (snap.get("cookie_text", "") if isinstance(snap, dict) else "") or "").strip()
+                cookie_text = str(
+                    (getattr(snap, "cookie_text", "") if snap is not None else "")
+                    or (snap.get("cookie_text", "") if isinstance(snap, dict) else "")
+                    or ""
+                ).strip()
                 if cookie_text:
                     self._persist_cookie(cookie_text)
                     await self._audit(

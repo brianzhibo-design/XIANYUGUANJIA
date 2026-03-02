@@ -11,7 +11,9 @@ class ITicketTextResponder(ABC):
     """Converts structured ticket data into a buyer-facing reply."""
 
     @abstractmethod
-    async def compose_pre_sale_reply(self, selection: TicketSelection, quote: TicketQuote, needs_manual_review: bool) -> str:
+    async def compose_pre_sale_reply(
+        self, selection: TicketSelection, quote: TicketQuote, needs_manual_review: bool
+    ) -> str:
         pass
 
     @abstractmethod

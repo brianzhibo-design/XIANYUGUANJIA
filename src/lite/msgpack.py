@@ -96,7 +96,9 @@ class MessagePackDecoder:
 def decrypt_payload(raw: str) -> Any | None:
     """Decode base64 payload into JSON object or MessagePack object."""
 
-    text = "".join(ch for ch in str(raw or "") if ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=-_")
+    text = "".join(
+        ch for ch in str(raw or "") if ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=-_"
+    )
     if not text:
         return None
     while len(text) % 4:

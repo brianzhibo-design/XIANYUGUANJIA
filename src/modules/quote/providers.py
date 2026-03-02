@@ -375,14 +375,12 @@ class RemoteQuoteProvider(IQuoteProvider):
             raise QuoteProviderError("Remote quote api missing total_fee/base_fee")
 
         surcharges = parsed.get("surcharges") if isinstance(parsed.get("surcharges"), dict) else {}
-        normalized_surcharges = {
-            str(k): round(float(v), 2)
-            for k, v in surcharges.items()
-            if _to_float(v) is not None
-        }
+        normalized_surcharges = {str(k): round(float(v), 2) for k, v in surcharges.items() if _to_float(v) is not None}
         fallback_base = max(0.0, float(total_fee or 0.0) - sum(normalized_surcharges.values()))
         resolved_base = float(base_fee if base_fee is not None else fallback_base)
-        resolved_total = float(total_fee if total_fee is not None else (resolved_base + sum(normalized_surcharges.values())))
+        resolved_total = float(
+            total_fee if total_fee is not None else (resolved_base + sum(normalized_surcharges.values()))
+        )
 
         provider_name = str(parsed.get("provider") or "remote_api")
         explain = parsed.get("explain") if isinstance(parsed.get("explain"), dict) else {}

@@ -63,7 +63,9 @@ class FileEnvCookieSource:
         if not cookie_text:
             import os
 
-            cookie_text = str(os.getenv("LITE_COOKIE") or os.getenv("XIANYU_COOKIE_1") or self.inline_cookie or "").strip()
+            cookie_text = str(
+                os.getenv("LITE_COOKIE") or os.getenv("XIANYU_COOKIE_1") or self.inline_cookie or ""
+            ).strip()
 
         if not cookie_text:
             return None

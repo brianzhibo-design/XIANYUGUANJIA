@@ -47,7 +47,9 @@ class TicketingService:
         upstream_quote = await self.provider.quote_ticket(selection)
         return self.pricing.quote(selection, upstream_quote)
 
-    async def quote_from_screenshot(self, image_bytes: bytes, mime_type: str = "image/png") -> tuple[TicketSelection, TicketQuote]:
+    async def quote_from_screenshot(
+        self, image_bytes: bytes, mime_type: str = "image/png"
+    ) -> tuple[TicketSelection, TicketQuote]:
         selection = await self.recognize(image_bytes, mime_type=mime_type)
         quote = await self.quote(selection)
         return selection, quote

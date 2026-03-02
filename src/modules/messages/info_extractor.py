@@ -12,9 +12,7 @@ from src.modules.quote.geo_resolver import GeoResolver
 
 _LLMExtractor = Callable[[str, str], dict[str, Any]]
 
-_ROUTE_PATTERNS = (
-    r"(?:从)?([\u4e00-\u9fa5]{2,12})\s*(?:到|发往|寄往|发|寄|->|→|-|—|~|～)\s*([\u4e00-\u9fa5]{2,12})",
-)
+_ROUTE_PATTERNS = (r"(?:从)?([\u4e00-\u9fa5]{2,12})\s*(?:到|发往|寄往|发|寄|->|→|-|—|~|～)\s*([\u4e00-\u9fa5]{2,12})",)
 
 _DIMENSION_PATTERNS = (
     r"(\d+\.?\d*)\s*[xX×*]\s*(\d+\.?\d*)\s*[xX×*]\s*(\d+\.?\d*)",
