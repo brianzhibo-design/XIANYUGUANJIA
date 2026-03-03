@@ -69,9 +69,29 @@ AI 助手会自动帮你在闲鱼上完成这些操作。
 ### 3.2 下载本工具
 
 1. 打开 https://github.com/G3niusYukki/xianyu-openclaw
-2. 点击绿色的 "Code" 按钮
+2. 点击绿色的 "Code"按钮
 3. 点击 "Download ZIP"
 4. 解压到你想放的位置
+
+### 3.2.1 Windows 一键部署工具（推荐 Windows 用户）
+
+如果你使用 Windows，可以直接用图形化工具完成所有配置，不需要打开命令行：
+
+1. 确保已安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+2. 从 [Releases 页面](https://github.com/G3niusYukki/xianyu-openclaw/releases/latest) 下载 `xianyu-openclaw-launcher.zip`
+3. 解压到你想放的位置（如桌面）
+4. 双击 `xianyu-openclaw-launcher.exe`
+5. 按向导步骤操作：
+   - **第 1 步**：工具会自动检测 Docker 是否安装，如未安装会引导你下载
+   - **第 2 步**：选择网关 AI 服务（推荐 Anthropic），填入 API Key
+   - **第 3 步**：选择业务文案 AI 服务（推荐 DeepSeek），填入 API Key
+   - **第 4 步**：设置登录密码、端口等（有默认值，可以不改）
+   - **第 5 步**：粘贴闲鱼 Cookie（获取方法见[第 4 节](#4-获取闲鱼-cookie)）
+   - **第 6 步**：确认所有信息，点击"生成配置并启动"
+6. 等待启动完成，工具会自动打开浏览器
+7. 用你设置的密码登录，开始使用！
+
+> 使用 EXE 工具后，你不再需要手动编辑 `.env` 文件或输入任何命令。
 
 ### 3.3 获取 AI 密钥
 
@@ -441,4 +461,4 @@ docker compose logs -f
 
 ---
 
-**版本**: v4.9.0 | **更新日期**: 2026-02-28
+**版本**: v6.1.0 | **更新日期**: 2026-03-03

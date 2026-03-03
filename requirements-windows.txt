@@ -1,0 +1,9 @@
+# Windows 一键部署工具额外依赖
+# 在主 requirements.txt 基础上安装：
+#   pip install -r requirements.txt -r requirements-windows.txt
+
+# GUI
+customtkinter>=5.2.0,<6.0.0
+
+# Packaging
+pyinstaller>=6.0.0,<7.0.0

@@ -46,7 +46,7 @@
 | 订单履约（虚拟商品） | 🟡 进行中 | 流程可跑，回调幂等/补偿待封板 |
 | 售后自动化 | 🟡 进行中 | 规则边界已定，工单路由待上线 |
 | 新手引导 UI | 🟡 进行中 | 方案已出，前端实现与验收中 |
-| 一键部署（Mac/Win） | 🟡 进行中 | 目标冻结，打包与双端一致性收口 |
+| 一键部署（Mac/Win） | ✅ 已完成 | Windows EXE 图形化向导已发布 |
 
 ### 本期硬约束（企业级执行）
 
@@ -56,6 +56,14 @@
 4. **超边界转人工**（电话沟通、转账退款、纠纷仲裁）
 
 ---
+
+## 6.1.0 更新摘要（2026-03-03）
+
+- **Windows 一键部署工具**：
+  - 新增图形化部署向导（`src/windows_launcher.py`），支持打包为 Windows EXE
+  - 分步配置：Docker 检测 → AI 服务选择 → 认证设置 → Cookie 粘贴 → 一键部署
+  - 零命令行操作，完全小白友好
+  - 构建脚本：`scripts\windows\build_exe.bat` 一键生成 EXE
 
 ## 6.0.0 更新摘要（2026-03-02）
 
@@ -254,6 +262,24 @@ Windows 可执行：
 scripts\windows\setup_windows.bat
 # 一键：安装依赖 + 严格自检 + 启动容器
 scripts\windows\quickstart.bat
+```
+
+### Windows 一键部署工具（EXE）
+
+不想装 Python？直接下载 EXE：
+
+1. 从 [Releases](https://github.com/G3niusYukki/xianyu-openclaw/releases/latest) 下载 `xianyu-openclaw-launcher.zip`
+2. 解压到任意位置
+3. 双击 `xianyu-openclaw-launcher.exe`
+4. 按向导步骤填写 AI 密钥、Cookie 等信息
+5. 点击"生成配置并启动"
+
+> 前提：需要先安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)。向导会自动检测并引导安装。
+
+自行构建 EXE：
+
+```bat
+scripts\windows\build_exe.bat
 ```
 
 ---
@@ -701,7 +727,7 @@ docker compose exec -it openclaw-gateway openclaw devices approve <requestId>
 | 订单履约（虚拟商品） | 🟡 进行中 | 回调幂等、补偿机制封板 | 2026-03-08 |
 | 售后自动化 | 🟡 进行中 | 工单路由、规则引擎上线 | 2026-03-10 |
 | 新手引导 UI | 🟡 进行中 | 首次安装引导、任务式教程 | 2026-03-12 |
-| 一键部署（Mac/Win） | 🟡 进行中 | 双端打包、一致性验证 | 2026-03-15 |
+| 一键部署（Mac/Win） | ✅ 已完成 | Windows EXE 图形化向导 + 双端打包 | 2026-03-03 |
 
 **里程碑**：v6.0 小白用户零门槛部署
 

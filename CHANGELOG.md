@@ -18,6 +18,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - 实物订单在未真正提交物流单、仅降级为人工发货任务时，状态保持为 `processing`，避免误标记为 `shipping`
 
+## [6.1.0] - 2026-03-03
+
+### Added
+- **Windows 一键部署工具（EXE）**：
+  - 新增 `src/windows_launcher.py`：基于 CustomTkinter 的图形化部署向导，替代命令行 `setup_wizard`
+  - 支持 Docker Desktop 自动检测与下载引导
+  - 分步向导：网关 AI 选择 → 业务 AI 选择 → 认证配置 → Cookie 粘贴 → 确认部署
+  - 自动生成 `.env` 配置文件，格式与 `setup_wizard` 完全一致
+  - 一键启动 `docker compose up -d`，支持启动后健康检查与自动打开浏览器
+  - 支持 PyInstaller 打包为 Windows EXE（`--onedir --windowed` 模式）
+- **PyInstaller 构建配置重写**：
+  - `pyinstaller.spec` 更新为新 GUI 入口（`src/windows_launcher.py`），包含 CustomTkinter 数据文件
+  - 排除运行时不需要的重型依赖（playwright/pandas/openai 等），减小打包体积
+- **Windows EXE 构建脚本**：
+  - 新增 `scripts/windows/build_exe.bat`：一键创建虚拟环境、安装依赖、构建 EXE
+- **Windows 专用依赖文件**：
+  - 新增 `requirements-windows.txt`：CustomTkinter + PyInstaller 依赖声明
+
+### Changed
+- `src/__init__.py` 版本号更新为 `6.1.0`
+- `README.md` / `USER_GUIDE.md` 新增 Windows EXE 部署说明，路线图状态更新
+
 ## [6.0.0] - 2026-03-02
 
 ### Added
