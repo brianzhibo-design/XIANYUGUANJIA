@@ -1,5 +1,7 @@
 @echo off
-chcp 65001 >nul
+:: 先保存当前代码页，然后设置UTF-8
+for /f "tokens=2 delims=:" %%a in ('chcp') do set "OLD_CP=%%a"
+chcp 65001 >nul 2>&1
 setlocal EnableDelayedExpansion
 
 :: ========================================
@@ -10,8 +12,8 @@ setlocal EnableDelayedExpansion
 set "PROJECT_DIR=%~dp0"
 cd /d "%PROJECT_DIR%"
 
-:: 如果没有参数，显示帮助
-if "%~1"=="" goto :HELP
+:: 如果没有参数，显示交互式菜单
+if "%~1"=="" goto :WELCOME
 
 :: 解析命令
 set "COMMAND=%~1"
@@ -37,6 +39,60 @@ goto :HELP
 :: ========================================
 :: 命令实现
 :: ========================================
+
+:WELCOME
+cls
+echo.
+echo ===========================================
+echo    闲鱼自动化 - Windows独立版
+echo ===========================================
+echo.
+echo 欢迎使用！请选择操作：
+echo.
+echo  [1] 首次部署 - 初始化环境
+echo  [2] 配置向导 - 设置AI Key和Cookie
+echo  [3] 启动服务 - 运行自动化模块
+echo  [4] 管理菜单 - 查看状态/日志/停止
+echo  [5] 帮助信息 - 查看所有命令
+echo  [0] 退出
+echo.
+echo ===========================================
+set /p choice="请输入选项 (0-5): "
+
+if "!choice!"=="1" goto :SETUP
+if "!choice!"=="2" goto :CONFIG
+if "!choice!"=="3" goto :START_MENU
+if "!choice!"=="4" goto :MENU
+if "!choice!"=="5" goto :HELP
+if "!choice!"=="0" exit /b 0
+goto :WELCOME
+
+:START_MENU
+cls
+echo.
+echo ===========================================
+echo    启动服务
+echo ===========================================
+echo.
+echo  [1] 启动所有模块（售前+运营+售后）
+echo  [2] 仅启动售前模块（自动回复）
+echo  [3] 仅启动运营模块（擦亮/改价）
+echo  [4] 仅启动售后模块（发货处理）
+echo  [0] 返回主菜单
+echo.
+set /p start_choice="请输入选项 (0-4): "
+
+if "!start_choice!"=="1" (
+    call scripts\windows\start_module.bat presales daemon
+    call scripts\windows\start_module.bat operations daemon
+    call scripts\windows\start_module.bat aftersales daemon
+    pause
+)
+if "!start_choice!"=="2" call scripts\windows\start_module.bat presales daemon ^& pause
+if "!start_choice!"=="3" call scripts\windows\start_module.bat operations daemon ^& pause
+if "!start_choice!"=="4" call scripts\windows\start_module.bat aftersales daemon ^& pause
+if "!start_choice!"=="0" goto :WELCOME
+goto :WELCOME
 
 :HELP
 echo.
@@ -72,7 +128,8 @@ echo   xianyu start presales           # 仅启动售前
 echo   xianyu status                   # 查看状态
 echo   xianyu logs presales            # 查看售前日志
 echo.
-exit /b 0
+pause
+goto :WELCOME
 
 :SETUP
 call scripts\windows\install.bat

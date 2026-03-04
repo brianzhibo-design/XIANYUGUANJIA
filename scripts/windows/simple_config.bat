@@ -1,7 +1,10 @@
 @echo off
-chcp 65001 >nul
+:: 保存当前代码页并设置UTF-8
+for /f "tokens=2 delims=:" %%a in ('chcp') do set "OLD_CP=%%a"
+chcp 65001 >nul 2>&1
 title 闲鱼自动化 - 简化配置
 color 0E
+setlocal EnableDelayedExpansion
 
 :: ========================================
 :: 简化版配置生成器
@@ -107,22 +110,22 @@ echo  3. 按F12打开开发者工具 -> 切换到Network标签
 echo  4. 刷新页面，点击任意请求
 echo  5. 在Request Headers中找到Cookie，复制完整内容
 echo.
-echo 粘贴Cookie (支持多行，输入END结束):
+echo 请选择输入方式:
+echo  [1] 直接粘贴Cookie（单行）
+echo  [2] 暂时跳过，稍后配置
 echo.
+set /p cookie_choice="请选择 (1-2): "
 
 set "COOKIE="
-:COOKIE_INPUT
-set /p line=""
-if /i "!line!"=="END" goto :COOKIE_DONE
-if /i "!line!"=="end" goto :COOKIE_DONE
-set "COOKIE=!COOKIE!!line!"
-goto :COOKIE_INPUT
-
-:COOKIE_DONE
+if "!cookie_choice!"=="1" (
+    echo.
+    echo 请粘贴Cookie内容（然后按回车）:
+    set /p COOKIE=""
+)
 
 if "!COOKIE!"=="" (
     echo [!] Cookie为空，将创建最小配置（稍后可以在Dashboard中添加Cookie）
-    set "COOKIE=(待配置)"
+    set "COOKIE=placeholder_cookie_configure_later"
 )
 
 :: 生成配置文件

@@ -1,5 +1,7 @@
 @echo off
-chcp 65001 >nul
+:: 保存当前代码页并设置UTF-8
+for /f "tokens=2 delims=:" %%a in ('chcp') do set "OLD_CP=%%a"
+chcp 65001 >nul 2>&1
 title 闲鱼自动化 - 一键部署
 color 0B
 
