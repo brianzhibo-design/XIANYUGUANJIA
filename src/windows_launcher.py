@@ -121,6 +121,10 @@ class WindowsLauncherApp(ctk.CTk):
         self.gateway_key_var = ctk.StringVar(value="")
         self.content_key_var = ctk.StringVar(value="")
 
+        self.custom_gateway_base_url_var = ctk.StringVar(value=self.existing_values.get("CUSTOM_GATEWAY_BASE_URL", ""))
+        self.custom_content_base_url_var = ctk.StringVar(value=self.existing_values.get("AI_BASE_URL", ""))
+        self.custom_content_model_var = ctk.StringVar(value=self.existing_values.get("AI_MODEL", ""))
+
         self.token_var = ctk.StringVar(value=self.existing_values.get("OPENCLAW_GATEWAY_TOKEN", secrets.token_hex(32)))
         self.password_var = ctk.StringVar(value=self.existing_values.get("AUTH_PASSWORD", ""))
         self.username_var = ctk.StringVar(value=self.existing_values.get("AUTH_USERNAME", "admin"))
@@ -241,11 +245,18 @@ class WindowsLauncherApp(ctk.CTk):
         self.gateway_hint_label = ctk.CTkLabel(frame, text="", text_color="gray70")
         self.gateway_hint_label.grid(row=5, column=0, padx=30, pady=(0, 10), sticky="w")
 
+        self.gateway_custom_url_label = ctk.CTkLabel(frame, text="Base URL", font=ctk.CTkFont(size=14, weight="bold"))
+        self.gateway_custom_url_label.grid(row=6, column=0, padx=30, pady=(0, 8), sticky="w")
+        self.gateway_custom_url_entry = ctk.CTkEntry(frame, width=520, textvariable=self.custom_gateway_base_url_var)
+        self.gateway_custom_url_entry.grid(row=7, column=0, padx=30, pady=(0, 6), sticky="w")
+        self.gateway_custom_url_label.grid_remove()
+        self.gateway_custom_url_entry.grid_remove()
+
         self.gateway_error_label = ctk.CTkLabel(frame, text="", text_color="#ff6f6f")
-        self.gateway_error_label.grid(row=6, column=0, padx=30, pady=(0, 4), sticky="w")
+        self.gateway_error_label.grid(row=8, column=0, padx=30, pady=(0, 4), sticky="w")
 
         nav = ctk.CTkFrame(frame, fg_color="transparent")
-        nav.grid(row=7, column=0, padx=30, pady=24, sticky="ew")
+        nav.grid(row=9, column=0, padx=30, pady=24, sticky="ew")
         nav.grid_columnconfigure(0, weight=1)
         ctk.CTkButton(nav, text="上一步", width=140, command=self._goto_prev).grid(row=0, column=0, sticky="w")
         ctk.CTkButton(nav, text="下一步", width=140, command=self._validate_gateway_and_next).grid(
@@ -282,11 +293,24 @@ class WindowsLauncherApp(ctk.CTk):
         self.content_shared_label = ctk.CTkLabel(frame, text="", text_color="#7fb8ff")
         self.content_shared_label.grid(row=6, column=0, padx=30, pady=(0, 10), sticky="w")
 
+        self.content_custom_url_label = ctk.CTkLabel(frame, text="Base URL", font=ctk.CTkFont(size=14, weight="bold"))
+        self.content_custom_url_label.grid(row=7, column=0, padx=30, pady=(0, 8), sticky="w")
+        self.content_custom_url_entry = ctk.CTkEntry(frame, width=520, textvariable=self.custom_content_base_url_var)
+        self.content_custom_url_entry.grid(row=8, column=0, padx=30, pady=(0, 6), sticky="w")
+        self.content_custom_model_label = ctk.CTkLabel(frame, text="模型名称", font=ctk.CTkFont(size=14, weight="bold"))
+        self.content_custom_model_label.grid(row=9, column=0, padx=30, pady=(0, 8), sticky="w")
+        self.content_custom_model_entry = ctk.CTkEntry(frame, width=520, textvariable=self.custom_content_model_var)
+        self.content_custom_model_entry.grid(row=10, column=0, padx=30, pady=(0, 6), sticky="w")
+        self.content_custom_url_label.grid_remove()
+        self.content_custom_url_entry.grid_remove()
+        self.content_custom_model_label.grid_remove()
+        self.content_custom_model_entry.grid_remove()
+
         self.content_error_label = ctk.CTkLabel(frame, text="", text_color="#ff6f6f")
-        self.content_error_label.grid(row=7, column=0, padx=30, pady=(0, 4), sticky="w")
+        self.content_error_label.grid(row=11, column=0, padx=30, pady=(0, 4), sticky="w")
 
         nav = ctk.CTkFrame(frame, fg_color="transparent")
-        nav.grid(row=8, column=0, padx=30, pady=24, sticky="ew")
+        nav.grid(row=12, column=0, padx=30, pady=24, sticky="ew")
         nav.grid_columnconfigure(0, weight=1)
         ctk.CTkButton(nav, text="上一步", width=140, command=self._goto_prev).grid(row=0, column=0, sticky="w")
         ctk.CTkButton(nav, text="下一步", width=140, command=self._validate_content_and_next).grid(
@@ -478,14 +502,32 @@ class WindowsLauncherApp(ctk.CTk):
         self.gateway_option.set(provider.title)
         self.gateway_key_label.configure(text=f"{provider.env_key}")
         self.gateway_key_entry.configure(placeholder_text=provider.hint)
-        self.gateway_hint_label.configure(text=f"提示：{provider.hint}")
+        if provider.id == "custom":
+            self.gateway_hint_label.configure(text="提示：配置自定义 OpenAI 兼容的 Gateway Provider")
+            self.gateway_custom_url_label.grid()
+            self.gateway_custom_url_entry.grid()
+        else:
+            self.gateway_hint_label.configure(text=f"提示：{provider.hint}")
+            self.gateway_custom_url_label.grid_remove()
+            self.gateway_custom_url_entry.grid_remove()
 
     def _render_content_field(self) -> None:
         provider = self._provider_by_content_id(self.content_provider_var.get())
         self.content_option.set(provider.title)
         self.content_key_label.configure(text=f"{provider.env_key}")
         self.content_key_entry.configure(placeholder_text=provider.hint)
-        self.content_hint_label.configure(text=f"提示：{provider.hint}")
+        if provider.id == "custom":
+            self.content_hint_label.configure(text="提示：配置自定义 OpenAI 兼容的 Content Provider")
+            self.content_custom_url_label.grid()
+            self.content_custom_url_entry.grid()
+            self.content_custom_model_label.grid()
+            self.content_custom_model_entry.grid()
+        else:
+            self.content_hint_label.configure(text=f"提示：{provider.hint}")
+            self.content_custom_url_label.grid_remove()
+            self.content_custom_url_entry.grid_remove()
+            self.content_custom_model_label.grid_remove()
+            self.content_custom_model_entry.grid_remove()
 
     def _sync_content_key_state(self) -> None:
         gateway = self._provider_by_gateway_id(self.gateway_provider_var.get())
@@ -519,6 +561,10 @@ class WindowsLauncherApp(ctk.CTk):
 
         self.gateway_key_var.set(existing.get(gateway_choice.env_key, ""))
         self.content_key_var.set(existing.get(content_choice.env_key, ""))
+
+        self.custom_gateway_base_url_var.set(existing.get("CUSTOM_GATEWAY_BASE_URL", ""))
+        self.custom_content_base_url_var.set(existing.get("AI_BASE_URL", ""))
+        self.custom_content_model_var.set(existing.get("AI_MODEL", ""))
 
         self._render_gateway_field()
         self._render_content_field()
@@ -579,6 +625,10 @@ class WindowsLauncherApp(ctk.CTk):
         if not self.gateway_key_var.get().strip():
             self.gateway_error_label.configure(text="请填写网关服务 API 密钥")
             return
+        provider = self._provider_by_gateway_id(self.gateway_provider_var.get())
+        if provider.id == "custom" and not self.custom_gateway_base_url_var.get().strip():
+            self.gateway_error_label.configure(text="自定义 Provider 需要填写 Base URL")
+            return
         self._goto_next()
 
     def _validate_content_and_next(self) -> None:
@@ -587,6 +637,14 @@ class WindowsLauncherApp(ctk.CTk):
         if not self.content_key_var.get().strip():
             self.content_error_label.configure(text="请填写业务服务 API 密钥")
             return
+        provider = self._provider_by_content_id(self.content_provider_var.get())
+        if provider.id == "custom":
+            if not self.custom_content_base_url_var.get().strip():
+                self.content_error_label.configure(text="自定义 Provider 需要填写 Base URL")
+                return
+            if not self.custom_content_model_var.get().strip():
+                self.content_error_label.configure(text="自定义 Provider 需要填写模型名称")
+                return
         self._goto_next()
 
     def _toggle_password(self) -> None:
@@ -638,6 +696,7 @@ class WindowsLauncherApp(ctk.CTk):
             "MOONSHOT_API_KEY",
             "MINIMAX_API_KEY",
             "ZAI_API_KEY",
+            "CUSTOM_GATEWAY_API_KEY",
             "DEEPSEEK_API_KEY",
             "DASHSCOPE_API_KEY",
             "ARK_API_KEY",
@@ -655,6 +714,17 @@ class WindowsLauncherApp(ctk.CTk):
         merged[gateway.env_key] = gateway_api_key
         merged[content.env_key] = content_api_key
 
+        custom_gateway_base_url = self.custom_gateway_base_url_var.get().strip()
+        custom_content_base_url = self.custom_content_base_url_var.get().strip()
+        custom_content_model = self.custom_content_model_var.get().strip()
+
+        if content.id == "custom":
+            content_base_url = custom_content_base_url
+            content_model = custom_content_model
+        else:
+            content_base_url = content.base_url
+            content_model = content.model
+
         merged.update(
             {
                 "OPENCLAW_GATEWAY_TOKEN": self.token_var.get().strip(),
@@ -665,10 +735,11 @@ class WindowsLauncherApp(ctk.CTk):
                 "XIANYU_COOKIE_2": self.cookie_2_placeholder.get(),
                 "AI_PROVIDER": content.id,
                 "AI_API_KEY": content_api_key,
-                "AI_BASE_URL": content.base_url,
-                "AI_MODEL": content.model,
+                "AI_BASE_URL": content_base_url,
+                "AI_MODEL": content_model,
                 "AI_TEMPERATURE": existing.get("AI_TEMPERATURE", "0.7"),
                 "OPENAI_BASE_URL": existing.get("OPENAI_BASE_URL", ""),
+                "CUSTOM_GATEWAY_BASE_URL": custom_gateway_base_url,
             }
         )
         return merged, gateway, content
@@ -689,17 +760,29 @@ class WindowsLauncherApp(ctk.CTk):
             "",
             f"网关服务：{gateway.title}",
             f"网关密钥：{_mask_secret(merged.get(gateway.env_key, ''))}",
-            f"业务服务：{content.title}",
-            f"业务密钥：{_mask_secret(merged.get(content.env_key, ''))}",
-            f"业务模型：{merged.get('AI_MODEL', '')}",
-            f"服务端口：{merged.get('OPENCLAW_WEB_PORT', '')}",
-            f"后台账号：{merged.get('AUTH_USERNAME', '')}",
-            f"后台密码：{_mask_secret(merged.get('AUTH_PASSWORD', ''))}",
-            f"Cookie 1：{_mask_secret(merged.get('XIANYU_COOKIE_1', ''))}",
-            f"Cookie 2：{_mask_secret(merged.get('XIANYU_COOKIE_2', ''))}",
-            "",
-            "确认后可选择仅生成配置，或直接生成并启动容器。",
         ]
+        if gateway.id == "custom":
+            lines.append(f"网关 Base URL：{merged.get('CUSTOM_GATEWAY_BASE_URL', '')}")
+        lines.extend(
+            [
+                f"业务服务：{content.title}",
+                f"业务密钥：{_mask_secret(merged.get(content.env_key, ''))}",
+                f"业务模型：{merged.get('AI_MODEL', '')}",
+            ]
+        )
+        if content.id == "custom":
+            lines.append(f"业务 Base URL：{merged.get('AI_BASE_URL', '')}")
+        lines.extend(
+            [
+                f"服务端口：{merged.get('OPENCLAW_WEB_PORT', '')}",
+                f"后台账号：{merged.get('AUTH_USERNAME', '')}",
+                f"后台密码：{_mask_secret(merged.get('AUTH_PASSWORD', ''))}",
+                f"Cookie 1：{_mask_secret(merged.get('XIANYU_COOKIE_1', ''))}",
+                f"Cookie 2：{_mask_secret(merged.get('XIANYU_COOKIE_2', ''))}",
+                "",
+                "确认后可选择仅生成配置，或直接生成并启动容器。",
+            ]
+        )
 
         self.summary_box.configure(state="normal")
         self.summary_box.delete("1.0", "end")

@@ -36,6 +36,7 @@ GATEWAY_PROVIDERS = [
     GatewayProvider("moonshot", "Moonshot / Kimi（官方支持）", "MOONSHOT_API_KEY", "sk-..."),
     GatewayProvider("minimax", "MiniMax（官方支持）", "MINIMAX_API_KEY", "sk-..."),
     GatewayProvider("zai", "智谱 ZAI（官方支持）", "ZAI_API_KEY", "zai-..."),
+    GatewayProvider("custom", "自定义（Custom Provider）", "CUSTOM_GATEWAY_API_KEY", "自定义API Key"),
 ]
 
 CONTENT_PROVIDERS = [
@@ -80,6 +81,14 @@ CONTENT_PROVIDERS = [
         "glm-4-plus",
     ),
     ContentProvider("openai", "OpenAI", "OPENAI_API_KEY", "sk-...", "https://api.openai.com/v1", "gpt-4o-mini"),
+    ContentProvider(
+        "custom",
+        "自定义（Custom Provider）",
+        "AI_API_KEY",
+        "自定义API Key",
+        "https://api.example.com/v1",
+        "custom-model",
+    ),
 ]
 
 ALL_SUPPORTED_KEYS = [
@@ -89,6 +98,8 @@ ALL_SUPPORTED_KEYS = [
     "MOONSHOT_API_KEY",
     "MINIMAX_API_KEY",
     "ZAI_API_KEY",
+    "CUSTOM_GATEWAY_API_KEY",
+    "CUSTOM_GATEWAY_BASE_URL",
     "DEEPSEEK_API_KEY",
     "DASHSCOPE_API_KEY",
     "ARK_API_KEY",
@@ -167,6 +178,8 @@ def _build_env_content(values: dict[str, str], gateway_key: str, content_key: st
         f"MOONSHOT_API_KEY={values.get('MOONSHOT_API_KEY', '')}",
         f"MINIMAX_API_KEY={values.get('MINIMAX_API_KEY', '')}",
         f"ZAI_API_KEY={values.get('ZAI_API_KEY', '')}",
+        f"CUSTOM_GATEWAY_API_KEY={values.get('CUSTOM_GATEWAY_API_KEY', '')}",
+        f"CUSTOM_GATEWAY_BASE_URL={values.get('CUSTOM_GATEWAY_BASE_URL', '')}",
         f"OPENAI_BASE_URL={values.get('OPENAI_BASE_URL', '')}",
         "",
         "# === Business AI Provider (used by Python services) ===",
@@ -250,12 +263,36 @@ def run_setup() -> int:
         required=True,
     )
 
-    if content_provider.env_key == gateway_provider.env_key:
+    # 处理 Gateway 自定义 provider 的额外配置
+    gateway_base_url = ""
+    if gateway_provider.id == "custom":
+        gateway_base_url = _prompt(
+            "请输入自定义 Gateway Base URL",
+            default=existing.get("CUSTOM_GATEWAY_BASE_URL", ""),
+            required=True,
+        )
+
+    if content_provider.env_key == gateway_provider.env_key and gateway_provider.id != "custom":
         content_api_key = gateway_api_key
     else:
         content_api_key = _prompt(
             f"请输入 {content_provider.env_key}",
             default=existing.get(content_provider.env_key, content_provider.hint),
+            required=True,
+        )
+
+    # 处理 Content 自定义 provider 的额外配置
+    content_base_url = content_provider.base_url
+    content_model = content_provider.model
+    if content_provider.id == "custom":
+        content_base_url = _prompt(
+            "请输入自定义 Base URL",
+            default=existing.get("AI_BASE_URL", ""),
+            required=True,
+        )
+        content_model = _prompt(
+            "请输入自定义模型名称",
+            default=existing.get("AI_MODEL", ""),
             required=True,
         )
 
@@ -283,6 +320,7 @@ def run_setup() -> int:
         "MOONSHOT_API_KEY",
         "MINIMAX_API_KEY",
         "ZAI_API_KEY",
+        "CUSTOM_GATEWAY_API_KEY",
         "DEEPSEEK_API_KEY",
         "DASHSCOPE_API_KEY",
         "ARK_API_KEY",
@@ -304,10 +342,11 @@ def run_setup() -> int:
             "XIANYU_COOKIE_2": cookie_2,
             "AI_PROVIDER": content_provider.id,
             "AI_API_KEY": content_api_key,
-            "AI_BASE_URL": content_provider.base_url,
-            "AI_MODEL": content_provider.model,
+            "AI_BASE_URL": content_base_url,
+            "AI_MODEL": content_model,
             "AI_TEMPERATURE": existing.get("AI_TEMPERATURE", "0.7"),
             "OPENAI_BASE_URL": existing.get("OPENAI_BASE_URL", ""),
+            "CUSTOM_GATEWAY_BASE_URL": gateway_base_url,
         }
     )
 
