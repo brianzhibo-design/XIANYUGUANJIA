@@ -1,0 +1,10 @@
+[PR1 TEST BASELINE EVIDENCE]
+command: ./.venv312/bin/pytest -q --no-cov tests/test_xianguanjia_signing.py tests/test_xianguanjia_error_mapping.py tests/test_xianguanjia_open_platform_client.py tests/test_xianguanjia_virtual_supply_client.py
+exit_code: 0
+passed_test_files:
+- tests/test_xianguanjia_signing.py
+- tests/test_xianguanjia_error_mapping.py
+- tests/test_xianguanjia_open_platform_client.py
+- tests/test_xianguanjia_virtual_supply_client.py
+passed_summary: 20 passed in 0.06s
+current_head: 3a88a26efca397f42f9e6cb6a16d62865ef89ef8
