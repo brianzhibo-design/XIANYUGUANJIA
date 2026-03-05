@@ -274,7 +274,8 @@ def _resolve_python_exec() -> str:
                 return str(candidate)
         except OSError:
             pass
-    return str(Path(sys.executable).resolve())
+    # Use abspath for cross-platform compatibility (avoids WindowsPath issue on Linux)
+    return os.path.abspath(sys.executable)
 
 
 def _module_state_path(target: str) -> Path:
