@@ -57,6 +57,14 @@
 
 ---
 
+## 6.3.4 更新摘要（2026-03-06）
+
+- **CI 测试修复**：
+  - `src/cli.py`: 修复 `_resolve_python_exec()` 函数跨平台兼容性问题
+  - 将 `Path(sys.executable).resolve()` 改为 `os.path.abspath(sys.executable)`
+  - 解决 Linux CI 环境中 WindowsPath 实例化失败的 `NotImplementedError`
+  - 修复测试 `test_cli_windows_start_stop_cleanup_and_automation`
+
 ## 6.3.3 更新摘要（2026-03-06）
 
 - **状态合约稳定化（PR-B Unblock）**：
