@@ -8,31 +8,28 @@
   <!-- 徽章区域 -->
   <p align="center">
     <a href="https://github.com/G3niusYukki/xianyu-openclaw/releases/latest">
-      <img src="https://img.shields.io/github/v/release/G3niusYukki/xianyu-openclaw?style=for-the-badge&logo=github&color=FF6A00" alt="Release" />
+      <img src="https://img.shields.io/github/v/release/G3niusYukki/xianyu-openclaw?logo=github&color=FF6A00&style=for-the-badge" alt="Release" />
     </a>
     <a href="LICENSE">
       <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge&logo=opensourceinitiative" alt="License: MIT" />
     </a>
-    <a href="https://github.com/G3niusYukki/xianyu-openclaw/actions">
-      <img src="https://img.shields.io/github/actions/workflow/status/G3niusYukki/xianyu-openclaw/ci.yml?style=for-the-badge&logo=githubactions&label=CI" alt="CI Status" />
-    </a>
-    <a href="https://github.com/G3niusYukki/xianyu-openclaw">
-      <img src="https://img.shields.io/github/stars/G3niusYukki/xianyu-openclaw?color=yellow&label=Stars&logo=github&style=for-the-badge" alt="Stars" />
+    <a href="https://github.com/G3niusYukki/xianyu-openclaw/actions/workflows/ci.yml">
+      <img src="https://img.shields.io/github/actions/workflow/status/G3niusYukki/xianyu-openclaw/ci.yml?logo=githubactions&label=CI&style=for-the-badge" alt="CI" />
     </a>
   </p>
   
   <p align="center">
+    <a href="https://github.com/G3niusYukki/xianyu-openclaw/stargazers">
+      <img src="https://img.shields.io/github/stars/G3niusYukki/xianyu-openclaw?logo=github&color=yellow&style=flat-square" alt="Stars" />
+    </a>
+    <a href="https://github.com/G3niusYukki/xianyu-openclaw/network/members">
+      <img src="https://img.shields.io/github/forks/G3niusYukki/xianyu-openclaw?logo=github&color=blue&style=flat-square" alt="Forks" />
+    </a>
+    <a href="https://github.com/G3niusYukki/xianyu-openclaw/issues">
+      <img src="https://img.shields.io/github/issues/G3niusYukki/xianyu-openclaw?logo=github&color=red&style=flat-square" alt="Issues" />
+    </a>
     <a href="https://www.python.org/downloads/release/python-3120/">
       <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+" />
-    </a>
-    <a href="https://github.com/G3niusYukki/xianyu-openclaw">
-      <img src="https://img.shields.io/github/forks/G3niusYukki/xianyu-openclaw?color=blue&label=Forks&logo=github&style=flat-square" alt="Forks" />
-    </a>
-    <a href="https://github.com/G3niusYukki/xianyu-openclaw">
-      <img src="https://img.shields.io/github/issues/G3niusYukki/xianyu-openclaw?color=red&label=Issues&logo=github&style=flat-square" alt="Issues" />
-    </a>
-    <a href="https://github.com/astral-sh/ruff">
-      <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square" alt="Ruff" />
     </a>
   </p>
 
