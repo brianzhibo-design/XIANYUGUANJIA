@@ -57,6 +57,16 @@
 
 ---
 
+## 6.3.2 更新摘要（2026-03-06）
+
+- **严格模式修复（PR-A Unblock）**：
+  - `src/core/config.py`: `.env` 加载改为 `override=False`，避免覆盖命令行临时环境变量
+  - `src/cli.py`: `doctor --strict` 增加 `project_root` 强校验，必须匹配预期路径
+  - `src/dashboard_server.py`: `/api/status` 新增返回 `instance_id`/`project_root`/`python_exec`/`started_at` 四字段
+  - 修复模块启动命令使用环境变量 `OPENCLAW_PYTHON_EXEC` 或 `PYTHON_EXEC` 指定 Python 解释器路径
+  - 新增 `_resolve_python_exec()` 函数，优先使用配置的解释器，回退到当前 sys.executable
+  - 严格模式新增 "模块解释器锁定" 检查项，确保模块使用正确的 Python 环境
+
 ## 6.2.1 更新摘要（2026-03-05）
 
 - **前端闲鱼风格化升级**：
