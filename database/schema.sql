@@ -1,130 +1,261 @@
--- Database Schema for Code Review Service
+-- Xianyu-OpenClaw Database Schema
+-- 闲鱼自动化工具数据库结构
+-- SQLite 兼容
 
--- Users table
-CREATE TABLE IF NOT EXISTS "Users" (
-  id SERIAL PRIMARY KEY,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  password VARCHAR(255),
-  "githubId" VARCHAR(255) UNIQUE,
-  username VARCHAR(255) NOT NULL,
-  avatar VARCHAR(255),
-  plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'basic', 'pro', 'team')),
-  "reviewsLimit" INTEGER DEFAULT 5,
-  "reviewsUsed" INTEGER DEFAULT 0,
-  "stripeCustomerId" VARCHAR(255),
-  "subscriptionId" VARCHAR(255),
-  "subscriptionStatus" VARCHAR(50),
-  "currentPeriodEnd" TIMESTAMP,
-  language VARCHAR(10) DEFAULT 'en' CHECK (language IN ('zh', 'en')),
-  "isActive" BOOLEAN DEFAULT true,
-  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- ============================================
+-- 1. 合规审计数据库 (data/compliance.db)
+-- ============================================
+CREATE TABLE IF NOT EXISTS compliance_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor TEXT,
+    account_id TEXT,
+    session_id TEXT,
+    action TEXT NOT NULL,
+    content TEXT,
+    decision TEXT NOT NULL,
+    blocked INTEGER NOT NULL,
+    hits_json TEXT,
+    policy_scope TEXT,
+    policy_version TEXT,
+    created_at INTEGER NOT NULL
 );
 
-CREATE INDEX idx_users_email ON "Users"(email);
-CREATE INDEX idx_users_github_id ON "Users"("githubId");
+CREATE INDEX IF NOT EXISTS idx_compliance_audit_time 
+ON compliance_audit(created_at DESC);
 
--- Reviews table
-CREATE TABLE IF NOT EXISTS "Reviews" (
-  id SERIAL PRIMARY KEY,
-  "userId" INTEGER NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
-  repository VARCHAR(255),
-  branch VARCHAR(255),
-  "commitHash" VARCHAR(255),
-  "fileName" VARCHAR(255),
-  "codeContent" TEXT NOT NULL,
-  language VARCHAR(50) NOT NULL,
-  status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
-  result JSONB,
-  summary TEXT,
-  "issuesFound" INTEGER DEFAULT 0,
-  "securityIssues" INTEGER DEFAULT 0,
-  "performanceIssues" INTEGER DEFAULT 0,
-  "bestPracticeIssues" INTEGER DEFAULT 0,
-  "processingTime" FLOAT,
-  "errorMessage" TEXT,
-  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE INDEX IF NOT EXISTS idx_compliance_audit_session
+ON compliance_audit(session_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_compliance_audit_account
+ON compliance_audit(account_id, created_at DESC);
+
+-- ============================================
+-- 2. 工作流数据库 (data/workflow.db)
+-- ============================================
+CREATE TABLE IF NOT EXISTS workflow_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL UNIQUE,
+    stage TEXT NOT NULL DEFAULT 'NEW',
+    payload_json TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    lease_until TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
-CREATE INDEX idx_reviews_user_id ON "Reviews"("userId");
-CREATE INDEX idx_reviews_status ON "Reviews"(status);
-CREATE INDEX idx_reviews_created_at ON "Reviews"("createdAt");
+CREATE INDEX IF NOT EXISTS idx_workflow_jobs_session 
+ON workflow_jobs(session_id);
 
--- Teams table
-CREATE TABLE IF NOT EXISTS "Teams" (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  "ownerId" INTEGER NOT NULL REFERENCES "Users"(id),
-  "reviewsLimit" INTEGER DEFAULT 1000,
-  "reviewsUsed" INTEGER DEFAULT 0,
-  plan VARCHAR(50) DEFAULT 'team',
-  "isActive" BOOLEAN DEFAULT true,
-  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE INDEX IF NOT EXISTS idx_workflow_jobs_stage 
+ON workflow_jobs(stage);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_jobs_lease 
+ON workflow_jobs(lease_until);
+
+-- 会话状态跟踪
+CREATE TABLE IF NOT EXISTS session_states (
+    session_id TEXT PRIMARY KEY,
+    current_state TEXT NOT NULL DEFAULT 'NEW',
+    context_json TEXT,
+    quote_data_json TEXT,
+    last_action TEXT,
+    manual_takeover INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
--- TeamMembers table
-CREATE TABLE IF NOT EXISTS "TeamMembers" (
-  id SERIAL PRIMARY KEY,
-  "teamId" INTEGER NOT NULL REFERENCES "Teams"(id) ON DELETE CASCADE,
-  "userId" INTEGER NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
-  role VARCHAR(50) DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'member')),
-  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE("teamId", "userId")
+CREATE INDEX IF NOT EXISTS idx_session_states_takeover 
+ON session_states(manual_takeover);
+
+-- ============================================
+-- 3. 订单数据库 (data/orders.db)
+-- ============================================
+CREATE TABLE IF NOT EXISTS orders (
+    order_id TEXT PRIMARY KEY,
+    session_id TEXT,
+    quote_snapshot_json TEXT,
+    item_type TEXT NOT NULL DEFAULT 'virtual',
+    status TEXT NOT NULL,
+    manual_takeover INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
--- Function to update timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW."updatedAt" = CURRENT_TIMESTAMP;
-  RETURN NEW;
-END;
-$$ language 'plpgsql';
+CREATE INDEX IF NOT EXISTS idx_orders_session 
+ON orders(session_id);
 
--- Triggers for automatic timestamp update
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON "Users"
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE INDEX IF NOT EXISTS idx_orders_status 
+ON orders(status);
 
-CREATE TRIGGER update_reviews_updated_at BEFORE UPDATE ON "Reviews"
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE INDEX IF NOT EXISTS idx_orders_created 
+ON orders(created_at DESC);
 
-CREATE TRIGGER update_teams_updated_at BEFORE UPDATE ON "Teams"
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- 订单事件日志
+CREATE TABLE IF NOT EXISTS order_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    status TEXT,
+    detail_json TEXT,
+    created_at TEXT NOT NULL
+);
 
-CREATE TRIGGER update_team_members_updated_at BEFORE UPDATE ON "TeamMembers"
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE INDEX IF NOT EXISTS idx_order_events_order_time
+ON order_events(order_id, created_at DESC);
 
--- View for review statistics
-CREATE OR REPLACE VIEW review_stats AS
-SELECT 
-  "userId",
-  COUNT(*) as total_reviews,
-  SUM("issuesFound") as total_issues,
-  SUM("securityIssues") as total_security_issues,
-  SUM("performanceIssues") as total_performance_issues,
-  SUM("bestPracticeIssues") as total_best_practice_issues,
-  AVG("processingTime") as avg_processing_time
-FROM "Reviews"
-WHERE status = 'completed'
-GROUP BY "userId";
+-- 订单回调去重（幂等性）
+CREATE TABLE IF NOT EXISTS order_callback_dedup (
+    external_event_id TEXT PRIMARY KEY,
+    order_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 
--- Function to reset monthly usage
-CREATE OR REPLACE FUNCTION reset_monthly_usage()
-RETURNS void AS $$
-BEGIN
-  UPDATE "Users"
-  SET "reviewsUsed" = 0
-  WHERE "isActive" = true;
-  
-  UPDATE "Teams"
-  SET "reviewsUsed" = 0
-  WHERE "isActive" = true;
-END;
-$$ LANGUAGE plpgsql;
+CREATE INDEX IF NOT EXISTS idx_callback_dedup_order 
+ON order_callback_dedup(order_id);
 
--- Grant permissions (adjust as needed)
--- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO your_user;
--- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO your_user;
+-- ============================================
+-- 4. 消息去重数据库 (data/dedup.db)
+-- ============================================
+CREATE TABLE IF NOT EXISTS message_dedup_exact (
+    digest TEXT PRIMARY KEY,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS message_dedup_content (
+    digest TEXT PRIMARY KEY,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dedup_exact_time 
+ON message_dedup_exact(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_dedup_content_time 
+ON message_dedup_content(created_at);
+
+-- ============================================
+-- 5. 数据分析数据库 (data/analytics.db)
+-- ============================================
+CREATE TABLE IF NOT EXISTS operations_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    item_id TEXT,
+    account_id TEXT,
+    detail_json TEXT,
+    result TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_operations_action 
+ON operations_log(action, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_operations_account 
+ON operations_log(account_id, created_at DESC);
+
+-- 报价记录
+CREATE TABLE IF NOT EXISTS quote_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT,
+    origin TEXT,
+    destination TEXT,
+    weight REAL,
+    courier TEXT,
+    total_fee REAL,
+    cache_hit INTEGER,
+    fallback_used INTEGER,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_quote_session 
+ON quote_logs(session_id);
+
+CREATE INDEX IF NOT EXISTS idx_quote_created 
+ON quote_logs(created_at DESC);
+
+-- ============================================
+-- 6. 跟进/回访数据库 (data/followup.db)
+-- ============================================
+CREATE TABLE IF NOT EXISTS followup_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    trigger_reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    scheduled_at INTEGER NOT NULL,
+    executed_at INTEGER,
+    result TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_followup_scheduled 
+ON followup_tasks(scheduled_at);
+
+CREATE INDEX IF NOT EXISTS idx_followup_status 
+ON followup_tasks(status);
+
+-- DND (勿扰) 列表
+CREATE TABLE IF NOT EXISTS dnd_sessions (
+    session_id TEXT PRIMARY KEY,
+    reason TEXT,
+    expires_at INTEGER,
+    created_at INTEGER NOT NULL
+);
+
+-- ============================================
+-- 7. 增长实验数据库 (data/growth.db)
+-- ============================================
+CREATE TABLE IF NOT EXISTS experiment_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    experiment_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    variant TEXT NOT NULL,
+    assigned_at TEXT NOT NULL,
+    UNIQUE(experiment_id, subject_id)
+);
+
+CREATE TABLE IF NOT EXISTS funnel_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    experiment_id TEXT,
+    subject_id TEXT NOT NULL,
+    stage TEXT NOT NULL,
+    converted INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_funnel_exp_subject 
+ON funnel_events(experiment_id, subject_id);
+
+-- ============================================
+-- 8. 主应用数据库 (data/agent.db)
+-- ============================================
+CREATE TABLE IF NOT EXISTS accounts (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    cookie_encrypted TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    last_health_check TEXT,
+    health_status TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_accounts_enabled 
+ON accounts(enabled);
+
+-- 商品信息缓存
+CREATE TABLE IF NOT EXISTS listings (
+    id TEXT PRIMARY KEY,
+    account_id TEXT,
+    title TEXT,
+    price REAL,
+    status TEXT,
+    detail_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_listings_account 
+ON listings(account_id);
+
+CREATE INDEX IF NOT EXISTS idx_listings_status 
+ON listings(status);
