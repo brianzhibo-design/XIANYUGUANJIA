@@ -131,19 +131,3 @@ jobs:
         uses: actions/dependency-review-action@v3
         with:
           fail-on-severity: high
-
-  notify:
-    name: Notify
-    runs-on: ubuntu-latest
-    needs: [lint, test, docker]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Check status
-        run: |
-          if [ "${{ needs.lint.result }}" == "success" ] && [ "${{ needs.test.result }}" == "success" ] && [ "${{ needs.docker.result }}" == "success" ]; then
-            echo "All checks passed!"
-            exit 0
-          else
-            echo "Some checks failed!"
-            exit 1
-          fi
