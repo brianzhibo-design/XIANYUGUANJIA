@@ -195,59 +195,51 @@ AI: 📊 今日概况
 
 ## 🚀 快速开始
 
-### 环境要求
+> 默认与推荐：**Lite/Core 本地启动**  
+> 默认地址：**http://127.0.0.1:8091**  
+> 说明：`5173` 仅用于前端开发（Vite dev server）。
 
-| 组件 | 版本 | 说明 |
-|------|------|------|
-| Python | 3.12+ | 运行环境 |
-| Docker | 20.10+ | 容器运行时 |
-| Docker Compose | 2.0+ | 编排工具 |
-
-### 1️⃣ 克隆项目
+### 单一推荐启动路径（Lite/Core）
 
 ```bash
 git clone https://github.com/G3niusYukki/xianyu-openclaw.git
 cd xianyu-openclaw
-```
 
-### 2️⃣ 配置环境
-
-```bash
-# 复制环境模板
 cp .env.example .env
+# 至少填写：
+# - ANTHROPIC_API_KEY（或 OPENAI_API_KEY / MOONSHOT_API_KEY / MINIMAX_API_KEY / ZAI_API_KEY / CUSTOM_GATEWAY_API_KEY）
+# - OPENCLAW_GATEWAY_TOKEN
+# - AUTH_PASSWORD
+# - XIANYU_COOKIE_1
 
-# 编辑配置（使用你喜欢的编辑器）
-nano .env  # 或 vim / code .
+python3.12 -m venv .venv312
+source .venv312/bin/activate
+pip install -r requirements.txt
+
+python -m src.dashboard_server --host 127.0.0.1 --port 8091
 ```
 
-**必填配置项：**
-- `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` - AI 服务密钥
-- `XIANYU_COOKIE_1` - 闲鱼账号 Cookie
-- `ENCRYPTION_KEY` - 数据加密密钥
+浏览器打开：**http://127.0.0.1:8091**
 
-### 3️⃣ 启动服务
+### 首次验证（推荐一条命令）
 
 ```bash
-# 标准启动
-docker compose up -d
-
-# 查看日志
-docker compose logs -f
+bash scripts/verify-quickstart.sh
 ```
 
-访问 http://localhost:8080 开始使用！
+验证内容：
+- 服务可启动（`/healthz`）
+- Dashboard 可访问（`http://127.0.0.1:8091`）
+- Cookie/配置就绪（`/api/get-cookie`）
 
-### 💻 Windows 用户
+日志文件：`logs/verify-quickstart.log`
 
-下载图形化部署工具：
+### 可选路径（非推荐）
 
-```powershell
-# 从 Releases 下载
-https://github.com/G3niusYukki/xianyu-openclaw/releases/latest
+- Docker：`docker compose up -d`
+- OpenClaw 深度模式（配对/网关运维）：见 `docs/DEPLOYMENT.md`
 
-# 解压后双击运行
-xianyu-openclaw-launcher.exe
-```
+更多细节：`QUICKSTART.md` / `docs/DEPLOYMENT.md`
 
 ---
 
