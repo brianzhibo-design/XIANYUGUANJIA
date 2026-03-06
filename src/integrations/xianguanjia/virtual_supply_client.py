@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import json
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,17 +15,43 @@ import httpx
 
 from .errors import is_retryable_error, map_error
 from .models import XianGuanJiaResponse
+from .signing import sign_virtual_supply_request
 
 
 @dataclass(slots=True)
 class VirtualSupplyClient:
     base_url: str
+    app_id: str
+    app_secret: str
+    mch_id: str
+    mch_secret: str
     timeout: float = 10.0
 
     def _post(self, path: str, payload: dict[str, Any]) -> XianGuanJiaResponse:
         url = f"{self.base_url.rstrip('/')}{path}"
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        timestamp = str(int(time.time() * 1000))
+        sign = sign_virtual_supply_request(
+            app_id=self.app_id,
+            app_secret=self.app_secret,
+            mch_id=self.mch_id,
+            mch_secret=self.mch_secret,
+            timestamp=timestamp,
+            body=body,
+        )
+        params = {
+            "mch_id": self.mch_id,
+            "timestamp": timestamp,
+            "sign": sign,
+        }
         try:
-            resp = httpx.post(url, json=payload, timeout=self.timeout)
+            resp = httpx.post(
+                url,
+                params=params,
+                content=body.encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                timeout=self.timeout,
+            )
             raw = resp.json()
             code = raw.get("code")
             if code == 0:
@@ -60,10 +88,10 @@ class VirtualSupplyClient:
             )
 
     def create_card_order(self, payload: dict[str, Any]) -> XianGuanJiaResponse:
-        return self._post("/goofish/order/kam/create", payload)
+        return self._post("/goofish/order/purchase/create", payload)
 
     def create_coupon_order(self, payload: dict[str, Any]) -> XianGuanJiaResponse:
-        return self._post("/goofish/order/coupon/create", payload)
+        return self._post("/goofish/order/ticket/create", payload)
 
     def create_recharge_order(self, payload: dict[str, Any]) -> XianGuanJiaResponse:
-        return self._post("/goofish/order/purchase/create", payload)
+        return self._post("/goofish/order/recharge/create", payload)

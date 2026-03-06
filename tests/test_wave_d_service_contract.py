@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from src.integrations.xianguanjia.models import XianGuanJiaResponse
 from src.integrations.xianguanjia.open_platform_client import OpenPlatformClient
 from src.modules.listing.models import Listing, PublishResult
 from src.modules.listing.service import ListingService
+from src.modules.virtual_goods.service import VirtualGoodsService
 
 
 def test_wave_d_internal_listing_id_in_listing_and_publish_result() -> None:
@@ -125,3 +128,33 @@ async def test_wave_d_create_execute_real_store_persists_mapping_and_contract_re
 
 def test_wave_d_open_platform_client_protocol_only_no_business_router() -> None:
     assert not hasattr(OpenPlatformClient, "execute_product_action")
+
+
+def test_wave_d_inspect_order_accepts_order_id_and_returns_drilldown_fields(temp_dir) -> None:
+    svc = VirtualGoodsService(db_path=str(temp_dir / "wave_d_inspect_contract.db"), config={"xianguanjia": {"app_key": "ak", "app_secret": "as"}})
+    svc.store.upsert_order(
+        xianyu_order_id="o-contract-1",
+        order_status="paid_waiting_delivery",
+        callback_status="received",
+        fulfillment_status="pending",
+    )
+    svc.store.insert_callback(
+        callback_type="unknown_kind",
+        external_event_id="evt-contract-1",
+        dedupe_key="dk-contract-1",
+        xianyu_order_id="o-contract-1",
+        payload={"order_id": "o-contract-1"},
+        raw_body=json.dumps({"order_id": "o-contract-1"}),
+        headers={},
+        signature="sig",
+        verify_passed=True,
+        source_family="unknown",
+        event_kind="unknown_kind",
+    )
+
+    out = svc.inspect_order(order_id="o-contract-1")
+    assert out["ok"] is True
+    assert out["data"]["order_id"] == "o-contract-1"
+    assert isinstance(out["data"]["callback_timeline"], list)
+    assert "exception_priority_pool" in out["data"]
+    assert out["metrics"]["unknown_event_kind"] >= 1

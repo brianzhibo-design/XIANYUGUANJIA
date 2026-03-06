@@ -28,6 +28,14 @@ class OrderFulfillmentService:
         "已关闭": "closed",
         "已取消": "closed",
     }
+    OPEN_PLATFORM_STATUS_MAP = {
+        11: "pending",
+        12: "processing",
+        21: "shipping",
+        22: "completed",
+        23: "after_sales",
+        24: "closed",
+    }
 
     AFTER_SALES_TEMPLATES = {
         "delay": "抱歉让您久等了，我这边已加急核查并优先处理，预计很快给您明确进度。",
@@ -172,19 +180,159 @@ class OrderFulfillmentService:
             return "closed"
         return "processing"
 
-    def upsert_order(
+    @staticmethod
+    def _coerce_int(value: Any) -> int | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            return int(text)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def map_open_platform_status(cls, raw_status: Any) -> str:
+        code = cls._coerce_int(raw_status)
+        if code is None or code not in cls.OPEN_PLATFORM_STATUS_MAP:
+            raise ValueError(f"Unsupported open platform order_status: {raw_status}")
+        return cls.OPEN_PLATFORM_STATUS_MAP[code]
+
+    @staticmethod
+    def _merge_quote_snapshot(
+        base_snapshot: dict[str, Any] | None,
+        incoming_snapshot: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        merged = dict(base_snapshot or {})
+        for key, value in (incoming_snapshot or {}).items():
+            if key == "shipping_info" and isinstance(value, dict):
+                current = merged.get("shipping_info")
+                merged["shipping_info"] = {
+                    **(current if isinstance(current, dict) else {}),
+                    **value,
+                }
+                continue
+            if key == "open_platform" and isinstance(value, dict):
+                current = merged.get("open_platform")
+                merged["open_platform"] = {
+                    **(current if isinstance(current, dict) else {}),
+                    **value,
+                }
+                continue
+            merged[key] = value
+        return merged
+
+    @classmethod
+    def _build_open_platform_snapshot(cls, payload: dict[str, Any], *, source: str) -> dict[str, Any]:
+        goods = payload.get("goods")
+        goods_snapshot = dict(goods) if isinstance(goods, dict) else {}
+
+        shipping_info = {
+            "order_no": str(payload.get("order_no") or "").strip(),
+            "receiver_name": str(payload.get("receiver_name") or "").strip(),
+            "receiver_mobile": str(payload.get("receiver_mobile") or "").strip(),
+            "prov_name": str(payload.get("prov_name") or "").strip(),
+            "city_name": str(payload.get("city_name") or "").strip(),
+            "area_name": str(payload.get("area_name") or "").strip(),
+            "town_name": str(payload.get("town_name") or "").strip(),
+            "address": str(payload.get("address") or "").strip(),
+            "waybill_no": str(payload.get("waybill_no") or "").strip(),
+            "express_code": str(payload.get("express_code") or "").strip(),
+            "express_name": str(payload.get("express_name") or "").strip(),
+            "express_fee": payload.get("express_fee"),
+        }
+        shipping_info = {
+            key: value
+            for key, value in shipping_info.items()
+            if value not in ("", None)
+        }
+
+        open_platform = {
+            "source": source,
+            "order_status": cls._coerce_int(payload.get("order_status")),
+            "refund_status": cls._coerce_int(payload.get("refund_status")),
+            "order_type": cls._coerce_int(payload.get("order_type")),
+            "consign_type": cls._coerce_int(payload.get("consign_type")),
+            "update_time": cls._coerce_int(payload.get("update_time")),
+            "pay_amount": cls._coerce_int(payload.get("pay_amount")),
+            "total_amount": cls._coerce_int(payload.get("total_amount")),
+            "buyer_eid": str(payload.get("buyer_eid") or "").strip(),
+            "buyer_nick": str(payload.get("buyer_nick") or "").strip(),
+            "seller_eid": str(payload.get("seller_eid") or "").strip(),
+            "seller_name": str(payload.get("seller_name") or "").strip(),
+        }
+        open_platform = {
+            key: value
+            for key, value in open_platform.items()
+            if value not in ("", None)
+        }
+
+        snapshot: dict[str, Any] = {}
+        if shipping_info:
+            snapshot["shipping_info"] = shipping_info
+        if goods_snapshot:
+            snapshot["goods"] = goods_snapshot
+        if open_platform:
+            snapshot["open_platform"] = open_platform
+        return snapshot
+
+    @classmethod
+    def _item_type_from_open_platform(cls, payload: dict[str, Any], shipping_info: dict[str, Any]) -> str:
+        consign_type = cls._coerce_int(payload.get("consign_type"))
+        if consign_type == 2:
+            return "virtual"
+        if consign_type == 1:
+            return "physical"
+        return cls._normalize_item_type("", shipping_info)
+
+    @staticmethod
+    def _extract_open_platform_payload(response: Any, *, path: str) -> Any:
+        if hasattr(response, "ok"):
+            if not bool(getattr(response, "ok", False)):
+                message = str(getattr(response, "error_message", "") or f"{path} failed")
+                raise ValueError(message)
+            return getattr(response, "data", None)
+
+        if isinstance(response, dict) and "code" in response:
+            code = response.get("code")
+            if code not in (None, 0, "0"):
+                raise ValueError(str(response.get("msg") or response.get("message") or f"{path} failed"))
+            return response.get("data", response)
+
+        return response
+
+    def _upsert_order_record(
         self,
+        *,
         order_id: str,
         raw_status: str,
         session_id: str = "",
         quote_snapshot: dict[str, Any] | None = None,
         item_type: str = "virtual",
-    ) -> dict[str, Any]:
-        status = self.map_status(raw_status)
+        normalized_status: str | None = None,
+        event_type: str = "status_sync",
+        event_detail: dict[str, Any] | None = None,
+        idempotent: bool = False,
+    ) -> tuple[dict[str, Any], bool]:
+        status = normalized_status or self.map_status(raw_status)
+        quote_snapshot = dict(quote_snapshot or {})
         now = self._now()
-        quote_json = json.dumps(quote_snapshot or {}, ensure_ascii=False)
+        quote_json = json.dumps(quote_snapshot, ensure_ascii=False)
 
         with self._connect() as conn:
+            existing_row = conn.execute("SELECT * FROM orders WHERE order_id=?", (order_id,)).fetchone()
+            if existing_row:
+                existing = self._parse_order_row(existing_row)
+                same_state = (
+                    str(existing.get("session_id") or "") == str(session_id or "")
+                    and str(existing.get("item_type") or "") == str(item_type or "")
+                    and str(existing.get("status") or "") == status
+                    and existing.get("quote_snapshot", {}) == quote_snapshot
+                )
+                if idempotent and same_state:
+                    return existing, False
+
             conn.execute(
                 """
                 INSERT INTO orders(
@@ -201,9 +349,120 @@ class OrderFulfillmentService:
                 """,
                 (order_id, session_id, quote_json, item_type, status, now, now),
             )
-            self._append_event(conn, order_id, "status_sync", status, {"raw_status": raw_status})
+            detail = dict(event_detail or {})
+            detail.setdefault("raw_status", raw_status)
+            self._append_event(conn, order_id, event_type, status, detail)
 
-        return self.get_order(order_id)
+        return self.get_order(order_id) or {}, True
+
+    def upsert_order(
+        self,
+        order_id: str,
+        raw_status: str,
+        session_id: str = "",
+        quote_snapshot: dict[str, Any] | None = None,
+        item_type: str = "virtual",
+        normalized_status: str | None = None,
+        event_type: str = "status_sync",
+        event_detail: dict[str, Any] | None = None,
+        idempotent: bool = False,
+    ) -> dict[str, Any]:
+        order, _changed = self._upsert_order_record(
+            order_id=order_id,
+            raw_status=raw_status,
+            session_id=session_id,
+            quote_snapshot=quote_snapshot,
+            item_type=item_type,
+            normalized_status=normalized_status,
+            event_type=event_type,
+            event_detail=event_detail,
+            idempotent=idempotent,
+        )
+        return order
+
+    def sync_open_platform_order(self, payload: dict[str, Any], *, source: str) -> dict[str, Any]:
+        data = dict(payload or {})
+        order_id = str(data.get("order_no") or data.get("order_id") or "").strip()
+        if not order_id:
+            raise ValueError("Missing order_no in open platform payload")
+
+        existing = self.get_order(order_id)
+        current_snapshot = existing.get("quote_snapshot", {}) if existing else {}
+        sync_snapshot = self._build_open_platform_snapshot(data, source=source)
+        merged_snapshot = self._merge_quote_snapshot(current_snapshot, sync_snapshot)
+        shipping_info = merged_snapshot.get("shipping_info")
+        shipping_context = dict(shipping_info) if isinstance(shipping_info, dict) else {}
+        normalized_status = self.map_open_platform_status(data.get("order_status"))
+        item_type = self._item_type_from_open_platform(data, shipping_context)
+
+        order, changed = self._upsert_order_record(
+            order_id=order_id,
+            raw_status=str(data.get("order_status") or ""),
+            session_id=str(existing.get("session_id") or "") if existing else "",
+            quote_snapshot=merged_snapshot,
+            item_type=item_type,
+            normalized_status=normalized_status,
+            event_type="status_sync",
+            event_detail={
+                "sync_source": source,
+                "raw_status": data.get("order_status"),
+                "refund_status": data.get("refund_status"),
+                "update_time": data.get("update_time"),
+            },
+            idempotent=True,
+        )
+
+        return {
+            "source": source,
+            "changed": changed,
+            "order": order,
+        }
+
+    def sync_open_platform_list_orders(self, client: Any, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        response = client.list_orders(dict(payload or {}))
+        data = self._extract_open_platform_payload(response, path="list_orders")
+        rows = data.get("list") if isinstance(data, dict) else data
+        orders: list[dict[str, Any]] = []
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict):
+                    orders.append(self.sync_open_platform_order(row, source="list_orders"))
+
+        return {
+            "success": True,
+            "total": len(orders),
+            "changed": sum(1 for item in orders if bool(item.get("changed"))),
+            "orders": orders,
+        }
+
+    def sync_list_orders(self, client: Any, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.sync_open_platform_list_orders(client, payload)
+
+    def sync_open_platform_order_detail(
+        self,
+        client: Any,
+        payload: dict[str, Any] | None = None,
+        *,
+        order_no: str | None = None,
+    ) -> dict[str, Any]:
+        request = dict(payload or {})
+        if order_no:
+            request["order_no"] = order_no
+        response = client.get_order_detail(request)
+        data = self._extract_open_platform_payload(response, path="get_order_detail")
+        if not isinstance(data, dict):
+            raise ValueError("Invalid get_order_detail payload")
+        result = self.sync_open_platform_order(data, source="get_order_detail")
+        return {"success": True, **result}
+
+    def sync_get_order_detail(
+        self,
+        client: Any,
+        payload: dict[str, Any] | None = None,
+        *,
+        order_no: str | None = None,
+    ) -> dict[str, Any]:
+        return self.sync_open_platform_order_detail(client, payload, order_no=order_no)
 
     def _append_event(
         self,
