@@ -20,4 +20,4 @@ RUN mkdir -p /app/data && chown -R appusr:appgrp /app/data
 
 USER appusr
 EXPOSE 8091
-CMD ["python", "-m", "src.dashboard_server"]
+CMD ["python", "-m", "src.dashboard_server", "--host", "0.0.0.0"]

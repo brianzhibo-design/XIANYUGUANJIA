@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { getTrendData, getTopProducts } from '../../api/dashboard';
-import { useCurrentAccount } from '../../contexts/AccountContext';
 import { TrendingUp, BarChart2, Calendar, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Analytics() {
-  const { currentAccountId } = useCurrentAccount();
-  const [metric, setMetric] = useState('orders'); // orders, views, revenue
+  const [metric, setMetric] = useState('views');
   const [days, setDays] = useState(30);
   const [trendData, setTrendData] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
@@ -14,7 +12,7 @@ export default function Analytics() {
 
   useEffect(() => {
     fetchData();
-  }, [metric, days, currentAccountId]);
+  }, [metric, days]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -25,10 +23,12 @@ export default function Analytics() {
       ]);
       
       if (trendRes.data) {
-        setTrendData(trendRes.data.trend || []);
+        const trend = Array.isArray(trendRes.data) ? trendRes.data : (trendRes.data.trend || []);
+        setTrendData(trend);
       }
       if (topRes.data) {
-        setTopProducts(topRes.data.products || []);
+        const products = Array.isArray(topRes.data) ? topRes.data : (topRes.data.products || []);
+        setTopProducts(products);
       }
     } catch (e) {
       toast.error('加载分析数据失败');
@@ -68,8 +68,8 @@ export default function Analytics() {
             <div className="flex bg-xy-gray-100 p-1 rounded-lg">
               {[
                 { id: 'views', label: '浏览量' },
-                { id: 'orders', label: '订单量' },
-                { id: 'revenue', label: '成交额' }
+                { id: 'wants', label: '想要数' },
+                { id: 'sales', label: '成交量' }
               ].map(m => (
                 <button
                   key={m.id}
@@ -131,7 +131,7 @@ export default function Analytics() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-xy-text-primary truncate">{p.title}</p>
-                    <p className="text-xs text-xy-text-secondary mt-0.5">转化率: {((p.orders/Math.max(1,p.views))*100).toFixed(1)}%</p>
+                    <p className="text-xs text-xy-text-secondary mt-0.5">想要: {p.wants || 0} | 成交: {p.sales || 0} | 浏览: {p.views || 0}</p>
                   </div>
                 </div>
               ))

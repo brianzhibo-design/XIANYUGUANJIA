@@ -10,56 +10,56 @@ from html import escape
 from typing import Any
 
 _COMMON_STYLE = """
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{
     width: 750px; height: 1000px; overflow: hidden;
     font-family: -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
     background: linear-gradient(135deg, {bg_from} 0%, {bg_to} 100%);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     padding: 40px;
-}
-.card {
+}}
+.card {{
     background: rgba(255,255,255,0.95); border-radius: 24px;
     padding: 48px 40px; width: 100%;
     box-shadow: 0 8px 32px rgba(0,0,0,0.08);
-}
-.badge {
+}}
+.badge {{
     display: inline-block; background: {accent}; color: #fff;
     font-size: 14px; font-weight: 600; padding: 6px 16px;
     border-radius: 20px; margin-bottom: 16px;
-}
-.title {
+}}
+.title {{
     font-size: 32px; font-weight: 700; color: #1a1a2e;
     line-height: 1.4; margin-bottom: 20px;
-}
-.desc {
+}}
+.desc {{
     font-size: 18px; color: #555; line-height: 1.8; margin-bottom: 24px;
-}
-.features {
+}}
+.features {{
     list-style: none; padding: 0;
-}
-.features li {
+}}
+.features li {{
     font-size: 16px; color: #333; padding: 10px 0;
     border-bottom: 1px solid #f0f0f0;
     display: flex; align-items: center;
-}
-.features li::before {
+}}
+.features li::before {{
     content: "✓"; color: {accent}; font-weight: 700;
     margin-right: 12px; font-size: 18px;
-}
-.price-tag {
+}}
+.price-tag {{
     margin-top: 24px; text-align: center;
-}
-.price-tag .price {
+}}
+.price-tag .price {{
     font-size: 48px; font-weight: 800; color: {accent};
-}
-.price-tag .unit {
+}}
+.price-tag .unit {{
     font-size: 20px; color: #999; margin-left: 4px;
-}
-.footer {
+}}
+.footer {{
     margin-top: 20px; text-align: center;
     font-size: 14px; color: #aaa;
-}
+}}
 """
 
 _HTML_SKELETON = """<!DOCTYPE html>

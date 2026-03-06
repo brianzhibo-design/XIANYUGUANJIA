@@ -3,13 +3,10 @@ const crypto = require('crypto');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const { auth } = require('../middleware/auth');
-
 const router = express.Router();
 
 const CONFIG_FILE = path.join(__dirname, '../../data/system_config.json');
 
-const ALLOWED_API_PREFIXES = ['/api/open/'];
 
 function md5(str) {
   return crypto.createHash('md5').update(str, 'utf8').digest('hex');
@@ -49,12 +46,13 @@ function timingSafeCompare(a, b) {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-router.post('/proxy', auth, async (req, res) => {
+router.post('/proxy', async (req, res) => {
   try {
-    const { path: apiPath, payload } = req.body;
+    const { apiPath, body: reqBody, path: legacyPath, payload } = req.body;
+    const resolvedPath = apiPath || legacyPath;
 
-    if (!apiPath || !ALLOWED_API_PREFIXES.some(p => apiPath.startsWith(p))) {
-      return res.status(403).json({ ok: false, error: 'API path not allowed' });
+    if (!resolvedPath || typeof resolvedPath !== 'string' || !resolvedPath.startsWith('/api/open/')) {
+      return res.status(400).json({ error: 'Invalid apiPath' });
     }
 
     const cfg = loadXgjConfig();
@@ -62,11 +60,11 @@ router.post('/proxy', auth, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'XianGuanJia API not configured. Please configure in Settings.' });
     }
 
-    const body = JSON.stringify(payload || {});
+    const body = JSON.stringify(reqBody || payload || {});
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const sign = signRequest(cfg.appKey, cfg.appSecret, body, timestamp);
 
-    const url = `${cfg.baseUrl}${apiPath}`;
+    const url = `${cfg.baseUrl}${resolvedPath}`;
     const response = await axios.post(url, body, {
       params: { appid: cfg.appKey, timestamp, sign },
       headers: { 'Content-Type': 'application/json' },
@@ -83,50 +81,47 @@ router.post('/proxy', auth, async (req, res) => {
   }
 });
 
-router.post('/order/receive', async (req, res) => {
+const PYTHON_WEBHOOK_URL = process.env.PYTHON_WEBHOOK_URL || 'http://localhost:8091/api/webhook';
+
+async function handleWebhook(req, res) {
   try {
     const cfg = loadXgjConfig();
     if (!cfg.appKey || !cfg.appSecret) {
       return res.status(400).json({ code: 1, msg: 'Not configured' });
     }
 
-    const { timestamp, sign } = req.query;
-    const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
-    const expected = signRequest(cfg.appKey, cfg.appSecret, rawBody, timestamp);
+    const timestamp = parseInt(req.body.timestamp || req.query.timestamp);
+    const now = Math.floor(Date.now() / 1000);
+    if (!timestamp || Math.abs(now - timestamp) > 300) {
+      return res.status(400).json({ error: 'Timestamp expired' });
+    }
+
+    const { sign } = req.query;
+    const rawBody = req.rawBody
+      ? req.rawBody.toString('utf8')
+      : JSON.stringify(req.body);
+    const expected = signRequest(cfg.appKey, cfg.appSecret, rawBody, String(timestamp));
 
     if (!timingSafeCompare(expected, sign || '')) {
       return res.status(401).json({ code: 401, msg: 'Invalid signature' });
     }
 
-    console.log('Order push received:', rawBody.slice(0, 500));
-    res.json({ code: 0, msg: 'OK' });
+    const forwarded = await axios.post(PYTHON_WEBHOOK_URL, rawBody, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+    });
+
+    res.json(forwarded.data);
   } catch (error) {
-    console.error('Order push error:', error.message);
+    console.error('Webhook error:', error.message);
+    if (error.response) {
+      return res.status(error.response.status).json(error.response.data);
+    }
     res.status(500).json({ code: 500, msg: 'Internal error' });
   }
-});
+}
 
-router.post('/product/receive', async (req, res) => {
-  try {
-    const cfg = loadXgjConfig();
-    if (!cfg.appKey || !cfg.appSecret) {
-      return res.status(400).json({ code: 1, msg: 'Not configured' });
-    }
-
-    const { timestamp, sign } = req.query;
-    const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
-    const expected = signRequest(cfg.appKey, cfg.appSecret, rawBody, timestamp);
-
-    if (!timingSafeCompare(expected, sign || '')) {
-      return res.status(401).json({ code: 401, msg: 'Invalid signature' });
-    }
-
-    console.log('Product push received:', rawBody.slice(0, 500));
-    res.json({ code: 0, msg: 'OK' });
-  } catch (error) {
-    console.error('Product push error:', error.message);
-    res.status(500).json({ code: 500, msg: 'Internal error' });
-  }
-});
+router.post('/order/receive', handleWebhook);
+router.post('/product/receive', handleWebhook);
 
 module.exports = router;

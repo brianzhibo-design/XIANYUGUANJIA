@@ -1,15 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
-import { useCurrentAccount } from '../contexts/AccountContext'
 import { getDashboardSummary, getRecentOperations, getSystemStatus } from '../api/dashboard'
 import { Store, ShoppingBag, MessageCircle, FileText, CheckCircle, AlertCircle, RefreshCw, Settings } from 'lucide-react'
 import toast from 'react-hot-toast'
+import SetupGuide from '../components/SetupGuide'
 
 const Dashboard = () => {
-  const { user } = useAuth()
-  const { currentAccount, currentAccountId, accounts } = useCurrentAccount()
-  
   const [stats, setStats] = useState({
     products: 0,
     orders: 0,
@@ -21,38 +17,43 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // 监听账号切换事件
-    const handleAccountSwitched = () => fetchDashboardData();
-    window.addEventListener('accountSwitched', handleAccountSwitched);
-    
     fetchDashboardData()
-
-    return () => window.removeEventListener('accountSwitched', handleAccountSwitched);
-  }, [currentAccountId])
+  }, [])
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
-      const [summaryRes, opsRes, statusRes] = await Promise.all([
+      const results = await Promise.allSettled([
         getDashboardSummary(),
         getRecentOperations(10),
         getSystemStatus()
-      ]).catch(e => {
-        console.error("Some dashboard API failed", e);
-        return [{}, {}, {}];
-      });
+      ]);
+      const summaryRes = results[0].status === 'fulfilled' ? results[0].value : null;
+      const opsRes = results[1].status === 'fulfilled' ? results[1].value : null;
+      const statusRes = results[2].status === 'fulfilled' ? results[2].value : null;
+      const failedCount = results.filter(r => r.status === 'rejected').length;
+      if (failedCount === results.length) {
+        throw new Error('所有仪表盘接口均请求失败');
+      }
 
       if (summaryRes?.data) {
+        const s = summaryRes.data;
         setStats({
-          products: summaryRes.data.published_count || summaryRes.data.active_products || 0,
-          orders: summaryRes.data.orders_created || 0,
-          messages: summaryRes.data.unread_messages || 0,
-          replies: summaryRes.data.auto_replies || 0
+          products: s.active_products ?? 0,
+          orders: s.today_orders ?? s.today_operations ?? 0,
+          messages: s.unread_messages ?? s.total_wants ?? 0,
+          replies: s.today_replies ?? s.total_sales ?? 0
         })
       }
       
-      if (opsRes?.data?.operations) {
-        setRecentOps(opsRes.data.operations)
+      if (opsRes?.data) {
+        const ops = Array.isArray(opsRes.data) ? opsRes.data : (opsRes.data.operations || []);
+        setRecentOps(ops.map(op => ({
+          action: op.operation_type || op.action || '未知操作',
+          success: op.status === 'success' || op.status === 'completed',
+          timestamp: op.timestamp || '',
+          message: op.message || `商品 ${op.product_id || ''}`
+        })))
       }
       
       if (statusRes?.data) {
@@ -67,12 +68,6 @@ const Dashboard = () => {
     }
   }
 
-  const getAccountStatusColor = (status) => {
-    if (status === 'good') return 'text-xy-success';
-    if (status === 'warning') return 'text-xy-warning';
-    return 'text-xy-error';
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-64px)]">
@@ -81,31 +76,28 @@ const Dashboard = () => {
     )
   }
 
-  const myAccountStatus = sysStatus?.modules?.account_health?.details?.[currentAccountId] || { health_score: 100, status: 'good' };
+  const cookieHealth = sysStatus?.modules?.account_health?.details?.default || { health_score: 100, status: 'good' };
 
   return (
     <div className="xy-page xy-enter">
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-xy-text-primary">
-            欢迎回来，{user.username}
-          </h1>
-          <p className="mt-2 text-xy-text-secondary">
-            当前操作店铺：<span className="font-medium text-xy-brand-600">{currentAccount?.name || '未选择'}</span>
-          </p>
+          <h1 className="text-2xl font-bold text-xy-text-primary">工作台</h1>
+          <p className="mt-2 text-xy-text-secondary">闲鱼自动化运营概览</p>
         </div>
         <div className="flex gap-4">
           <div className="flex items-center gap-2 bg-xy-surface px-4 py-2 rounded-xl border border-xy-border shadow-sm">
-            <div className={`w-2 h-2 rounded-full ${myAccountStatus.status === 'good' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-            <span className="text-sm font-medium">Cookie: {myAccountStatus.health_score}分</span>
+            <div className={`w-2 h-2 rounded-full ${cookieHealth.status === 'good' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+            <span className="text-sm font-medium">Cookie: {cookieHealth.health_score ?? 100}分</span>
           </div>
-          <button onClick={fetchDashboardData} className="p-2 bg-xy-surface border border-xy-border rounded-xl shadow-sm hover:bg-xy-gray-50 transition-colors">
+          <button onClick={fetchDashboardData} className="p-2 bg-xy-surface border border-xy-border rounded-xl shadow-sm hover:bg-xy-gray-50 transition-colors" aria-label="刷新数据">
             <RefreshCw className="w-5 h-5 text-xy-text-secondary" />
           </button>
         </div>
       </div>
 
-      {/* 核心数据指标 */}
+      <SetupGuide />
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
         <div className="xy-card p-6">
           <div className="flex items-center justify-between mb-4">
@@ -143,17 +135,16 @@ const Dashboard = () => {
               <CheckCircle className="h-6 w-6 text-green-500" />
             </div>
           </div>
-          <p className="text-sm font-medium text-xy-text-secondary mb-1">自动回复</p>
+          <p className="text-sm font-medium text-xy-text-secondary mb-1">今日自动回复</p>
           <p className="text-2xl md:text-3xl font-bold text-xy-text-primary">{stats.replies}</p>
         </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-8">
-        {/* 左侧：最近操作记录 */}
         <div className="md:col-span-2 xy-card overflow-hidden">
           <div className="px-6 py-4 border-b border-xy-border bg-xy-gray-50 flex justify-between items-center">
             <h2 className="text-base font-semibold text-xy-text-primary">近期自动化操作</h2>
-            <Link to="/logs" className="text-sm text-xy-brand-500 hover:text-xy-brand-600 font-medium">查看完整日志 &rarr;</Link>
+            <Link to="/analytics" className="text-sm text-xy-brand-500 hover:text-xy-brand-600 font-medium">查看完整日志 &rarr;</Link>
           </div>
           
           <div className="divide-y divide-xy-border">
@@ -181,7 +172,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* 右侧：快捷入口和状态 */}
         <div className="space-y-6">
           <div className="xy-card p-6">
             <h3 className="text-base font-semibold text-xy-text-primary mb-4">快捷操作</h3>
@@ -206,12 +196,12 @@ const Dashboard = () => {
                 <span className="text-blue-500">&rarr;</span>
               </Link>
 
-              <Link to="/accounts" className="flex items-center justify-between p-3 rounded-xl border border-xy-border hover:border-green-500 hover:bg-green-50 transition-colors group">
+              <Link to="/config" className="flex items-center justify-between p-3 rounded-xl border border-xy-border hover:border-green-500 hover:bg-green-50 transition-colors group">
                 <div className="flex items-center gap-3">
                   <div className="bg-green-100 p-2 rounded-lg group-hover:bg-green-200 transition-colors">
                     <Settings className="w-5 h-5 text-green-600" />
                   </div>
-                  <span className="font-medium text-xy-text-primary">店铺配置</span>
+                  <span className="font-medium text-xy-text-primary">系统配置</span>
                 </div>
                 <span className="text-green-500">&rarr;</span>
               </Link>
@@ -222,15 +212,11 @@ const Dashboard = () => {
             <h3 className="font-semibold mb-2">系统运行状态</h3>
             <div className="space-y-3 mt-4">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-400">模块网关</span>
+                <span className="text-gray-400">服务状态</span>
                 <span className="flex items-center gap-1.5">
-                  <div className={`w-2 h-2 rounded-full ${sysStatus?.modules?.account_health ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                  {sysStatus?.modules?.account_health ? '运行中' : '异常'}
+                  <div className={`w-2 h-2 rounded-full ${sysStatus ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                  {sysStatus ? '运行中' : '异常'}
                 </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">总店铺数</span>
-                <span className="font-medium">{accounts.length} 个</span>
               </div>
             </div>
           </div>

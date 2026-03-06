@@ -20,6 +20,8 @@ class DualLayerDedup:
         """Create tables if absent."""
 
         async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.execute("PRAGMA busy_timeout=5000")
             await db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS exact_dedup (
@@ -63,6 +65,8 @@ class DualLayerDedup:
         """
 
         async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.execute("PRAGMA busy_timeout=5000")
             cur = await db.execute(
                 f"INSERT OR IGNORE INTO {table}(digest, created_at) VALUES (?, ?)",
                 (digest, int(time.time())),
@@ -77,6 +81,8 @@ class DualLayerDedup:
 
         now = int(time.time())
         async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.execute("PRAGMA busy_timeout=5000")
             await db.execute("DELETE FROM exact_dedup WHERE created_at < ?", (now - self.exact_ttl,))
             await db.execute("DELETE FROM content_dedup WHERE created_at < ?", (now - self.content_ttl,))
             await db.commit()

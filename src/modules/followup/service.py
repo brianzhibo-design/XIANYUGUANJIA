@@ -68,6 +68,8 @@ class FollowUpEngine:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
             yield conn
 
     def _init_db(self) -> None:

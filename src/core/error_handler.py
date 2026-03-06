@@ -171,6 +171,8 @@ def retry(max_attempts: int = 3, delay: float = 1.0, backoff_factor: float = 2.0
             for attempt in range(max_attempts):
                 try:
                     return await func(*args, **kwargs)
+                except KeyboardInterrupt:
+                    raise
                 except exceptions as e:
                     if attempt == max_attempts - 1:
                         logger.error(f"Final attempt failed for {func.__name__}: {e}")
@@ -189,6 +191,8 @@ def retry(max_attempts: int = 3, delay: float = 1.0, backoff_factor: float = 2.0
             for attempt in range(max_attempts):
                 try:
                     return func(*args, **kwargs)
+                except KeyboardInterrupt:
+                    raise
                 except exceptions as e:
                     if attempt == max_attempts - 1:
                         logger.error(f"Final attempt failed for {func.__name__}: {e}")

@@ -1,42 +1,18 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: xianyu-postgres
-    environment:
-      POSTGRES_DB: ${DB_NAME:-code_review_db}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
   node-backend:
     build:
       context: ./server
       dockerfile: Dockerfile
     container_name: xianyu-node-backend
-    depends_on:
-      postgres:
-        condition: service_healthy
     ports:
       - "${NODE_PORT:-3001}:3001"
     env_file:
       - .env
+    volumes:
+      - node-data:/app/data
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 3001
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-code_review_db}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
       interval: 15s
@@ -59,7 +35,7 @@ services:
     environment:
       PYTHONUNBUFFERED: 1
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8091/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8091/healthz || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -70,7 +46,8 @@ services:
       context: ./client
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
+        VITE_NODE_API_URL: ${VITE_NODE_API_URL:-/api}
+        VITE_PY_API_URL: ${VITE_PY_API_URL:-/py}
     container_name: xianyu-react-frontend
     depends_on:
       node-backend:
@@ -85,4 +62,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgdata:
+  node-data:

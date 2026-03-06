@@ -19,6 +19,9 @@ import httpx
 from src.core.error_handler import BrowserError
 from src.core.logger import get_logger
 
+_APP_KEY = os.environ.get("XGJ_APP_KEY", "34839810")
+_APP_SECRET = os.environ.get("XGJ_APP_SECRET", "444e9908a51d1cb236a27862abc769c9")
+
 try:
     import websockets
 except Exception:  # pragma: no cover - optional dependency path
@@ -38,7 +41,7 @@ def parse_cookie_header(cookie_text: str) -> dict[str, str]:
     return result
 
 
-def generate_sign(timestamp_ms: str, token: str, data: str, app_key: str = "34839810") -> str:
+def generate_sign(timestamp_ms: str, token: str, data: str, app_key: str = _APP_KEY) -> str:
     raw = f"{token}&{timestamp_ms}&{app_key}&{data}"
     return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
@@ -536,13 +539,13 @@ class GoofishWsTransport:
 
             t = str(int(time.time() * 1000))
             data_val = json.dumps(
-                {"appKey": "444e9908a51d1cb236a27862abc769c9", "deviceId": self.device_id},
+                {"appKey": _APP_SECRET, "deviceId": self.device_id},
                 ensure_ascii=False,
                 separators=(",", ":"),
             )
             params = {
                 "jsv": "2.7.2",
-                "appKey": "34839810",
+                "appKey": _APP_KEY,
                 "t": t,
                 "sign": generate_sign(t, token_seed, data_val),
                 "v": "1.0",
@@ -612,7 +615,7 @@ class GoofishWsTransport:
             "lwp": "/reg",
             "headers": {
                 "cache-header": "app-key token ua wv",
-                "app-key": "444e9908a51d1cb236a27862abc769c9",
+                "app-key": _APP_SECRET,
                 "token": token,
                 "ua": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -697,6 +700,11 @@ class GoofishWsTransport:
         self._cleanup_seen()
 
         self._session_peer[chat_id] = sender_id
+        _SESSION_PEER_MAX = 1000
+        if len(self._session_peer) > _SESSION_PEER_MAX:
+            oldest_keys = list(self._session_peer.keys())[: len(self._session_peer) - _SESSION_PEER_MAX]
+            for k in oldest_keys:
+                self._session_peer.pop(k, None)
         payload = {
             "session_id": chat_id,
             "peer_name": str(event.get("sender_name", "") or "买家"),

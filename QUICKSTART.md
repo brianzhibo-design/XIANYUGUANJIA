@@ -1,24 +1,22 @@
-# 快速开始指南
+# 快速开始
 
-> 🚀 5分钟内启动你的闲鱼 AI 助手
-
----
-
-## 📋 环境要求
-
-在开始之前，请确保你已准备好：
-
-| 需求 | 说明 | 是否必须 |
-|------|------|---------|
-| **Docker** | 20.10+ 版本 | ✅ 必须 |
-| **Docker Compose** | 随 Docker Desktop 安装 | ✅ 必须 |
-| **AI API Key** | Anthropic / OpenAI / Moonshot / MiniMax / ZAI 任选一个 | ✅ 必须 |
-| **闲鱼 Cookie** | 从浏览器获取的登录凭证 | ✅ 必须 |
-| **Python 3.10+** | 仅在使用 Lite 模式时需要 | ❌ 可选 |
+5 分钟内启动闲鱼管家。
 
 ---
 
-## 🚀 三步启动
+## 前提条件
+
+| 依赖 | 版本要求 | 说明 |
+|------|---------|------|
+| Python | 3.10+ | Python 后端运行时 |
+| Node.js | 18+ | Node.js 后端和 React 前端 |
+| npm | 随 Node.js 安装 | 包管理器 |
+| 闲鱼 Cookie | - | 从浏览器获取的登录凭证 |
+| AI API Key | - | DeepSeek / 阿里百炼 / OpenAI 等，任选一个 |
+
+---
+
+## 方式一：本地开发模式（推荐）
 
 ### 第 1 步：克隆项目
 
@@ -27,247 +25,183 @@ git clone https://github.com/G3niusYukki/xianyu-openclaw.git
 cd xianyu-openclaw
 ```
 
-### 第 2 步：配置环境
+### 第 2 步：安装依赖
 
 ```bash
-# 复制环境变量模板
+# Python 依赖
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Node.js 依赖
+cd server && npm install && cd ..
+cd client && npm install && cd ..
+```
+
+> Windows 用户激活虚拟环境用 `.venv\Scripts\activate` 替代 `source .venv/bin/activate`。
+
+### 第 3 步：配置环境变量
+
+```bash
 cp .env.example .env
 ```
 
-编辑 `.env` 文件，填入以下必需信息：
+用编辑器打开 `.env`，填入以下必需信息：
 
 ```bash
-# === 网关 AI 配置（至少填一个）===
-ANTHROPIC_API_KEY=sk-ant-api03-...          # Anthropic Claude
-OPENAI_API_KEY=sk-...                       # OpenAI
-MOONSHOT_API_KEY=sk-...                     # Moonshot (Kimi)
-MINIMAX_API_KEY=...                         # MiniMax
-ZAI_API_KEY=...                             # 智谱 ZAI
+# 闲鱼 Cookie（从浏览器获取）
+XIANYU_COOKIE_1=your_cookie_here
 
-# === OpenClaw 网关配置 ===
-OPENCLAW_GATEWAY_TOKEN=your-secret-token    # 任意自定义密钥
-OPENCLAW_WEB_PORT=8080                      # Web 界面端口
-AUTH_PASSWORD=changeme                      # 登录密码
-AUTH_USERNAME=admin                         # 登录用户名
-
-# === 闲鱼 Cookie ===
-XIANYU_COOKIE_1=your_cookie_here            # 主账号 Cookie
-XIANYU_COOKIE_2=                            # 第二个账号（可选）
-
-# === 业务文案 AI（可选，推荐 DeepSeek）===
+# AI 服务配置（以 DeepSeek 为例）
 AI_PROVIDER=deepseek
-AI_API_KEY=sk-...
+AI_API_KEY=sk-your-deepseek-key
 AI_BASE_URL=https://api.deepseek.com/v1
 AI_MODEL=deepseek-chat
+
 ```
 
-**获取闲鱼 Cookie 的方法：**
+### 第 4 步：启动服务
 
-1. 用 Chrome 打开 [https://www.goofish.com](https://www.goofish.com) 并登录
-2. 按 **F12** 打开开发者工具
-3. 切换到 **Network（网络）** 标签
-4. 按 **F5** 刷新页面
-5. 点击任意一个请求
-6. 在右侧 **Request Headers** 中找到 `Cookie:` 一行
-7. 全部复制并粘贴到 `.env` 文件中
+使用一键启动脚本（推荐）：
 
-### 第 3 步：启动服务
+```bash
+# macOS / Linux
+./start.sh
+
+# Windows
+start.bat
+```
+
+脚本会自动启动 Node.js 后端、React 前端和 Python 后端。如需 Lite 直连模式（WebSocket 消息监听 + AI 自动回复），可另开终端执行 `python -m src.lite`。
+
+### 第 5 步：验证启动
+
+打开浏览器，依次访问：
+
+| 服务 | 地址 | 预期结果 |
+|------|------|---------|
+| React 前端 | http://localhost:5173 | 管理面板首页 |
+| Python Dashboard | http://localhost:8091 | Dashboard 页面 |
+| Node.js 后端 | http://localhost:3001/health | 返回健康状态 JSON |
+
+---
+
+## 方式二：Docker 模式
+
+### 第 1 步：配置
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env`，填入闲鱼 Cookie、AI 服务等配置（同本地模式）。
+
+### 第 2 步：启动
 
 ```bash
 docker compose up -d
 ```
 
-等待约 30 秒，让服务完全启动。
+Docker Compose 会启动以下容器：
 
----
+| 容器 | 端口 | 说明 |
+|------|------|------|
+| xianyu-node-backend | 3001 | Node.js 后端 |
+| xianyu-python-backend | 8091 | Python 后端 |
+| xianyu-react-frontend | 5173 | React 前端 |
 
-## 🪟 Windows 一键部署（推荐小白用户）
-
-如果你使用 Windows，可以直接使用图形化工具，无需命令行：
-
-### 方式 1：下载 EXE 工具
-
-1. 访问 [Releases 页面](https://github.com/G3niusYukki/xianyu-openclaw/releases/latest)
-2. 下载 `xianyu-openclaw-launcher.zip`
-3. 解压到任意位置（如桌面）
-4. 双击 `xianyu-openclaw-launcher.exe`
-5. 按向导步骤操作：
-   - **第 1 步**：检测 Docker 安装
-   - **第 2 步**：选择 AI 服务并填入 API Key
-   - **第 3 步**：设置登录密码
-   - **第 4 步**：粘贴闲鱼 Cookie
-   - **第 5 步**：一键启动
-
-### 方式 2：使用批处理脚本
-
-```bat
-# 快速启动（安装 + 检查 + 启动）
-scripts\windows\quickstart.bat
-
-# 或使用菜单式启动器
-scripts\windows\launcher.bat
-```
-
----
-
-## ✅ 验证启动
-
-### 1. 检查容器状态
+### 第 3 步：验证
 
 ```bash
 docker compose ps
 ```
 
-应该看到 `xianyu-openclaw` 容器处于 `Up (healthy)` 状态。
+所有容器应处于 `Up (healthy)` 状态。
 
-### 2. 访问 Web 界面
+访问 http://localhost:5173 打开管理面板。
 
-打开浏览器访问：**http://localhost:8080**
+---
 
-- 用户名：`admin`（或你在 `.env` 中设置的 `AUTH_USERNAME`）
-- 密码：你在 `.env` 中设置的 `AUTH_PASSWORD`
+## 获取闲鱼 Cookie
 
-### 3. 网关配对（首次启动可能需要）
+1. 用 Chrome 打开 https://www.goofish.com 并登录
+2. 按 **F12** 打开开发者工具
+3. 切换到 **Network** 标签
+4. 按 **F5** 刷新页面
+5. 点击任意一个请求
+6. 在右侧 **Request Headers** 中找到 `Cookie:` 一行
+7. 全部复制，粘贴到 `.env` 文件中
 
-如果看到 `pairing required` 提示，运行：
+Cookie 有效期通常 7-30 天。过期后可通过管理面板或 Dashboard（http://localhost:8091/cookie）在线更新，或重新从浏览器获取。
+
+---
+
+## 常见问题
+
+### 端口被占用
+
+**症状**：启动时报 `port already in use` 或 `address already in use`。
+
+**解决**：检查哪个进程占用了端口，停掉后重试：
 
 ```bash
-# 查看配对请求
-docker compose exec -it openclaw-gateway openclaw devices list
+# macOS/Linux
+lsof -i :5173
+lsof -i :3001
+lsof -i :8091
 
-# 批准配对（将 <requestId> 替换为实际的请求 ID）
-docker compose exec -it openclaw-gateway openclaw devices approve <requestId>
+# 或修改端口
+# .env 中设置 FRONTEND_PORT、NODE_PORT、PYTHON_PORT
 ```
 
----
+### Cookie 失效
 
-## 🎯 快速测试
+**症状**：WebSocket 连接失败，或消息监听无响应。
 
-登录 Web 界面后，尝试以下对话命令：
+**解决**：重新从浏览器获取 Cookie，更新到 `.env` 或通过 Dashboard 在线更新，然后重启 Python 后端。
 
-```
-你: 帮我发布一个 iPhone 15 Pro，价格 5999，95新
-AI: ✅ 已发布！标题：【自用出】iPhone 15 Pro 256G 原色钛金属 95新
-    链接：https://www.goofish.com/item/xxx
-```
+### AI 服务报错
 
-```
-你: 擦亮所有商品
-AI: ✅ 已擦亮 23 件商品
-```
-
-```
-你: 今天卖得怎么样？
-AI: 📊 今日浏览 1,247 | 想要 89 | 成交 12 | 营收 ¥38,700
-```
-
----
-
-## 🔧 故障排查
-
-### 问题 1：Docker 未运行
-
-**症状**：`Cannot connect to the Docker daemon`
+**症状**：自动回复无输出，或日志中出现 API 错误。
 
 **解决**：
-- Windows/macOS：打开 Docker Desktop 应用
-- Linux：`sudo systemctl start docker`
+1. 检查 `.env` 中的 `AI_API_KEY` 是否正确
+2. 确认 API Key 余额充足
+3. 检查 `AI_BASE_URL` 是否可访问
 
-### 问题 2：端口 8080 被占用
+### npm install 失败
 
-**症状**：`Bind for 0.0.0.0:8080 failed: port is already allocated`
-
-**解决**：
-1. 修改 `.env` 文件中的 `OPENCLAW_WEB_PORT`，例如改为 `8081`
-2. 重新启动：`docker compose up -d`
-
-### 问题 3：Cookie 失效
-
-**症状**：无法获取闲鱼数据，或提示认证失败
+**症状**：Node.js 依赖安装报错。
 
 **解决**：
-1. 重新获取闲鱼 Cookie（有效期通常 7-30 天）
-2. 更新 `.env` 文件
-3. 重启服务：`docker compose restart`
+1. 确认 Node.js 版本 >= 18：`node -v`
+2. 清除缓存重试：`npm cache clean --force && npm install`
 
-### 问题 4：AI 服务报错
+### Python 依赖安装失败
 
-**症状**：AI 回复异常或超时
+**症状**：`pip install` 报错。
 
 **解决**：
-1. 检查 API Key 是否正确
-2. 检查 API Key 余额是否充足
-3. 查看网关日志：`docker compose logs -f openclaw-gateway`
+1. 确认 Python 版本 >= 3.10：`python3 --version`
+2. 确认已激活虚拟环境
+3. 国内用户可使用镜像源：`pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
 
 ---
 
-## 📊 查看运行状态
-
-### 诊断工具
+## 停止服务
 
 ```bash
-# 运行完整诊断
-python -m src.cli doctor --strict
+# 本地模式：Ctrl+C 终止各终端进程
 
-# 检查模块状态
-python -m src.cli module --action status --target all
-```
-
-### 查看日志
-
-```bash
-# 查看所有服务日志
-docker compose logs
-
-# 查看特定服务日志（实时）
-docker compose logs -f openclaw-gateway
-
-# 查看最近 100 行
-docker compose logs --tail 100
-```
-
-### 数据看板
-
-启动独立的数据看板：
-
-```bash
-python -m src.dashboard_server --port 8091
-```
-
-然后访问：**http://localhost:8091**
-
----
-
-## 🛑 停止服务
-
-```bash
-# 停止服务（保留数据）
-docker compose down
-
-# 停止服务并删除数据（谨慎使用）
-docker compose down -v
+# Docker 模式
+docker compose down          # 停止（保留数据）
+docker compose down -v       # 停止并删除数据卷（谨慎）
 ```
 
 ---
 
-## 📚 下一步
+## 下一步
 
-- 📖 **详细使用指南**：查看 [USER_GUIDE.md](USER_GUIDE.md)
-- 🚀 **生产部署**：查看 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- 🔧 **CLI 命令参考**：查看 [docs/API.md](docs/API.md)
-- 🛠️ **参与开发**：查看 [CONTRIBUTING.md](CONTRIBUTING.md)
-
----
-
-## 💡 提示
-
-- **首次启动**：可能需要 1-2 分钟下载 Docker 镜像
-- **Cookie 更新**：定期更新 Cookie 以避免失效
-- **备份数据**：定期备份 `data/` 目录
-- **监控告警**：配置飞书 webhook 接收告警通知
-
----
-
-<p align="center">
-  遇到问题？查看 <a href="USER_GUIDE.md">详细用户指南</a> 或提交 <a href="https://github.com/G3niusYukki/xianyu-openclaw/issues">Issue</a>
-</p>
+- 详细使用指南：[USER_GUIDE.md](USER_GUIDE.md)
+- 完整功能说明：[README.md](README.md)
+- CLI 命令参考：`python -m src.cli --help`
+- 参与开发：[CONTRIBUTING.md](CONTRIBUTING.md)

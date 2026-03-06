@@ -1,19 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getProducts, unpublishProduct, publishProduct } from '../../api/xianguanjia';
 import toast from 'react-hot-toast';
-import { Package, Search, Filter, Plus, RefreshCw, PowerOff, Play, ExternalLink } from 'lucide-react';
+import { Package, Search, Plus, RefreshCw, PowerOff, Play, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useCurrentAccount } from '../../contexts/AccountContext';
 
 export default function ProductList() {
-  const { currentAccountId } = useCurrentAccount();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchProducts();
-  }, [page, currentAccountId]);
+  }, [page]);
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -24,12 +23,21 @@ export default function ProductList() {
       } else {
         toast.error(res.data?.error || '无法获取商品列表');
       }
-    } catch (e) {
+    } catch {
       toast.error('加载失败');
     } finally {
       setLoading(false);
     }
   };
+
+  const filteredProducts = useMemo(() => {
+    if (!searchQuery.trim()) return products;
+    const q = searchQuery.toLowerCase();
+    return products.filter(p =>
+      (p.title && p.title.toLowerCase().includes(q)) ||
+      (p.product_id && String(p.product_id).toLowerCase().includes(q))
+    );
+  }, [products, searchQuery]);
 
   const toggleStatus = async (product) => {
     const isOnline = product.status === 1 || product.status === '1' || product.status === 'on_sale';
@@ -37,22 +45,25 @@ export default function ProductList() {
     
     try {
       toast.loading(`正在${actionStr}...`, { id: 'status_toggle' });
-      let res;
-      if (isOnline) {
-        res = await unpublishProduct(product.product_id);
-      } else {
-        res = await publishProduct(product.product_id);
-      }
+      const res = isOnline
+        ? await unpublishProduct(product.product_id)
+        : await publishProduct(product.product_id);
       
       if (res.data?.ok) {
         toast.success(`${actionStr}成功`, { id: 'status_toggle' });
-        fetchProducts(); // 刷新列表
+        fetchProducts();
       } else {
         toast.error(res.data?.error || `${actionStr}失败`, { id: 'status_toggle' });
       }
-    } catch (e) {
+    } catch {
       toast.error(`${actionStr}出错`, { id: 'status_toggle' });
     }
+  };
+
+  const formatPrice = (price) => {
+    const num = Number(price);
+    if (!num || isNaN(num)) return '¥0.00';
+    return `¥${(num / 100).toFixed(2)}`;
   };
 
   return (
@@ -63,7 +74,7 @@ export default function ProductList() {
           <p className="xy-subtitle mt-1">管理闲鱼在售商品，或使用 AI 辅助发布新商品</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={fetchProducts} className="xy-btn-secondary px-3">
+          <button onClick={fetchProducts} className="xy-btn-secondary px-3" aria-label="刷新商品列表">
             <RefreshCw className="w-4 h-4" />
           </button>
           <Link to="/products/auto-publish" className="xy-btn-primary flex items-center gap-2">
@@ -78,13 +89,13 @@ export default function ProductList() {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-xy-text-muted" />
             <input 
               type="text" 
-              placeholder="搜索商品标题" 
+              placeholder="搜索商品标题或 ID" 
               className="xy-input pl-9 pr-3 py-1.5 text-sm"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              aria-label="搜索商品"
             />
           </div>
-          <button className="xy-btn-secondary p-2">
-            <Filter className="w-4 h-4" />
-          </button>
         </div>
 
         {loading ? (
@@ -92,23 +103,27 @@ export default function ProductList() {
             <RefreshCw className="w-8 h-8 animate-spin text-xy-brand-500 mx-auto" />
             <p className="mt-4 text-xy-text-secondary">正在同步闲管家数据...</p>
           </div>
-        ) : products.length === 0 ? (
+        ) : filteredProducts.length === 0 ? (
           <div className="p-16 text-center">
             <div className="w-16 h-16 bg-xy-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <Package className="w-8 h-8 text-xy-gray-400" />
             </div>
-            <h3 className="text-lg font-medium text-xy-text-primary mb-1">还没有商品</h3>
-            <p className="text-xy-text-secondary mb-6">点击右上角按钮开始你的第一次 AI 智能上架吧</p>
-            <Link to="/products/auto-publish" className="xy-btn-primary">去发布商品</Link>
+            <h3 className="text-lg font-medium text-xy-text-primary mb-1">
+              {searchQuery ? '未找到匹配商品' : '还没有商品'}
+            </h3>
+            <p className="text-xy-text-secondary mb-6">
+              {searchQuery ? '请尝试其他搜索关键词' : '点击右上角按钮开始你的第一次 AI 智能上架吧'}
+            </p>
+            {!searchQuery && <Link to="/products/auto-publish" className="xy-btn-primary">去发布商品</Link>}
           </div>
         ) : (
           <div className="divide-y divide-xy-border">
-            {products.map(p => {
+            {filteredProducts.map(p => {
               const isOnline = p.status === 1 || p.status === '1' || p.status === 'on_sale';
               return (
                 <div key={p.product_id} className="p-5 hover:bg-xy-gray-50 transition-colors flex flex-col md:flex-row gap-5">
                   <div className="w-24 h-24 bg-xy-gray-100 rounded-lg overflow-hidden border border-xy-border flex-shrink-0 relative">
-                    <img src={p.pic_url || (p.images && p.images[0]) || 'https://via.placeholder.com/100'} alt="" className="w-full h-full object-cover" />
+                    <img src={p.pic_url || (Array.isArray(p.images) && p.images[0]) || 'https://via.placeholder.com/100'} alt={p.title || '商品图片'} className="w-full h-full object-cover" />
                     {!isOnline && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                         <span className="text-white text-xs font-bold px-2 py-1 bg-black/50 rounded">已下架</span>
@@ -123,12 +138,12 @@ export default function ProductList() {
                           {p.title}
                         </h3>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-xy-text-secondary mb-2">
-                          <span className="text-lg font-bold text-xy-brand-500">¥{(p.price / 100).toFixed(2)}</span>
-                          <span className="bg-xy-gray-100 px-2 py-0.5 rounded text-xs">库存: {p.stock || 1}</span>
-                          {p.view_count !== undefined && <span>浏览 {p.view_count}</span>}
-                          {p.want_count !== undefined && <span>想要 {p.want_count}</span>}
+                          <span className="text-lg font-bold text-xy-brand-500">{formatPrice(p.price)}</span>
+                          <span className="bg-xy-gray-100 px-2 py-0.5 rounded text-xs">库存: {p.stock ?? 1}</span>
+                          {p.view_count != null && <span>浏览 {p.view_count}</span>}
+                          {p.want_count != null && <span>想要 {p.want_count}</span>}
                         </div>
-                        <p className="text-xs text-xy-text-muted">ID: {p.product_id} • 闲管家同步</p>
+                        <p className="text-xs text-xy-text-muted">ID: {p.product_id}</p>
                       </div>
                       
                       <div className="flex flex-col items-end gap-2 flex-shrink-0">

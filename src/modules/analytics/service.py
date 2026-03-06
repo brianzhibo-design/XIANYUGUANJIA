@@ -98,6 +98,8 @@ class AnalyticsService:
     async def _init_db(self) -> None:
         """初始化数据库"""
         async with aiosqlite.connect(self.db_path, timeout=self._db_timeout) as db:
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.execute("PRAGMA busy_timeout=5000")
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS operation_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -181,6 +183,8 @@ class AnalyticsService:
     def _init_db_sync(self) -> None:
         """同步初始化数据库，确保服务创建后表结构可立即使用"""
         with closing(sqlite3.connect(self.db_path, timeout=self._db_timeout)) as db, db:
+            db.execute("PRAGMA journal_mode=WAL")
+            db.execute("PRAGMA busy_timeout=5000")
             db.execute("""
                 CREATE TABLE IF NOT EXISTS operation_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,

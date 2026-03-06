@@ -24,9 +24,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+import logging
+
 import yaml
 
 from src.core.config import get_config
+
+logger = logging.getLogger(__name__)
 from src.modules.messages.service import MessagesService
 from src.modules.quote.cost_table import CostTableRepository, normalize_courier_name
 from src.modules.quote.setup import DEFAULT_MARKUP_RULES, QuoteSetupService
@@ -1802,6 +1806,8 @@ class MimicOps:
         try:
             with closing(sqlite3.connect(db_path)) as conn:
                 conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA busy_timeout=5000")
 
                 total_replied = int(
                     conn.execute(
@@ -6836,6 +6842,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = None) -> None:
+    import signal
+
     config = get_config()
     resolved_db = db_path or config.database.get("path", "data/agent.db")
 
@@ -6848,8 +6856,16 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
     )
 
     server = ThreadingHTTPServer((host, port), DashboardHandler)
-    print(f"Dashboard running: http://{host}:{port}")
-    print(f"Using database: {resolved_db}")
+
+    def _shutdown(signum, frame):
+        logger.info("收到信号 %s，正在关闭...", signum)
+        server.shutdown()
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
+    logger.info("Dashboard running: http://%s:%s", host, port)
+    logger.info("Using database: %s", resolved_db)
     server.serve_forever()
 
 

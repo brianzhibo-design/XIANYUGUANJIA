@@ -220,13 +220,29 @@ def test_compliance_auto_reload_branches(tmp_path: Path) -> None:
 def test_setup_wizard_start_now_runs_post_checks(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sw, "_read_existing_env", lambda _p: {})
-    monkeypatch.setattr(sw, "_choose_gateway_provider", lambda: sw.GATEWAY_PROVIDERS[0])
     monkeypatch.setattr(sw, "_choose_content_provider", lambda: sw.CONTENT_PROVIDERS[0])
-    vals = iter(["gk", "tok", "8080", "admin", "pwd", "cookie", "", "", "Y"])
-    monkeypatch.setattr(sw, "_prompt", lambda *_a, **_k: next(vals))
+
+    def prompt_fn(text, default=None, required=False, secret=False):
+        if "DEEPSEEK_API_KEY" in text:
+            return "gk"
+        if "XGJ_APP_KEY" in text:
+            return "appkey"
+        if "XGJ_APP_SECRET" in text:
+            return "appsecret"
+        if "XGJ_BASE_URL" in text:
+            return ""
+        if "XIANYU_COOKIE_1" in text:
+            return "cookie"
+        if "XIANYU_COOKIE_2" in text:
+            return ""
+        if "请选择" in text:
+            return "2"
+        return ""
+
+    monkeypatch.setattr(sw, "_prompt", prompt_fn)
     monkeypatch.setattr(sw, "_ensure_docker_ready", lambda: True)
     ran = {"post": False}
-    monkeypatch.setattr(sw, "_run_post_start_checks", lambda _p: ran.__setitem__("post", True))
+    monkeypatch.setattr(sw, "_run_post_start_checks", lambda: ran.__setitem__("post", True))
 
     class R:
         returncode = 0

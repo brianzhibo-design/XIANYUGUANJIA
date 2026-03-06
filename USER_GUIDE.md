@@ -11,7 +11,7 @@
 3. [安装步骤](#3-安装步骤)
 4. [获取闲鱼 Cookie](#4-获取闲鱼-cookie)
 5. [启动工具](#5-启动工具)
-6. [怎么用？直接对话就行](#6-怎么用直接对话就行)
+6. [管理面板各页面功能](#6-管理面板各页面功能)
 7. [日常维护](#7-日常维护)
 8. [自动化推进与飞书通知](#8-自动化推进与飞书通知)
 9. [常见问题](#9-常见问题)
@@ -21,18 +21,11 @@
 
 ## 1. 这个工具能帮我做什么？
 
-如果你在闲鱼上卖东西，每天需要重复做很多事情：发布商品、写标题和描述、每天擦亮、调价格、看数据。
+如果你在闲鱼上卖东西，每天需要重复做很多事情：发布商品、写标题和描述、调价格、看数据。
 
-**这个工具让你用"说话"的方式完成所有操作。**
+**这个工具通过管理面板帮你完成这些操作。**
 
-你只需要打开一个网页，像跟助手聊天一样说：
-
-- "帮我发布一个 iPhone 15，价格 5999"
-- "擦亮所有商品"
-- "今天卖得怎么样"
-- "把那个 MacBook 降价到 8000"
-
-AI 助手会自动帮你在闲鱼上完成这些操作。
+你只需要打开管理面板网页，在对应页面完成：发布商品、管理订单、查看消息、配置账号和 AI 服务、查看运营数据等。
 
 ---
 
@@ -43,250 +36,98 @@ AI 助手会自动帮你在闲鱼上完成这些操作。
 | 一台电脑或服务器 | Windows、macOS 或 Linux |
 | 能上网 | 需要连接互联网 |
 | 闲鱼账号 | 能正常登录的闲鱼账号 |
-| AI 服务密钥 | 网关模型（Anthropic/OpenAI/Kimi/MiniMax/智谱ZAI 任选一个）+ 业务文案模型（DeepSeek/百炼/火山/智谱等可选） |
-| Python 3.10+ | 仅在本地运行脚本（如一键向导、可视化后台）时需要 |
-| Docker | 一个免费的软件，用来运行工具 |
+| AI 服务密钥（可选） | DeepSeek / 阿里百炼 / 火山方舟 / OpenAI 等，可在管理面板配置 |
+| Python 3.10+ | Python 后端运行所需 |
+| Node.js 18+ | Node.js 后端和 React 前端运行所需 |
 
 ---
 
 ## 3. 安装步骤
 
-### 3.1 安装 Docker
-
-**Windows 用户：**
-1. 打开 https://www.docker.com/products/docker-desktop/
-2. 下载 Docker Desktop for Windows
-3. 双击安装，一路点 Next
-4. 安装完成后重启电脑
-5. 打开 Docker Desktop，等左下角状态变成绿色 "Running"
-
-**macOS 用户：**
-1. 打开 https://www.docker.com/products/docker-desktop/
-2. 下载 Docker Desktop for Mac
-3. 拖到 Applications 安装
-4. 打开 Docker Desktop，等左下角状态变成绿色 "Running"
-
-### 3.2 下载本工具
+### 3.1 下载本工具
 
 1. 打开 https://github.com/G3niusYukki/xianyu-openclaw
-2. 点击绿色的 "Code"按钮
+2. 点击绿色的 "Code" 按钮
 3. 点击 "Download ZIP"
 4. 解压到你想放的位置
 
-### 3.2.1 Windows 一键部署工具（推荐 Windows 用户）
+或者用命令行：
 
-如果你使用 Windows，可以直接用图形化工具完成所有配置，不需要打开命令行：
+```bash
+git clone https://github.com/G3niusYukki/xianyu-openclaw.git
+cd xianyu-openclaw
+```
 
-1. 确保已安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-2. 从 [Releases 页面](https://github.com/G3niusYukki/xianyu-openclaw/releases/latest) 下载 `xianyu-openclaw-launcher.zip`
-3. 解压到你想放的位置（如桌面）
-4. 双击 `xianyu-openclaw-launcher.exe`
-5. 按向导步骤操作：
-   - **第 1 步**：工具会自动检测 Docker 是否安装，如未安装会引导你下载
-   - **第 2 步**：选择网关 AI 服务（推荐 Anthropic），填入 API Key
-   - **第 3 步**：选择业务文案 AI 服务（推荐 DeepSeek），填入 API Key
-   - **第 4 步**：设置登录密码、端口等（有默认值，可以不改）
-   - **第 5 步**：粘贴闲鱼 Cookie（获取方法见[第 4 节](#4-获取闲鱼-cookie)）
-   - **第 6 步**：确认所有信息，点击"生成配置并启动"
-6. 等待启动完成，工具会自动打开浏览器
-7. 用你设置的密码登录，开始使用！
+### 3.2 安装运行环境
 
-> 使用 EXE 工具后，你不再需要手动编辑 `.env` 文件或输入任何命令。
+**安装 Python 3.10+：**
+- Windows：从 https://www.python.org/downloads/ 下载安装，安装时勾选 "Add to PATH"
+- macOS：`brew install python@3.12` 或从官网下载
 
-### 3.3 获取 AI 密钥
+**安装 Node.js 18+：**
+- 从 https://nodejs.org/ 下载 LTS 版本安装
 
-工具需要 AI 服务来理解你的指令。建议分成两类：
+### 3.3 安装项目依赖
 
-- 网关模型（必填）：Anthropic / OpenAI / Moonshot(Kimi) / MiniMax / ZAI（智谱）
-- 业务文案模型（可选）：DeepSeek / 阿里百炼 / 火山方舟 / MiniMax / 智谱
+```bash
+# Python 依赖
+python3 -m venv .venv
+source .venv/bin/activate    # Windows 用: .venv\Scripts\activate
+pip install -r requirements.txt
 
-**Anthropic（推荐）：**
-1. 打开 https://console.anthropic.com/
-2. 注册账号
-3. 在 API Keys 页面创建密钥
-4. 复制密钥（以 `sk-ant-` 开头）
+# Node.js 依赖
+cd server && npm install && cd ..
+cd client && npm install && cd ..
+```
 
-**DeepSeek（最便宜）：**
+### 3.4 获取 AI 密钥
+
+工具需要 AI 服务来理解买家消息并生成回复。推荐使用国产模型，价格便宜且无需翻墙。
+
+**DeepSeek（推荐，便宜好用）：**
 1. 打开 https://platform.deepseek.com/
 2. 注册账号
 3. 创建 API Key，复制密钥
 
-### 3.4 配置
+**阿里百炼（备选）：**
+1. 打开 https://dashscope.console.aliyun.com/
+2. 注册账号
+3. 创建 API Key，复制密钥
+
+### 3.5 配置
 
 在工具文件夹中找到 `.env.example` 文件，复制一份改名为 `.env`。
 
 用记事本打开 `.env`，填入：
 
 ```
-ANTHROPIC_API_KEY=你的AI密钥
-OPENCLAW_GATEWAY_TOKEN=随便设一个密码
-AUTH_PASSWORD=你的登录密码
-XIANYU_COOKIE_1=你的闲鱼Cookie（下一步教你获取）
+# 闲鱼 Cookie（下一步教你获取）
+XIANYU_COOKIE_1=你的闲鱼Cookie
+
+# AI 服务配置（可选，也可在管理面板中配置）
+AI_PROVIDER=deepseek
+AI_API_KEY=你的DeepSeek密钥
+AI_BASE_URL=https://api.deepseek.com/v1
+AI_MODEL=deepseek-chat
 ```
 
 ---
 
-### 3.5 中国大陆网络受限环境部署（离线/镜像方案）
+### 3.6 中国大陆网络受限环境
 
-如果你在中国大陆，遇到以下问题：
-- 无法访问 GitHub
-- Docker Hub 拉取镜像失败
-- pip 安装 Python 包超时
-- 无法连接 OpenAI/Anthropic 等国外 AI 服务
+如果 pip 安装超时，使用国内镜像源：
 
-请使用以下方案：
-
-#### 方案 A：使用国内镜像源（推荐，网络受限但可联网）
-
-**1. 使用国内 pip 镜像（清华/阿里云）**
-
-修改安装脚本，在 `scripts/windows/setup_windows.bat` 中，将第19行改为：
-
-```batch
-call .venv\Scripts\pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```bash
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-或在用户目录创建 `pip.ini` 文件：
+或在用户目录创建 `pip.ini`（Windows）/ `pip.conf`（macOS/Linux）：
 
 ```ini
 [global]
 index-url = https://pypi.tuna.tsinghua.edu.cn/simple
 trusted-host = pypi.tuna.tsinghua.edu.cn
 ```
-
-文件位置：
-- Windows: `C:\Users\你的用户名\pip\pip.ini`
-- 或 `C:\Users\你的用户名\AppData\Roaming\pip\pip.ini`
-
-**2. 使用国内 Docker 镜像加速器**
-
-编辑 Docker Desktop 设置：
-- 打开 Docker Desktop → Settings → Docker Engine
-- 添加 registry-mirrors：
-
-```json
-{
-  "registry-mirrors": [
-    "https://mirror.ccs.tencentyun.com",
-    "https://hub-mirror.c.163.com",
-    "https://docker.mirrors.ustc.edu.cn"
-  ]
-}
-```
-
-**3. 使用国产 AI 服务（绕过 OpenAI/Anthropic）**
-
-编辑 `.env` 文件，使用 DeepSeek 或阿里云百炼：
-
-```env
-# === 网关配置 ===
-CUSTOM_GATEWAY_API_KEY=sk-your-deepseek-key
-CUSTOM_GATEWAY_BASE_URL=https://api.deepseek.com/v1
-
-# === 业务 AI 配置 ===
-DEEPSEEK_API_KEY=sk-your-deepseek-key
-AI_PROVIDER=deepseek
-AI_API_KEY=sk-your-deepseek-key
-AI_BASE_URL=https://api.deepseek.com/v1
-AI_MODEL=deepseek-chat
-```
-
-备选（阿里云百炼）：
-```env
-DASHSCOPE_API_KEY=sk-your-dashscope-key
-AI_PROVIDER=aliyun_bailian
-AI_API_KEY=sk-your-dashscope-key
-AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-AI_MODEL=qwen-turbo
-```
-
-#### 方案 B：完全离线部署（无法访问任何外网）
-
-**准备阶段（在有网络的电脑上进行）：**
-
-1. **下载项目代码**
-   - 从 GitHub 下载 ZIP 包，或让朋友帮你下载后复制
-
-2. **下载所有 Python 依赖包（whl格式）**
-
-在能联网的电脑上执行：
-```bash
-mkdir offline_packages
-pip download -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --only-binary=:all: --platform win_amd64
-pip download playwright -i https://pypi.tuna.tsinghua.edu.cn/simple --only-binary=:all: --platform win_amd64
-```
-
-3. **下载 Playwright 浏览器**
-- 从阿里云镜像下载 Chromium 浏览器
-- 或使用 U 盘从其他电脑复制已安装的浏览器
-
-4. **导出 Docker 镜像（如使用 Docker）**
-```bash
-docker pull coollabsio/openclaw:latest
-docker save coollabsio/openclaw:latest > openclaw-image.tar
-```
-
-**部署阶段（在离线 Windows 11 机器上）：**
-
-1. **传输文件**
-   将以下文件复制到目标机器：
-   - 项目代码文件夹
-   - `offline_packages/` 文件夹（所有 whl 文件）
-   - `chromium/` 浏览器文件夹
-   - `openclaw-image.tar`（如使用 Docker）
-
-2. **创建离线安装脚本**
-
-创建 `setup_offline.bat` 文件：
-
-```batch
-@echo off
-setlocal enabledelayedexpansion
-echo ============================================
-echo   闲鱼 OpenClaw - 离线部署
-echo ============================================
-cd /d %~dp0
-
-:: 检查 Python
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo [错误] 未检测到 Python，请先安装 Python 3.10+
-    pause
-    exit /b 1
-)
-
-:: 创建虚拟环境
-echo [*] 创建虚拟环境...
-python -m venv .venv
-
-:: 离线安装依赖
-echo [*] 离线安装依赖...
-.venv\Scripts\pip install --no-index --find-links=offline_packages -r requirements.txt
-
-:: 配置浏览器
-echo [*] 配置浏览器...
-set PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-xcopy /E /I /Y chromium .venv\Lib\site-packages\playwright\driver\package\.local-browsers\chromium-1097 2>nul
-
-:: 创建目录
-mkdir data 2>nul
-mkdir logs 2>nul
-mkdir config 2>nul
-
-:: 复制配置文件
-if not exist .env copy .env.example .env
-if not exist config\config.yaml copy config\config.example.yaml config\config.yaml
-
-echo [OK] 部署完成！请编辑 .env 配置 AI Key 和 Cookie。
-pause
-```
-
-3. **运行安装脚本**
-   双击 `setup_offline.bat` 执行安装
-
-4. **配置和启动**
-   - 编辑 `.env` 文件，配置国产 AI 服务
-   - 运行 `scripts\windows\menu.bat` 启动
 
 ---
 
@@ -342,112 +183,63 @@ pause
 
 ## 5. 启动工具
 
-### 一键部署（推荐）
+### 本地开发模式（推荐）
 
-不想手动改 `.env` 的话，直接运行：
-
-```bash
-python3 -m src.setup_wizard
-```
-
-Windows 用户也可以先执行（自动创建虚拟环境并安装依赖）：
-
-```bat
-scripts\windows\setup_windows.bat
-# 一键安装 + 自检 + 启动
-scripts\windows\quickstart.bat
-```
-
-按提示一步一步输入：
-- AI API Key
-- OpenClaw 登录密码
-- 闲鱼 Cookie
-
-向导会自动生成 `.env`，并可直接帮你执行 `docker compose up -d`。
-
-### 第一次启动
-
-在工具文件夹中打开终端（命令行），执行：
+在工具文件夹中打开终端（命令行），执行一键启动脚本：
 
 ```bash
-docker compose up -d
+# macOS / Linux
+./start.sh
+
+# Windows
+start.bat
 ```
 
-等待几分钟下载和启动。
+脚本会自动启动 Node.js 后端、React 前端和 Python 后端。如需 Lite 直连模式（消息自动回复），可另开终端执行 `python3 -m src.lite`。
 
 ### 打开使用
 
-浏览器访问：
+浏览器访问以下地址：
 
-```
-http://localhost:8080
-```
+| 服务 | 地址 | 说明 |
+|------|------|------|
+| 管理面板 | http://localhost:5173 | React 前端，配置和管理 |
+| Python 看板 | http://localhost:8091 | 趋势图、商品表现、操作日志 |
+| 后端健康检查 | http://localhost:3001/health | Node.js 后端状态 |
 
-输入你在 `.env` 中设置的用户名（默认 admin）和密码登录。
+### Docker 模式（可选）
 
-### 可视化后台（运营看板）
-
-如果你想看图表和操作日志，可单独启动后台页面：
-
-```bash
-python3 -m src.dashboard_server --port 8091
-```
-
-浏览器打开 `http://localhost:8091`，可看到趋势图、商品表现和最近操作记录。
-
-### 启动前自检（推荐）
-
-先执行 doctor，自动检查 Python、Cookie、数据库、网关连通性和首响配置：
+如果你更喜欢 Docker，也可以用 Docker Compose 一键启动：
 
 ```bash
-python3 -m src.cli doctor --strict
+docker compose up -d
 ```
 
 ### 关闭
 
 ```bash
+# 本地模式：在运行 start.sh / start.bat 的终端按 Ctrl+C 停止
+
+# Docker 模式
 docker compose down
-```
-
-### 再次启动
-
-```bash
-docker compose up -d
 ```
 
 ---
 
-## 6. 怎么用？直接对话就行
+## 6. 管理面板各页面功能
 
-登录后你会看到一个对话界面。像跟助手聊天一样说你想做什么。
+启动后访问 http://localhost:5173 打开管理面板首页。各页面功能简要说明如下：
 
-### 发布商品
-
-> "帮我发布一个 iPhone 15 Pro 256G，95新，价格 5999，换新手机了"
-
-AI 会自动帮你生成标题和描述，然后在闲鱼上发布。
-
-### 擦亮商品
-
-> "帮我擦亮所有商品"
-
-AI 会自动帮你擦亮全部在售商品。
-
-### 调整价格
-
-> "把那个 iPhone 的价格改成 5500"
-
-### 查看数据
-
-> "今天运营数据怎么样"
->
-> "最近一周浏览量怎么变化的"
-
-### 管理账号
-
-> "我的账号还正常吗"
->
-> "Cookie 过期了，帮我更新"
+| 页面 | 路径 | 功能 |
+|------|------|------|
+| 工作台 | /dashboard | 概览数据、快捷入口 |
+| 商品管理 | /products | 商品列表、上下架、编辑 |
+| 自动发布 | /products/auto-publish | 配置自动发布任务 |
+| 订单 | /orders | 订单列表、状态管理 |
+| 消息 | /messages | 买家消息、自动回复配置 |
+| 账号 | /accounts | 多账号管理、Cookie 配置 |
+| 系统配置 | /config | AI 服务、全局参数配置 |
+| 数据分析 | /analytics | 运营数据、趋势图表 |
 
 ---
 
@@ -463,140 +255,57 @@ AI 会自动帮你擦亮全部在售商品。
 
 ### 每天要做的
 
-什么都不用做。你可以设置自动擦亮，AI 会按计划执行。
+按需在管理面板查看订单、消息和运营数据即可。
 
 ### 每周建议做的
 
-- 打开对话，问问 "我的 Cookie 还有效吗"
-- 如果过期了，重新获取 Cookie（见第 4 步）
-- 查看周报：问 "这周运营情况怎么样"
+- 检查 Cookie 是否有效（见第 4 步）
+- 如过期则重新获取 Cookie
+- 在数据分析页面查看运营情况
 
 ### 更新工具
 
 ```bash
-docker compose pull
-docker compose up -d
+git pull
+pip install -r requirements.txt
+cd server && npm install && cd ..
+cd client && npm install && cd ..
 ```
 
-这会自动获取 OpenClaw 最新版本。
+然后重新启动服务即可。Docker 模式用 `docker compose up -d --build` 重建。
 
 ---
 
 ## 8. 自动化推进与飞书通知
 
-如果你希望系统自动持续处理询盘，并把告警推送到飞书，可以用下面命令：
-
-```bash
-python3 -m src.cli automation --action setup --enable-feishu --feishu-webhook "你的飞书webhook"
-python3 -m src.cli automation --action status
-python3 -m src.cli automation --action test-feishu
-```
-
-Windows 可以直接运行：
-
-```bat
-scripts\windows\automation_setup.bat 你的飞书webhook
-scripts\windows\feishu_test.bat
-scripts\windows\run_worker.bat 20 5
-```
-
-### 三大模块单独启动（售前/运营/售后）
-
-如果你只想开某一部分能力，可以按模块启动：
-
-```bash
-# 1) 售前客服（自动首响 + 自动报价）
-python3 -m src.cli module --action start --target presales --mode daemon --limit 20 --interval 5
-
-# 2) 闲鱼运营（擦亮/数据采集调度）
-python3 -m src.cli module --action start --target operations --mode daemon --init-default-tasks --interval 30
-
-# 3) 售后客服（售后订单跟进）
-python3 -m src.cli module --action start --target aftersales --mode daemon --limit 20 --interval 15 --issue-type delay
-```
-
-### 售前/售后推荐模式（真实可用链路）
-
-售前与售后建议改为 WebSocket 实时通道（和 `XianyuAutoAgent` 同类链路），可以减少对浏览器页面抓取的依赖。
-
-在 `config/config.yaml` 中确认：
-
-```yaml
-messages:
-  transport: "ws"
-  ws:
-    base_url: "wss://wss-goofish.dingtalk.com/"
-```
-
-然后用下面命令验证：
-
-```bash
-python3 -m src.cli messages --action list-unread --limit 5
-python3 -m src.cli module --action check --target presales
-```
-
-如果能返回会话列表，且 `module check` 无浏览器运行时阻塞，说明已切到 WS 实时通道。
-
-启动前建议先做模块检查：
-
-```bash
-python3 -m src.cli module --action check --target all --strict
-```
-
-查看运行状态：
-
-```bash
-python3 -m src.cli module --action status --target all --window-minutes 60
-python3 -m src.cli module --action logs --target all --tail-lines 80
-python3 -m src.cli module --action stop --target all
-```
-
-Windows 一键脚本：
-
-```bat
-scripts\windows\launcher.bat
-scripts\windows\lite_quickstart.bat
-scripts\windows\module_check.bat
-scripts\windows\module_status.bat
-scripts\windows\start_all_lite.bat
-scripts\windows\start_presales.bat daemon 20 5
-scripts\windows\start_operations.bat daemon 30
-scripts\windows\start_aftersales.bat daemon 20 15 delay
-```
+系统支持自动处理询盘、订单跟进等自动化能力，并可配置飞书告警通知。具体配置方式请参考项目文档或管理面板中的相关设置。
 
 ---
 
 ## 9. 常见问题
 
-### Q: 打不开 localhost:8080
+### Q: 打不开 localhost:5173
 
-确认 Docker Desktop 是否在运行（图标是绿色的），执行 `docker compose ps` 看容器是否正常。
-
-### Q: 页面提示 `pairing required`
-
-这是首次设备配对，执行：
-
-```bash
-docker compose exec -it openclaw-gateway openclaw devices list
-docker compose exec -it openclaw-gateway openclaw devices approve <requestId>
-```
-
-### Q: 报错 `At least one AI provider API key env var is required`
-
-说明网关没有读到可识别的 Key。请在 `.env` 至少填写一个：
-`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `MOONSHOT_API_KEY` / `MINIMAX_API_KEY` / `ZAI_API_KEY`。
+1. 确认 Node.js 服务是否在运行（终端中有没有报错）
+2. 执行 `npm run dev` 重新启动
+3. 如果端口被占用，检查是否有其他进程占用 5173 端口
 
 ### Q: AI 不回复
 
-检查 `.env` 中的 AI 密钥是否正确，确认账户有余额。
+1. 检查 `.env` 中的 `AI_API_KEY` 是否正确
+2. 确认 API Key 余额充足
+3. 检查 `AI_BASE_URL` 是否可以访问
 
-### Q: 发布商品失败
+### Q: Cookie 失效 / 发布商品失败
 
-最可能是 Cookie 过期了。重新获取 Cookie 并更新。
+最可能是 Cookie 过期了。重新从浏览器获取 Cookie，更新到 `.env` 或通过 Dashboard（http://localhost:8091/cookie）在线更新。
 
 ### Q: 怎么看日志
 
 ```bash
+# 本地模式：直接在运行终端查看输出
+
+# Docker 模式
 docker compose logs -f
 ```
 
@@ -607,12 +316,11 @@ docker compose logs -f
 | 名词 | 解释 |
 |------|------|
 | Cookie | 登录闲鱼后浏览器保存的"通行证" |
-| Docker | 一个免费软件，让工具在任何电脑上都能运行 |
-| OpenClaw | 一个 AI 助手框架，提供对话能力和浏览器控制 |
 | API Key | AI 服务的"钥匙"，让工具能使用 AI |
-| 擦亮 | 闲鱼功能，刷新商品让排名更靠前 |
-| Gateway | OpenClaw 的核心服务，处理对话和浏览器控制 |
-| Skills | 技能，教 AI 如何操作闲鱼的说明书 |
+| WebSocket | 一种实时通信协议，用来监听闲鱼消息 |
+| 闲管家 | 闲鱼开放平台，提供商品和订单管理 API |
+| Dashboard | 数据看板，用来查看运营数据和操作日志 |
+| Lite 模式 | 轻量运行模式，直连闲鱼 WebSocket 收发消息 |
 
 ---
 
@@ -625,4 +333,4 @@ docker compose logs -f
 
 ---
 
-**版本**: v6.1.0 | **更新日期**: 2026-03-03
+**版本**: v6.2.1 | **更新日期**: 2026-03-07

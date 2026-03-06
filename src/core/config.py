@@ -70,6 +70,8 @@ class Config:
             self._resolve_env_variables()
             self._set_defaults()
         else:
+            if config_path:
+                self.logger.error(f"指定的配置文件不存在: {config_path}，使用默认配置")
             self._set_defaults()
 
     def _find_config_file(self) -> str | None:
@@ -112,7 +114,7 @@ class Config:
             raise ConfigError(f"Invalid YAML: {e}") from e
         except Exception as e:
             self.logger.error(f"Failed to load config file: {e}")
-            self._config = {}
+            raise ConfigError(f"Config load failed: {e}") from e
 
     def _load_env_file(self) -> None:
         """
