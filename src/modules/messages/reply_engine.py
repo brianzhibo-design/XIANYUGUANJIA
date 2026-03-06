@@ -2,12 +2,30 @@
 消息回复策略引擎
 Message Reply Strategy Engine
 
-将自动回复逻辑从服务层剥离，支持意图规则、虚拟商品场景兜底和旧关键词兼容。
+支持:
+- 关键词规则匹配
+- AI 意图识别（询价/下单/售后/闲聊）
+- 合规敏感词过滤
+- 自动报价引擎联动
 """
 
 import re
 from dataclasses import dataclass, field
 from typing import Any
+
+from src.core.logger import get_logger
+
+logger = get_logger()
+
+INTENT_LABELS = {
+    "price_inquiry": "询价",
+    "order": "下单",
+    "after_sales": "售后",
+    "chat": "闲聊",
+    "availability": "咨询在不在",
+    "usage": "使用咨询",
+    "unknown": "未知",
+}
 
 DEFAULT_VIRTUAL_PRODUCT_KEYWORDS = [
     "虚拟",
@@ -87,7 +105,7 @@ class IntentRule:
 
 
 class ReplyStrategyEngine:
-    """通用自动回复策略引擎。"""
+    """通用自动回复策略引擎 — 支持关键词规则 + AI 意图识别 + 合规检查。"""
 
     def __init__(
         self,
@@ -98,10 +116,14 @@ class ReplyStrategyEngine:
         keyword_replies: dict[str, str] | None = None,
         intent_rules: list[dict[str, Any]] | None = None,
         virtual_product_keywords: list[str] | None = None,
+        ai_intent_enabled: bool = False,
+        compliance_enabled: bool = True,
     ):
         self.default_reply = default_reply
         self.virtual_default_reply = virtual_default_reply or default_reply
         self.reply_prefix = reply_prefix
+        self.ai_intent_enabled = ai_intent_enabled
+        self.compliance_enabled = compliance_enabled
         self.virtual_product_keywords = [
             kw.lower() for kw in (virtual_product_keywords or DEFAULT_VIRTUAL_PRODUCT_KEYWORDS) if str(kw).strip()
         ]
@@ -112,17 +134,84 @@ class ReplyStrategyEngine:
         legacy_rules = self._build_legacy_keyword_rules(keyword_replies or {})
         self.rules = sorted([*parsed_rules, *legacy_rules], key=lambda rule: rule.priority)
 
+        self._content_service = None
+        self._compliance_guard = None
+
+    def _get_content_service(self):
+        if self._content_service is None:
+            try:
+                from src.modules.content.service import ContentService
+                self._content_service = ContentService()
+            except Exception:
+                pass
+        return self._content_service
+
+    def _get_compliance_guard(self):
+        if self._compliance_guard is None:
+            try:
+                from src.core.compliance import get_compliance_guard
+                self._compliance_guard = get_compliance_guard()
+            except Exception:
+                pass
+        return self._compliance_guard
+
+    def classify_intent(self, message_text: str, item_title: str = "") -> str:
+        """识别买家消息意图。优先使用关键词规则，可选 AI 兜底。
+
+        Returns: intent label (price_inquiry/order/after_sales/chat/availability/usage/unknown)
+        """
+        normalized = self._normalize_text(message_text)
+
+        for rule in self.rules:
+            if rule.matches(normalized):
+                return rule.name
+
+        if self._is_virtual_context(normalized, item_title):
+            return "availability"
+
+        if not self.ai_intent_enabled:
+            return "unknown"
+
+        return self._ai_classify_intent(message_text, item_title)
+
+    def _ai_classify_intent(self, message_text: str, item_title: str = "") -> str:
+        """使用 AI 模型识别意图。"""
+        svc = self._get_content_service()
+        if not svc or not svc.client:
+            return "unknown"
+
+        prompt = (
+            f"你是闲鱼卖家助手。根据买家消息判断意图，只返回一个标签。\n"
+            f"可选标签: price_inquiry, order, after_sales, chat, availability, usage\n"
+            f"商品: {item_title}\n买家消息: {message_text}\n"
+            f"只返回标签，不要解释。"
+        )
+        try:
+            result = svc._call_ai(prompt, max_tokens=20, task="intent_classify")
+            if result:
+                label = result.strip().lower().replace(" ", "_")
+                if label in INTENT_LABELS:
+                    return label
+        except Exception as e:
+            logger.debug(f"AI intent classification failed: {e}")
+        return "unknown"
+
     def generate_reply(self, message_text: str, item_title: str = "") -> str:
-        """按规则生成回复。"""
+        """按规则生成回复，支持合规检查。"""
         normalized = self._normalize_text(message_text)
 
         reply = ""
+        matched_intent = "unknown"
         for rule in self.rules:
             if rule.matches(normalized):
                 reply = rule.reply
+                matched_intent = rule.name
                 break
 
         if not reply:
+            if self.ai_intent_enabled:
+                matched_intent = self._ai_classify_intent(message_text, item_title)
+
             if self._is_virtual_context(normalized, item_title):
                 reply = self.virtual_default_reply
             else:
@@ -134,7 +223,35 @@ class ReplyStrategyEngine:
         if self.reply_prefix:
             reply = f"{self.reply_prefix}{reply}"
 
+        if self.compliance_enabled:
+            reply = self._check_compliance(reply)
+
         return reply
+
+    def generate_reply_with_intent(self, message_text: str, item_title: str = "") -> dict[str, Any]:
+        """生成回复并返回意图信息（供外部集成用，如报价引擎联动）。"""
+        intent = self.classify_intent(message_text, item_title)
+        reply = self.generate_reply(message_text, item_title)
+        return {
+            "reply": reply,
+            "intent": intent,
+            "intent_label": INTENT_LABELS.get(intent, "未知"),
+            "should_quote": intent == "price_bargain" or intent == "price_inquiry",
+        }
+
+    def _check_compliance(self, reply_text: str) -> str:
+        """检查回复内容是否包含敏感词，有则替换为安全版本。"""
+        guard = self._get_compliance_guard()
+        if not guard:
+            return reply_text
+        try:
+            result = guard.evaluate_content(reply_text)
+            if result.get("blocked"):
+                logger.warning(f"Reply blocked by compliance: {result.get('hits')}")
+                return self.default_reply
+        except Exception:
+            pass
+        return reply_text
 
     def _parse_rule(self, raw_rule: dict[str, Any]) -> IntentRule:
         name = str(raw_rule.get("name") or f"rule_{id(raw_rule)}")

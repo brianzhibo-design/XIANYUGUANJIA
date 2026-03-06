@@ -627,7 +627,7 @@ class GoofishWsTransport:
         await asyncio.sleep(1.0)
         ack_diff = {
             "lwp": "/r/SyncStatus/ackDiff",
-            "headers": {"mid": "5701741704675979 0"},
+            "headers": {"mid": generate_mid()},
             "body": [
                 {
                     "pipeline": "sync",

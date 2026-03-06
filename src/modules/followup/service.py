@@ -356,3 +356,72 @@ class FollowUpEngine:
             "dnd_count": dnd_count,
             "policy_version": self._policy_version,
         }
+
+    # ── 催单（未支付订单提醒）────────────────────────────────
+
+    ORDER_REMINDER_TEMPLATES = [
+        {"id": "order_unpaid_1", "text": "您好，您的订单还没有完成支付哦~ 如有疑问可以随时问我，确认需要的话请尽快支付，我好给您安排发货。"},
+        {"id": "order_unpaid_2", "text": "提醒一下，您有一笔待支付订单，商品已为您预留，请在规定时间内完成支付，以免影响发货哦~"},
+        {"id": "order_final", "text": "最后提醒：您的订单即将超时关闭，如果还需要请尽快支付。若已不需要请忽略此消息。"},
+    ]
+
+    def process_unpaid_order(
+        self,
+        session_id: str,
+        order_id: str,
+        account_id: str | None = None,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """催单逻辑：对未支付订单发送提醒。
+
+        复用已读未回的合规框架（DND、静默时段、频率限制）。
+        """
+        eligible, reason = self.check_eligibility(
+            session_id=session_id,
+            account_id=account_id,
+        )
+        if not eligible:
+            return {
+                "session_id": session_id,
+                "order_id": order_id,
+                "eligible": False,
+                "reason": reason,
+                "action": "order_reminder",
+                "dry_run": dry_run,
+            }
+
+        daily_count, _ = self._get_touch_stats(session_id)
+        idx = min(daily_count, len(self.ORDER_REMINDER_TEMPLATES) - 1)
+        template = self.ORDER_REMINDER_TEMPLATES[idx]
+
+        valid, validation_reason = self.validate_template(template["text"])
+        if not valid:
+            return {
+                "session_id": session_id,
+                "order_id": order_id,
+                "eligible": False,
+                "reason": f"template_invalid:{validation_reason}",
+                "action": "order_reminder",
+                "dry_run": dry_run,
+            }
+
+        audit_id = self.record_trigger(
+            session_id=session_id,
+            account_id=account_id,
+            action="order_reminder",
+            template_id=template["id"],
+            status="sent" if not dry_run else "dry_run",
+            metadata={"order_id": order_id, "touch_count": daily_count + 1},
+        )
+
+        return {
+            "session_id": session_id,
+            "order_id": order_id,
+            "eligible": True,
+            "template_id": template["id"],
+            "template_text": template["text"],
+            "touch_count": daily_count + 1,
+            "audit_id": audit_id,
+            "action": "order_reminder",
+            "dry_run": dry_run,
+        }

@@ -447,6 +447,49 @@ class OperationsService:
             self.logger.error(f"Failed to fetch stats: {e}")
             return {"error": str(e)}
 
+    async def auto_adjust_price(
+        self,
+        product_id: str,
+        current_price: float,
+        *,
+        strategy: str = "step_down",
+        step_amount: float = 1.0,
+        min_price: float | None = None,
+        max_discount_pct: float = 0.3,
+    ) -> dict[str, Any]:
+        """自动改价 — 未支付订单场景下的策略性降价。
+
+        Args:
+            product_id: 商品 ID
+            current_price: 当前价格
+            strategy: 改价策略 (step_down=阶梯降价, restore=恢复原价)
+            step_amount: 每次降价金额
+            min_price: 最低价格保护
+            max_discount_pct: 最大折扣比例
+        """
+        if strategy == "restore":
+            return await self.update_price(product_id, current_price)
+
+        floor = min_price if min_price is not None else current_price * (1 - max_discount_pct)
+        new_price = max(floor, current_price - step_amount)
+        new_price = round(new_price, 2)
+
+        if new_price >= current_price:
+            return {
+                "success": False,
+                "product_id": product_id,
+                "action": "auto_adjust_price",
+                "error": "price_at_floor",
+                "current_price": current_price,
+                "floor_price": floor,
+            }
+
+        result = await self.update_price(product_id, new_price, current_price)
+        result["action"] = "auto_adjust_price"
+        result["strategy"] = strategy
+        result["price_change"] = round(current_price - new_price, 2)
+        return result
+
     def _error_result(self, action: str, product_id: str | None, error: str) -> dict[str, Any]:
         """生成错误结果"""
         return {
