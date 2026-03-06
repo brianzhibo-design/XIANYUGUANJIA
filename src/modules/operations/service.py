@@ -8,13 +8,17 @@ Operations Service
 import asyncio
 import random
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from src.core.compliance import get_compliance_guard
+from src.integrations.xianguanjia.open_platform_client import OpenPlatformClient
 from src.core.config import get_config
 from src.core.error_handler import BrowserError
 from src.core.logger import get_logger
 from src.modules.analytics.service import AnalyticsService
+from src.modules.listing.models import Listing
+from src.modules.listing.service import ListingService
 from src.modules.orders.xianguanjia import XianGuanJiaClient
 
 
@@ -85,6 +89,7 @@ class OperationsService:
         self.analytics = analytics
         self.compliance = get_compliance_guard()
         self.price_api_client = price_api_client or self._build_price_api_client()
+        self.product_api_client = self._build_product_api_client()
 
         browser_config = get_config().browser
         self.delay_range = (
@@ -118,6 +123,51 @@ class OperationsService:
         except Exception as e:
             self.logger.warning(f"Failed to initialize XianGuanJia price client: {e}")
             return None
+
+    def _build_product_api_client(self) -> OpenPlatformClient | None:
+        cfg = self.config.get("xianguanjia")
+        if not isinstance(cfg, dict) or not cfg.get("enabled", False):
+            return None
+        app_key = str(cfg.get("app_key", "")).strip()
+        app_secret = str(cfg.get("app_secret", "")).strip()
+        if not app_key or not app_secret:
+            return None
+        try:
+            return OpenPlatformClient(
+                base_url=str(cfg.get("base_url", "https://open.goofish.pro")).strip(),
+                app_key=app_key,
+                app_secret=app_secret,
+                timeout=float(cfg.get("timeout", 30.0)),
+                seller_id=str(cfg.get("seller_id", "")).strip() or None,
+            )
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize XianGuanJia product client: {e}")
+            return None
+
+    @staticmethod
+    def _ts() -> str:
+        return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    @classmethod
+    def _exec_contract(
+        cls,
+        *,
+        ok: bool,
+        action: str,
+        code: str,
+        message: str,
+        data: dict[str, Any] | None = None,
+        errors: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "ok": bool(ok),
+            "action": action,
+            "code": code,
+            "message": message,
+            "data": data or {},
+            "errors": list(errors or []),
+            "ts": cls._ts(),
+        }
 
     @staticmethod
     def _price_to_minor_units(value: float | int) -> int:
@@ -157,6 +207,38 @@ class OperationsService:
         min_delay = self.delay_range[0] * min_factor
         max_delay = self.delay_range[1] * max_factor
         return random.uniform(min_delay, max_delay)
+
+    async def execute_product_action(
+        self,
+        action: str,
+        *,
+        payload: dict[str, Any] | None = None,
+        internal_listing_id: str | None = None,
+        allow_dom_fallback: bool = False,
+        api_client: OpenPlatformClient | None = None,
+    ) -> dict[str, Any]:
+        listing_service = ListingService(
+            controller=self.controller,
+            config=self.config,
+            analytics=self.analytics,
+        )
+        listing = None
+        if internal_listing_id:
+            req = dict(payload or {})
+            listing = Listing(
+                title=str(req.get("title", "")),
+                description=str(req.get("description", "")),
+                price=float(req.get("price", 0.0) or 0.0),
+                images=req.get("images") if isinstance(req.get("images"), list) else [],
+                internal_listing_id=internal_listing_id,
+            )
+        return await listing_service.execute_product_action(
+            action,
+            payload=payload,
+            listing=listing,
+            api_client=api_client or self.product_api_client,
+            allow_dom_fallback=allow_dom_fallback,
+        )
 
     async def polish_listing(self, product_id: str) -> dict[str, Any]:
         """
@@ -321,6 +403,34 @@ class OperationsService:
         if isinstance(extracted, list) and extracted:
             return [str(pid) for pid in extracted[:limit]]
         return [f"unknown_{i + 1}" for i in range(limit)]
+
+    async def modify_order_price(self, order_no: str, order_price: int, express_fee: int | None = None) -> dict[str, Any]:
+        if not self.price_api_client:
+            return {"success": False, "channel": "order_price_api", "error": "price_api_client_not_configured"}
+        try:
+            response = await asyncio.to_thread(
+                self.price_api_client.modify_order_price,
+                order_no=order_no,
+                order_price=int(order_price),
+                express_fee=int(express_fee) if express_fee is not None else None,
+            )
+            return {
+                "success": True,
+                "channel": "order_price_api",
+                "order_no": order_no,
+                "order_price": int(order_price),
+                "api_response": response,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "channel": "order_price_api",
+                "order_no": order_no,
+                "order_price": int(order_price),
+                "error": str(e),
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
 
     async def update_price(
         self, product_id: str, new_price: float, original_price: float | None = None

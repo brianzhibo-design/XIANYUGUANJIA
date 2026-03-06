@@ -11,13 +11,11 @@ from src.modules.orders.service import OrderFulfillmentService
 
 
 class _OpsSuccess:
-    async def update_price(self, product_id: str, new_price: float, original_price: float | None = None):
+    async def modify_order_price(self, order_id: str, order_price: int):
         return {
             "success": True,
-            "product_id": product_id,
-            "old_price": original_price,
-            "new_price": new_price,
-            "action": "price_update",
+            "order_id": order_id,
+            "order_price": order_price,
         }
 
 
@@ -82,6 +80,8 @@ async def test_minimal_e2e_inquiry_reprice_callback_writeback(monkeypatch: pytes
     )
     replay = await pe.execute_job(int(job["id"]), _OpsSuccess())
     assert replay["job"]["status"] == "success"
+    assert replay["job"]["result"]["action"] == "modify_order_price"
+    assert replay["job"]["result"]["channel"] == "order_price_api"
     assert any(ev["event_type"] == "execution_finished" for ev in replay["events"])
 
     # 3) 回调（用订单状态同步模拟支付回调入站）

@@ -8,14 +8,17 @@ Listing Service
 import asyncio
 import json
 import random
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
 from src.core.compliance import get_compliance_guard
+from src.integrations.xianguanjia.open_platform_client import OpenPlatformClient
 from src.core.config import get_config
 from src.core.error_handler import BrowserError
 from src.core.logger import get_logger
-from src.modules.listing.models import Listing, PublishResult
+from src.modules.listing.models import Listing, PublishResult, generate_internal_listing_id
+from src.modules.virtual_goods.store import VirtualGoodsStore
 
 
 class XianyuSelectors:
@@ -95,7 +98,7 @@ class ListingService:
     负责商品的发布、批量发布等核心功能
     """
 
-    def __init__(self, controller=None, config: dict | None = None, analytics=None):
+    def __init__(self, controller=None, config: dict | None = None, analytics=None, mapping_store=None):
         """
         初始化上架服务
 
@@ -108,6 +111,7 @@ class ListingService:
         self.logger = get_logger()
         self.analytics = analytics
         self.compliance = get_compliance_guard()
+        self.mapping_store = mapping_store or self._build_mapping_store()
 
         browser_config = get_config().browser
         self.delay_range = (
@@ -117,11 +121,254 @@ class ListingService:
 
         self.selectors = XianyuSelectors()
 
+    @staticmethod
+    def _ts() -> str:
+        return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    @staticmethod
+    def _build_execution_contract(
+        *,
+        ok: bool,
+        action: str,
+        code: str,
+        message: str,
+        data: dict[str, Any] | None = None,
+        errors: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "ok": bool(ok),
+            "action": action,
+            "code": code,
+            "message": message,
+            "data": data or {},
+            "errors": list(errors or []),
+            "ts": ListingService._ts(),
+        }
+
+    def _build_open_platform_client(self) -> OpenPlatformClient | None:
+        cfg = self.config.get("xianguanjia")
+        if not isinstance(cfg, dict) or not cfg.get("enabled", False):
+            return None
+        app_key = str(cfg.get("app_key", "")).strip()
+        app_secret = str(cfg.get("app_secret", "")).strip()
+        if not app_key or not app_secret:
+            return None
+        return OpenPlatformClient(
+            base_url=str(cfg.get("base_url", "https://open.goofish.pro")).strip(),
+            app_key=app_key,
+            app_secret=app_secret,
+            timeout=float(cfg.get("timeout", 30.0)),
+            seller_id=str(cfg.get("seller_id", "")).strip() or None,
+        )
+
+    def _build_mapping_store(self):
+        db_path = str(self.config.get("db_path", "")).strip()
+        if not db_path:
+            return None
+        try:
+            return VirtualGoodsStore(db_path=db_path)
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize listing mapping store: {e}")
+            return None
+
+    @staticmethod
+    def _ensure_internal_listing_id(listing: Listing | None) -> str | None:
+        if listing is None:
+            return None
+        if not listing.internal_listing_id:
+            listing.internal_listing_id = generate_internal_listing_id()
+        return listing.internal_listing_id
+
+    @staticmethod
+    def _to_contract_mapping_status(raw_status: str | None) -> str:
+        status = str(raw_status or "").strip().lower()
+        if status in {"mapped", "active"}:
+            return "active"
+        if status in {"syncing", "pending_sync"}:
+            return "pending_sync"
+        if status in {"failed", "sync_failed"}:
+            return "sync_failed"
+        return "inactive"
+
+    def _resolve_mapping_status(
+        self,
+        *,
+        internal_listing_id: str | None,
+        product_id: str | None,
+    ) -> tuple[str, bool]:
+        if not self.mapping_store:
+            return "inactive", False
+
+        mapping = None
+        try:
+            if product_id:
+                mapping = self.mapping_store.get_listing_product_mapping(xianyu_product_id=product_id)
+            if not mapping and internal_listing_id:
+                mapping = self.mapping_store.get_listing_product_mapping(internal_listing_id=internal_listing_id)
+        except Exception as e:
+            self.logger.warning(f"Failed to read listing mapping status: {e}")
+            return "inactive", False
+
+        if not mapping:
+            return "inactive", False
+        return self._to_contract_mapping_status(mapping.get("mapping_status")), True
+
+    def _persist_listing_mapping(self, *, internal_listing_id: str | None, product_id: str | None) -> dict[str, Any] | None:
+        if not internal_listing_id or not product_id or not self.mapping_store:
+            return None
+        try:
+            return self.mapping_store.upsert_listing_product_mapping(
+                internal_listing_id=internal_listing_id,
+                xianyu_product_id=product_id,
+                mapping_status="mapped",
+            )
+        except Exception as e:
+            self.logger.warning(f"Failed to persist listing mapping: {e}")
+            return None
+
     def _random_delay(self, min_factor: float = 1.0, max_factor: float = 1.0) -> float:
         """生成随机延迟"""
         min_delay = self.delay_range[0] * min_factor
         max_delay = self.delay_range[1] * max_factor
         return random.uniform(min_delay, max_delay)
+
+    async def execute_product_action(
+        self,
+        action: str,
+        *,
+        payload: dict[str, Any] | None = None,
+        listing: Listing | None = None,
+        api_client: OpenPlatformClient | None = None,
+        allow_dom_fallback: bool = False,
+    ) -> dict[str, Any]:
+        action_key = str(action or "").strip().lower()
+        action_map = {
+            "create": "create_product",
+            "edit": "edit_product",
+            "stock": "edit_stock",
+            "publish": "publish_product",
+            "unpublish": "unpublish_product",
+        }
+        method_name = action_map.get(action_key)
+        if not method_name:
+            return self._build_execution_contract(
+                ok=False,
+                action=action_key or "unknown",
+                code="UNSUPPORTED_ACTION",
+                message=f"unsupported product action: {action}",
+                data={
+                    "xianyu_product_id": None,
+                    "internal_listing_id": getattr(listing, "internal_listing_id", None),
+                    "mapping_status": "inactive",
+                    "channel": "api_primary",
+                    "code": "UNSUPPORTED_ACTION",
+                    "message": f"unsupported product action: {action}",
+                },
+                errors=[{"code": "UNSUPPORTED_ACTION", "message": f"unsupported product action: {action}"}],
+            )
+
+        internal_listing_id = self._ensure_internal_listing_id(listing)
+        request_payload = dict(payload or {})
+
+        requested_product_id = request_payload.get("product_id")
+        mapping_status, has_mapping = self._resolve_mapping_status(
+            internal_listing_id=internal_listing_id,
+            product_id=str(requested_product_id) if requested_product_id else None,
+        )
+        if listing is not None and action_key == "create":
+            request_payload.setdefault("title", listing.title)
+            request_payload.setdefault("description", listing.description)
+            request_payload.setdefault("price", listing.price)
+            if listing.images:
+                request_payload.setdefault("images", listing.images)
+
+        client = api_client or self._build_open_platform_client()
+        if client is None:
+            return self._build_execution_contract(
+                ok=False,
+                action=action_key,
+                code="API_CLIENT_NOT_CONFIGURED",
+                message="xianguanjia open platform client is not configured",
+                data={
+                    "xianyu_product_id": request_payload.get("product_id"),
+                    "internal_listing_id": internal_listing_id,
+                    "mapping_status": mapping_status,
+                    "channel": "api_primary",
+                    "code": "API_CLIENT_NOT_CONFIGURED",
+                    "message": "xianguanjia open platform client is not configured",
+                },
+                errors=[{"code": "API_CLIENT_NOT_CONFIGURED", "message": "xianguanjia open platform client is not configured"}],
+            )
+
+        response = getattr(client, method_name)(request_payload)
+        if response.ok:
+            resp_data = response.data if isinstance(response.data, dict) else {}
+            product_id = (
+                resp_data.get("xianyu_product_id")
+                or resp_data.get("product_id")
+                or request_payload.get("product_id")
+            )
+            if action_key == "create":
+                persisted = self._persist_listing_mapping(internal_listing_id=internal_listing_id, product_id=product_id)
+                mapping_status = self._to_contract_mapping_status((persisted or {}).get("mapping_status"))
+                has_mapping = bool(persisted)
+            else:
+                mapping_status, has_mapping = self._resolve_mapping_status(
+                    internal_listing_id=internal_listing_id,
+                    product_id=str(product_id) if product_id else None,
+                )
+
+            return self._build_execution_contract(
+                ok=True,
+                action=action_key,
+                code="OK",
+                message="ok",
+                data={
+                    "xianyu_product_id": product_id,
+                    "internal_listing_id": internal_listing_id,
+                    "mapping_status": mapping_status,
+                    "channel": "api_primary",
+                    "code": "OK",
+                    "message": "ok" if has_mapping else "ok_without_mapping",
+                    "raw": response.to_dict(),
+                },
+                errors=[],
+            )
+
+        code = str(response.error_code or "API_ERROR")
+        message = str(response.error_message or "open platform api failed")
+        if not allow_dom_fallback:
+            return self._build_execution_contract(
+                ok=False,
+                action=action_key,
+                code=code,
+                message=message,
+                data={
+                    "xianyu_product_id": request_payload.get("product_id"),
+                    "internal_listing_id": internal_listing_id,
+                    "mapping_status": mapping_status,
+                    "channel": "api_primary",
+                    "code": code,
+                    "message": message,
+                },
+                errors=[{"code": code, "message": message}],
+            )
+
+        return self._build_execution_contract(
+            ok=False,
+            action=action_key,
+            code="DOM_FALLBACK_USED",
+            message="dom fallback was requested but is disabled by default policy",
+            data={
+                "xianyu_product_id": request_payload.get("product_id"),
+                "internal_listing_id": internal_listing_id,
+                "mapping_status": mapping_status,
+                "channel": "dom_fallback",
+                "code": "DOM_FALLBACK_USED",
+                "message": "dom fallback was requested but is disabled by default policy",
+            },
+            errors=[{"code": code, "message": message}],
+        )
 
     async def create_listing(self, listing: Listing, account_id: str | None = None) -> PublishResult:
         """
@@ -135,6 +382,7 @@ class ListingService:
             发布结果
         """
         self.logger.info(f"Creating listing: {listing.title}")
+        self._ensure_internal_listing_id(listing)
 
         try:
             content_check = self.compliance.evaluate_content(listing.title, listing.description)
@@ -156,7 +404,14 @@ class ListingService:
                     hits=content_check["hits"],
                     blocked=True,
                 )
-                return PublishResult(success=False, error_message=content_check["message"])
+                return PublishResult(
+                    success=False,
+                    internal_listing_id=listing.internal_listing_id,
+                    error_message=content_check["message"],
+                    action="publish",
+                    code="COMPLIANCE_BLOCK",
+                    message=content_check["message"],
+                )
 
             rate_key = f"publish:{account_id or 'global'}"
             rate_check = await self.compliance.evaluate_publish_rate(rate_key)
@@ -178,21 +433,54 @@ class ListingService:
                     hits=[],
                     blocked=True,
                 )
-                return PublishResult(success=False, error_message=rate_check["message"])
+                return PublishResult(
+                    success=False,
+                    internal_listing_id=listing.internal_listing_id,
+                    error_message=rate_check["message"],
+                    action="publish",
+                    code="RATE_LIMIT_BLOCK",
+                    message=rate_check["message"],
+                )
 
             if not self.controller:
                 raise BrowserError("Browser controller is not initialized. Cannot publish.")
 
             product_id, product_url = await self._execute_publish(listing)
+            persisted = self._persist_listing_mapping(internal_listing_id=listing.internal_listing_id, product_id=product_id)
+            mapping_status = self._to_contract_mapping_status((persisted or {}).get("mapping_status"))
 
-            result = PublishResult(success=True, product_id=product_id, product_url=product_url)
+            result = PublishResult(
+                success=True,
+                product_id=product_id,
+                product_url=product_url,
+                internal_listing_id=listing.internal_listing_id,
+                action="publish",
+                code="OK",
+                message="ok",
+                data={
+                    "xianyu_product_id": product_id,
+                    "internal_listing_id": listing.internal_listing_id,
+                    "mapping_status": mapping_status,
+                    "channel": "dom",
+                    "code": "OK",
+                    "message": "ok",
+                },
+                errors=[],
+            )
 
             self.logger.success(f"Listing created: {product_url}")
             return result
 
         except Exception as e:
             self.logger.error(f"Failed to create listing: {e}")
-            return PublishResult(success=False, error_message=str(e))
+            return PublishResult(
+                success=False,
+                internal_listing_id=listing.internal_listing_id,
+                error_message=str(e),
+                action="publish",
+                code="PUBLISH_FAILED",
+                message=str(e),
+            )
 
     async def _audit_compliance_event(
         self,

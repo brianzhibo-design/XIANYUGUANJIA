@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,17 +11,43 @@ import httpx
 
 from .errors import is_retryable_error, map_error
 from .models import XianGuanJiaResponse
+from .signing import sign_open_platform_request
 
 
 @dataclass(slots=True)
 class OpenPlatformClient:
     base_url: str
+    app_key: str
+    app_secret: str
     timeout: float = 10.0
+    seller_id: str | None = None
 
     def _post(self, path: str, payload: dict[str, Any]) -> XianGuanJiaResponse:
         url = f"{self.base_url.rstrip('/')}{path}"
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        timestamp = str(int(time.time() * 1000))
+        sign = sign_open_platform_request(
+            app_key=self.app_key,
+            app_secret=self.app_secret,
+            timestamp=timestamp,
+            body=body,
+            seller_id=self.seller_id,
+        )
+        params: dict[str, str] = {
+            "appKey": self.app_key,
+            "timestamp": timestamp,
+            "sign": sign,
+        }
+        if self.seller_id:
+            params["sellerId"] = self.seller_id
         try:
-            resp = httpx.post(url, json=payload, timeout=self.timeout)
+            resp = httpx.post(
+                url,
+                params=params,
+                content=body.encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                timeout=self.timeout,
+            )
             raw = resp.json()
             code = raw.get("code")
             if code == 0:
@@ -82,3 +109,4 @@ class OpenPlatformClient:
 
     def get_order_detail(self, payload: dict[str, Any]) -> XianGuanJiaResponse:
         return self._post("/api/open/order/detail", payload)
+

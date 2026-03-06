@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import sqlite3
 from datetime import UTC, datetime
@@ -92,20 +93,32 @@ class PriceExecutionService:
         self,
         *,
         session_id: str,
-        product_id: str,
+        product_id: str = "",
         from_price: float,
         buyer_offer_price: float,
         min_price: float,
         order_id: str = "",
+        price_scope: str | None = None,
         strategy_meta: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        strategy_meta = dict(strategy_meta or {})
+        resolved_scope = str(
+            price_scope or strategy_meta.get("price_scope") or ("order" if str(order_id).strip() else "product")
+        ).strip().lower()
+        if resolved_scope not in {"order", "product"}:
+            raise ValueError(f"Unsupported price_scope: {resolved_scope}")
+        if resolved_scope == "order" and not str(order_id).strip():
+            raise ValueError("order_id is required for order price execution")
+        if resolved_scope == "product" and not str(product_id).strip():
+            raise ValueError("product_id is required for product price execution")
+
         decision = self.decide_target_price(
             from_price=from_price,
             buyer_offer_price=buyer_offer_price,
             min_price=min_price,
         )
         now = self._now()
-        strategy_payload = {**decision, **(strategy_meta or {})}
+        strategy_payload = {**decision, **strategy_meta, "price_scope": resolved_scope}
 
         with self._connect() as conn:
             cur = conn.execute(
@@ -138,6 +151,83 @@ class PriceExecutionService:
             )
 
         return self.get_job(job_id) or {}
+
+    @staticmethod
+    def _price_scope_for(job: dict[str, Any]) -> str:
+        strategy = job.get("strategy")
+        if isinstance(strategy, dict):
+            scope = str(strategy.get("price_scope") or "").strip().lower()
+            if scope in {"order", "product"}:
+                return scope
+        if str(job.get("order_id") or "").strip():
+            return "order"
+        return "product"
+
+    @staticmethod
+    async def _await_if_needed(result: Any) -> Any:
+        if hasattr(result, "__await__"):
+            return await result
+        return result
+
+    async def _invoke_with_supported_kwargs(self, func: Any, variants: list[dict[str, Any]]) -> Any:
+        try:
+            signature = inspect.signature(func)
+        except (TypeError, ValueError):
+            return await self._await_if_needed(func(**variants[0]))
+
+        accepts_var_kwargs = any(
+            param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
+        )
+        parameter_names = set(signature.parameters)
+
+        for kwargs in variants:
+            if accepts_var_kwargs or set(kwargs).issubset(parameter_names):
+                return await self._await_if_needed(func(**kwargs))
+
+        raise TypeError("No supported parameter combination for price execution")
+
+    @staticmethod
+    def _normalize_result(
+        *,
+        result: Any,
+        price_scope: str,
+        order_id: str,
+        product_id: str,
+    ) -> dict[str, Any]:
+        out = dict(result or {})
+        raw_channel = str(out.get("channel") or "").strip().lower()
+        raw_action = str(out.get("action") or "").strip().lower()
+
+        if price_scope == "order":
+            if raw_channel == "product_price_api" or raw_action in {"price_update", "edit_product_price"}:
+                return {
+                    "success": False,
+                    "order_id": order_id,
+                    "product_id": product_id,
+                    "action": "modify_order_price",
+                    "channel": "order_price_api",
+                    "error": "product_price_result_on_order_flow",
+                }
+            out.setdefault("success", True)
+            out.setdefault("order_id", out.get("order_no") or order_id)
+            out["action"] = "modify_order_price"
+            out["channel"] = "dom" if raw_channel == "dom" else "order_price_api"
+            return out
+
+        if raw_channel == "order_price_api" or raw_action == "modify_order_price":
+            return {
+                "success": False,
+                "order_id": order_id,
+                "product_id": product_id,
+                "action": "edit_product_price",
+                "channel": "product_price_api",
+                "error": "order_price_result_on_product_flow",
+            }
+        out.setdefault("success", True)
+        out.setdefault("product_id", product_id)
+        out["action"] = "edit_product_price"
+        out["channel"] = "dom" if raw_channel == "dom" else "product_price_api"
+        return out
 
     def _append_event(
         self,
@@ -190,11 +280,7 @@ class PriceExecutionService:
             return self.replay_job(job_id)
 
         try:
-            result = await operations_service.update_price(
-                product_id=str(job.get("product_id") or ""),
-                new_price=float(job.get("target_price") or 0.0),
-                original_price=float(job.get("from_price") or 0.0),
-            )
+            result = await self._execute_price_change(job=job, operations_service=operations_service)
 
             success = bool(result.get("success", False))
             final_status = "success" if success else "failed"
@@ -265,6 +351,71 @@ class PriceExecutionService:
                 await result
         except Exception:
             return
+
+    async def _execute_price_change(self, *, job: dict[str, Any], operations_service: Any) -> dict[str, Any]:
+        price_scope = self._price_scope_for(job)
+        order_no = str(job.get("order_id") or "").strip()
+        product_id = str(job.get("product_id") or "").strip()
+        target_price = float(job.get("target_price") or 0.0)
+        from_price = float(job.get("from_price") or 0.0)
+        target_price_cents = round(target_price * 100)
+
+        if price_scope == "order":
+            modify = getattr(operations_service, "modify_order_price", None) or getattr(
+                operations_service, "update_order_price", None
+            )
+            if not callable(modify) or not order_no:
+                return {
+                    "success": False,
+                    "order_id": order_no,
+                    "product_id": product_id,
+                    "action": "modify_order_price",
+                    "channel": "order_price_api",
+                    "error": "order_price_unsupported",
+                }
+
+            result = await self._invoke_with_supported_kwargs(
+                modify,
+                [
+                    {"order_no": order_no, "order_price": target_price_cents},
+                    {"order_id": order_no, "order_price": target_price_cents},
+                    {"order_id": order_no, "new_price": target_price, "original_price": from_price},
+                    {"order_no": order_no, "new_price": target_price, "original_price": from_price},
+                ],
+            )
+            return self._normalize_result(
+                result=result,
+                price_scope=price_scope,
+                order_id=order_no,
+                product_id=product_id,
+            )
+
+        update = getattr(operations_service, "update_price", None)
+        if not callable(update) or not product_id:
+            return {
+                "success": False,
+                "order_id": order_no,
+                "product_id": product_id,
+                "action": "edit_product_price",
+                "channel": "product_price_api",
+                "error": "product_price_unsupported",
+            }
+
+        result = await self._invoke_with_supported_kwargs(
+            update,
+            [
+                {"product_id": product_id, "new_price": target_price, "original_price": from_price},
+                {"product_id": product_id, "price": target_price_cents, "original_price": round(from_price * 100)},
+                {"pid": product_id, "new_price": target_price, "original_price": from_price},
+                {"pid": product_id, "price": target_price, "original_price": from_price},
+            ],
+        )
+        return self._normalize_result(
+            result=result,
+            price_scope=price_scope,
+            order_id=order_no,
+            product_id=product_id,
+        )
 
     def replay_job(self, job_id: int) -> dict[str, Any]:
         job = self.get_job(job_id)

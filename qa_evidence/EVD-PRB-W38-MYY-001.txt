@@ -1,0 +1,87 @@
+# PR-B review evidence
+2026-03-06 01:31:36 CST
+
+## branch/status
+## chore/wave-gate-progress-20260305...origin/chore/wave-gate-progress-20260305 [丢失]
+ M src/dashboard_server.py
+ M src/modules/messages/service.py
+ M src/modules/quote/engine.py
+?? .venv312/
+?? qa_evidence/
+
+## tracked source changes vs main...HEAD
+src/core/startup_checks.py
+src/dashboard_server.py
+src/modules/quote/providers.py
+
+## working-tree changes
+src/dashboard_server.py
+src/modules/messages/service.py
+src/modules/quote/engine.py
+
+## key constraints grep
+src/modules/messages/service.py:375:        ok_pairs.sort(key=lambda item: (float(item[1].total_fee), str(item[0])))
+src/dashboard_server.py:863:            "recover_triggered": "已触发自动恢复",
+src/dashboard_server.py:873:        if s == "recover_triggered":
+src/dashboard_server.py:2643:            stage = "recover_triggered"
+src/dashboard_server.py:2667:            "auto_recover_triggered": auto_triggered,
+src/dashboard_server.py:2708:        risk_signals_raw = risk_control.get("signals", [])
+src/dashboard_server.py:2709:        risk_signals = [str(x).strip() for x in risk_signals_raw if str(x).strip()] if isinstance(risk_signals_raw, list) else []
+src/dashboard_server.py:2710:        risk_signal_text = " ".join(risk_signals)
+src/dashboard_server.py:2756:        next_retry_at: str | None = None
+src/dashboard_server.py:2757:        if recovery_stage in {"recover_triggered", "waiting_reconnect"}:
+src/dashboard_server.py:2762:                    next_retry_at = (dt + timedelta(seconds=20)).strftime("%Y-%m-%dT%H:%M:%S")
+src/dashboard_server.py:2764:                    next_retry_at = None
+src/dashboard_server.py:2783:            "next_retry_at": next_retry_at,
+src/dashboard_server.py:2784:            "risk_signals": risk_signals,
+src/dashboard_server.py:3299:      if (stage === "recover_triggered") return "warning";
+src/dashboard_server.py:3309:      if (s === "recover_triggered") return "已触发自动恢复";
+src/dashboard_server.py:3515:      const recoveryTriggered = !!recovery.auto_recover_triggered;
+src/lite/cookie_renewal.py:32:        risk_cooldown_seconds: float = 300.0,
+src/lite/cookie_renewal.py:50:        self.risk_cooldown_seconds = max(1.0, float(risk_cooldown_seconds or 300.0))
+src/lite/cookie_renewal.py:66:        self._next_retry_at: float | None = None
+src/lite/cookie_renewal.py:97:            "next_retry_at": self._fmt_ts(self._next_retry_at),
+src/lite/cookie_renewal.py:176:                self._next_retry_at = None
+src/lite/cookie_renewal.py:197:                    await self._schedule_retry(retry_seed, cooldown=budget_exhausted)
+src/lite/cookie_renewal.py:336:    async def _schedule_retry(self, fail_count: int, *, cooldown: bool = False) -> None:
+src/lite/cookie_renewal.py:337:        if cooldown:
+src/lite/cookie_renewal.py:338:            wait_seconds = self.risk_cooldown_seconds
+src/lite/cookie_renewal.py:346:        self._next_retry_at = time.time() + max(0.1, wait_seconds)
+src/lite/cookie_renewal.py:349:        if self._next_retry_at is None:
+src/lite/cookie_renewal.py:351:        sleep_seconds = max(0.0, self._next_retry_at - time.time())
+src/lite/cookie_renewal.py:391:            "next_retry_at": self._fmt_ts(self._next_retry_at),
+src/modules/quote/cost_table.py:225:                return self._sort_candidates(exact)[:limit]
+src/modules/quote/cost_table.py:239:            return self._sort_candidates(fuzzy)[:limit]
+src/modules/quote/cost_table.py:335:    def _sort_candidates(records: list[CostRecord]) -> list[CostRecord]:
+
+## wave-B backend verification
+2026-03-06 04:30:51 CST
+
+### changed scope
+- src/modules/orders/service.py
+- src/modules/orders/price_execution.py
+- tests/test_orders.py
+- tests/test_price_execution.py
+- tests/test_e2e_minimal_closed_loop.py
+
+### commands run
+1. `PYTHONPYCACHEPREFIX=/tmp/pycache .venv312/bin/python -m py_compile src/modules/orders/service.py src/modules/orders/price_execution.py tests/test_orders.py tests/test_price_execution.py tests/test_e2e_minimal_closed_loop.py`
+   - result: pass
+2. `PYTHONPYCACHEPREFIX=/tmp/pycache .venv312/bin/python -m pytest --no-cov -q tests/test_orders.py tests/test_price_execution.py tests/test_e2e_minimal_closed_loop.py`
+   - result: `23 passed in 0.76s`
+3. `PYTHONPYCACHEPREFIX=/tmp/pycache .venv312/bin/python -m pytest --no-cov -q tests/test_part12_services_full_coverage.py tests/test_targeted_xy_cov_006r_cont.py`
+   - result: `22 passed in 1.05s`
+
+### notes
+- system `python3` resolved to 3.9 and failed on PEP 604 union syntax during import, so verification was run with `.venv312/bin/python` instead.
+
+## wave-B backend verification (subagent rerun)
+2026-03-06 04:32:25 CST
+
+### commands run
+1. `python3 -m py_compile src/modules/orders/service.py src/modules/orders/price_execution.py tests/test_orders.py tests/test_price_execution.py tests/test_e2e_minimal_closed_loop.py`
+   - result: pass
+2. `JWT_SECRET_KEY=test .venv312/bin/pytest -q tests/test_orders.py tests/test_price_execution.py tests/test_e2e_minimal_closed_loop.py`
+   - result: tests passed, but process exit code 1 due to repo global coverage gate (`Total coverage: 17.65%`, threshold 35%)
+3. `JWT_SECRET_KEY=test .venv312/bin/pytest -q --no-cov tests/test_orders.py tests/test_price_execution.py tests/test_e2e_minimal_closed_loop.py`
+   - result: `23 passed in 0.33s`

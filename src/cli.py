@@ -1653,6 +1653,84 @@ async def cmd_growth(args: argparse.Namespace) -> None:
     _json_out({"error": f"Unknown growth action: {action}"})
 
 
+async def cmd_virtual_goods(args: argparse.Namespace) -> None:
+    from src.modules.virtual_goods.service import VirtualGoodsService
+
+    service = VirtualGoodsService(db_path=args.db_path or "data/orders.db")
+    action = str(args.action or "").strip().lower()
+
+    if action == "scheduler":
+        method_name = "scheduler_dry_run" if bool(args.dry_run) else "scheduler_run"
+        runner = getattr(service, method_name, None)
+        if not callable(runner):
+            _json_out({"ok": False, "action": f"virtual_goods_{method_name}", "error": "service_method_not_available"})
+            return
+        result = runner(max_events=max(int(args.max_events or 20), 1))
+        _json_out({"ok": True, "action": f"virtual_goods_{method_name}", **(result if isinstance(result, dict) else {"result": result})})
+        return
+
+    if action == "replay":
+        if not args.event_id and not str(args.dedupe_key or "").strip():
+            _json_out({"ok": False, "action": "virtual_goods_replay", "error": "Specify --event-id or --dedupe-key"})
+            return
+        runner = getattr(service, "replay", None)
+        if not callable(runner):
+            _json_out({"ok": False, "action": "virtual_goods_replay", "error": "service_method_not_available"})
+            return
+        result = runner(event_id=args.event_id, dedupe_key=args.dedupe_key)
+        _json_out({"ok": True, "action": "virtual_goods_replay", **(result if isinstance(result, dict) else {"result": result})})
+        return
+
+    if action == "manual":
+        manual_action = str(args.manual_action or "").strip().lower()
+        if manual_action == "list":
+            runner = getattr(service, "manual_list", None)
+            if not callable(runner):
+                _json_out({"ok": False, "action": "virtual_goods_manual_list", "error": "service_method_not_available"})
+                return
+            result = runner(order_ids=list(args.order_ids or []))
+            _json_out(
+                {
+                    "ok": True,
+                    "action": "virtual_goods_manual_list",
+                    **(result if isinstance(result, dict) else {"result": result}),
+                }
+            )
+            return
+
+        if manual_action == "set":
+            if not args.order_id:
+                _json_out({"ok": False, "action": "virtual_goods_manual_set", "error": "Specify --order-id"})
+                return
+            runner = getattr(service, "manual_set", None)
+            if not callable(runner):
+                _json_out({"ok": False, "action": "virtual_goods_manual_set", "error": "service_method_not_available"})
+                return
+            result = runner(order_id=args.order_id, enabled=bool(args.enabled))
+            _json_out(
+                {
+                    "ok": True,
+                    "action": "virtual_goods_manual_set",
+                    **(result if isinstance(result, dict) else {"result": result}),
+                }
+            )
+            return
+
+        _json_out({"ok": False, "action": "virtual_goods_manual", "error": "Unknown --manual-action"})
+        return
+
+    if action == "inspect":
+        runner = getattr(service, "inspect", None)
+        if not callable(runner):
+            _json_out({"ok": False, "action": "virtual_goods_inspect", "error": "service_method_not_available"})
+            return
+        result = runner(event_id=args.event_id, order_id=args.order_id)
+        _json_out({"ok": True, "action": "virtual_goods_inspect", **(result if isinstance(result, dict) else {"result": result})})
+        return
+
+    _json_out({"ok": False, "action": "virtual_goods", "error": f"Unknown virtual-goods action: {action}"})
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="xianyu-cli",
@@ -1878,6 +1956,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--from-stage", default="inquiry", help="转化起始阶段")
     p.add_argument("--to-stage", default="ordered", help="转化目标阶段")
 
+    # virtual-goods
+    p = sub.add_parser("virtual-goods", help="虚拟商品回调调度/重放/人工接管")
+    p.add_argument("--action", required=True, choices=["scheduler", "replay", "manual", "inspect"])
+    p.add_argument("--db-path", default="data/orders.db", help="虚拟商品数据库路径")
+    p.add_argument("--dry-run", action="store_true", help="scheduler 仅预览，不执行")
+    p.add_argument("--max-events", type=int, default=20, help="scheduler 每次最多处理事件数")
+    p.add_argument("--event-id", default=None, help="回调事件ID（用于 replay/inspect）")
+    p.add_argument("--dedupe-key", default=None, help="回调去重键（用于 replay）")
+    p.add_argument("--manual-action", choices=["list", "set"], default=None, help="manual 子动作")
+    p.add_argument("--order-id", default=None, help="订单ID（manual set / inspect）")
+    p.add_argument("--order-ids", nargs="*", default=[], help="订单ID列表（manual list）")
+    p.add_argument("--enabled", action="store_true", help="manual set 开关（默认关闭）")
+
     return parser
 
 
@@ -1906,6 +1997,7 @@ def main() -> None:
         "module": cmd_module,
         "quote": cmd_quote,
         "growth": cmd_growth,
+        "virtual-goods": cmd_virtual_goods,
     }
 
     handler = dispatch.get(args.command)

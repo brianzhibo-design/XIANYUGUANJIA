@@ -2,6 +2,8 @@
 
 from unittest.mock import Mock
 
+import pytest
+
 from src.modules.orders.service import OrderFulfillmentService
 
 
@@ -11,6 +13,107 @@ def test_order_status_mapping(temp_dir) -> None:
     assert service.map_status("待发货") == "processing"
     assert service.map_status("已完成") == "completed"
     assert service.map_status("退款中") == "after_sales"
+
+
+def test_open_platform_status_mapping_is_fixed(temp_dir) -> None:
+    service = OrderFulfillmentService(db_path=str(temp_dir / "orders_open_platform.db"))
+
+    assert service.map_open_platform_status(11) == "pending"
+    assert service.map_open_platform_status("12") == "processing"
+    assert service.map_open_platform_status(21) == "shipping"
+    assert service.map_open_platform_status(22) == "completed"
+    assert service.map_open_platform_status(23) == "after_sales"
+    assert service.map_open_platform_status(24) == "closed"
+
+    with pytest.raises(ValueError, match="Unsupported open platform order_status"):
+        service.map_open_platform_status(99)
+
+
+def test_sync_open_platform_list_orders_is_idempotent(temp_dir) -> None:
+    class _Client:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def list_orders(self, payload):
+            self.calls.append(dict(payload))
+            return {
+                "code": 0,
+                "data": {
+                    "list": [
+                        {
+                            "order_no": "xy-sync-1",
+                            "order_status": 12,
+                            "consign_type": 1,
+                            "receiver_name": "张三",
+                            "receiver_mobile": "13800138000",
+                            "address": "桂庙新村100室",
+                            "goods": {"title": "测试商品", "product_id": 1001},
+                            "update_time": 1700000001,
+                        }
+                    ]
+                },
+            }
+
+    service = OrderFulfillmentService(db_path=str(temp_dir / "orders_sync_list.db"))
+    client = _Client()
+
+    first = service.sync_open_platform_list_orders(client, {"page_no": 1, "page_size": 10, "order_status": 12})
+    second = service.sync_open_platform_list_orders(client, {"page_no": 1, "page_size": 10, "order_status": 12})
+    trace = service.trace_order("xy-sync-1")
+
+    assert first["success"] is True
+    assert first["total"] == 1
+    assert first["changed"] == 1
+    assert second["changed"] == 0
+    assert trace["order"]["status"] == "processing"
+    assert trace["order"]["item_type"] == "physical"
+    assert trace["order"]["quote_snapshot"]["open_platform"]["order_status"] == 12
+    assert trace["order"]["quote_snapshot"]["open_platform"]["source"] == "list_orders"
+    assert len([ev for ev in trace["events"] if ev["event_type"] == "status_sync"]) == 1
+    assert len(client.calls) == 2
+
+
+def test_sync_open_platform_order_detail_merges_snapshot_idempotently(temp_dir) -> None:
+    class _Client:
+        def get_order_detail(self, payload):
+            assert payload == {"order_no": "xy-sync-detail"}
+            return {
+                "order_no": "xy-sync-detail",
+                "order_status": 21,
+                "consign_type": 1,
+                "receiver_name": "李四",
+                "receiver_mobile": "13800138001",
+                "address": "科技园一路88号",
+                "waybill_no": "SF23817389113",
+                "express_code": "shunfeng",
+                "express_name": "顺丰速运",
+                "goods": {"title": "公交卡测试", "product_id": 2002},
+                "update_time": 1700000010,
+            }
+
+    service = OrderFulfillmentService(db_path=str(temp_dir / "orders_sync_detail.db"))
+    service.upsert_order(
+        order_id="xy-sync-detail",
+        raw_status="待付款",
+        session_id="session-sync-detail",
+        quote_snapshot={"quote_result": {"total_fee": 19.9}},
+        item_type="virtual",
+    )
+
+    first = service.sync_open_platform_order_detail(_Client(), order_no="xy-sync-detail")
+    second = service.sync_open_platform_order_detail(_Client(), order_no="xy-sync-detail")
+    trace = service.trace_order("xy-sync-detail")
+
+    assert first["success"] is True
+    assert first["changed"] is True
+    assert second["changed"] is False
+    assert trace["order"]["session_id"] == "session-sync-detail"
+    assert trace["order"]["status"] == "shipping"
+    assert trace["order"]["item_type"] == "physical"
+    assert trace["order"]["quote_snapshot"]["quote_result"]["total_fee"] == 19.9
+    assert trace["order"]["quote_snapshot"]["shipping_info"]["waybill_no"] == "SF23817389113"
+    assert trace["order"]["quote_snapshot"]["open_platform"]["source"] == "get_order_detail"
+    assert len([ev for ev in trace["events"] if ev["event_type"] == "status_sync"]) == 2
 
 
 def test_order_upsert_and_trace(temp_dir) -> None:
