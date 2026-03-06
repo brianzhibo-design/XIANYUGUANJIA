@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 
 KNOWN_EVENT_KINDS = {"order", "refund", "voucher", "coupon", "code"}

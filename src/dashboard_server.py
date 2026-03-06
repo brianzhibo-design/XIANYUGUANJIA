@@ -734,10 +734,10 @@ class MimicOps:
         metrics = self._vg_service_metrics(dashboard_result)
         errors = dashboard_result.get("errors") if isinstance(dashboard_result.get("errors"), list) else []
 
-        total_orders = self._vg_int(metrics, "total_orders")
-        total_callbacks = self._vg_int(metrics, "total_callbacks")
-        pending_callbacks = self._vg_int(metrics, "pending_callbacks")
-        processed_callbacks = self._vg_int(metrics, "processed_callbacks")
+        _total_orders = self._vg_int(metrics, "total_orders")
+        _total_callbacks = self._vg_int(metrics, "total_callbacks")
+        _pending_callbacks = self._vg_int(metrics, "pending_callbacks")
+        _processed_callbacks = self._vg_int(metrics, "processed_callbacks")
         failed_callbacks = self._vg_int(metrics, "failed_callbacks")
         timeout_backlog = self._vg_int(metrics, "timeout_backlog")
         unknown_event_kind = self._vg_int(metrics, "unknown_event_kind")
@@ -839,7 +839,7 @@ class MimicOps:
                     if isinstance(funnel_result, dict)
                     else funnel_total
                 ),
-                "source": str(((funnel_result.get("metrics") or {}).get("source") or "ops_funnel_stage_daily"))
+                "source": str((funnel_result.get("metrics") or {}).get("source") or "ops_funnel_stage_daily")
                 if isinstance(funnel_result, dict)
                 else "ops_funnel_stage_daily",
             },

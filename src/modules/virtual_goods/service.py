@@ -1010,7 +1010,7 @@ class VirtualGoodsService:
                 code="REPLAY_EXCEPTION",
                 message="replay failed",
                 data={"callback_id": int(cb["id"]), "target": target},
-                errors=errors + [{"code": "REPLAY_EXCEPTION", "message": str(exc)}],
+                errors=[*errors, {"code": "REPLAY_EXCEPTION", "message": str(exc)}],
                 metrics={"unknown_event_kind": unknown_count},
             )
 

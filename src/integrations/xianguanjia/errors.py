@@ -121,7 +121,7 @@ def _normalize_error_type(error_type: XianGuanJiaErrorType | str | None) -> Xian
 def _is_timeout_error(exc: BaseException) -> bool:
     timeout_types: tuple[type[BaseException], ...] = (TimeoutError, socket.timeout)
     if httpx is not None:
-        timeout_types = timeout_types + (httpx.TimeoutException,)
+        timeout_types = (*timeout_types, httpx.TimeoutException)
     return isinstance(exc, timeout_types)
 
 
@@ -146,7 +146,7 @@ def _is_transport_error(exc: BaseException) -> bool:
         BrokenPipeError,
     )
     if httpx is not None:
-        transport_types = transport_types + (httpx.TransportError,)
+        transport_types = (*transport_types, httpx.TransportError)
 
     if isinstance(exc, transport_types):
         return True
