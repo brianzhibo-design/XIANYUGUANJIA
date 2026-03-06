@@ -1,11 +1,9 @@
 """
-OpenClaw Gateway Browser Client
+Browser Client — 浏览器自动化客户端。
 
-通过 HTTP 调用 OpenClaw Gateway 的 Browser Control API 实现浏览器自动化。
-替代旧的 Playwright 直接调用方式，使浏览器引擎由 OpenClaw 统一管理和升级。
-
-Gateway Browser Control API 端口 = gateway_port + 2（默认 18791）
-文档: https://docs.openclaw.ai/tools/browser
+BrowserClient (OpenClaw Gateway) 已废弃。
+所有业务操作已迁移到闲管家 API，浏览器仅用于 Cookie 抓取和 HTML 截图。
+create_browser_client() 现在默认使用 PlaywrightBrowserClient (lite 模式)。
 """
 
 import asyncio
@@ -625,7 +623,7 @@ def _resolve_runtime(config: dict[str, Any] | None = None) -> str:
     except Exception:
         pass
 
-    return "auto"
+    return "lite"
 
 
 async def _probe_gateway_available(config: dict[str, Any] | None = None) -> bool:

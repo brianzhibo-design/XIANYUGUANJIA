@@ -1,4 +1,16 @@
-"""闲管家开放平台 API 适配层。"""
+"""闲管家开放平台 API 适配层。
+
+已废弃 — 请使用 src.integrations.xianguanjia.open_platform_client.OpenPlatformClient。
+本文件存在签名 bug（无逗号分隔、毫秒时间戳、sort_keys=True），保留仅为向后兼容。
+"""
+
+import warnings as _warnings
+_warnings.warn(
+    "orders.xianguanjia.XianGuanJiaClient is deprecated. "
+    "Use integrations.xianguanjia.open_platform_client.OpenPlatformClient instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from __future__ import annotations
 
