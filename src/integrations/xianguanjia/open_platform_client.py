@@ -109,4 +109,3 @@ class OpenPlatformClient:
 
     def get_order_detail(self, payload: dict[str, Any]) -> XianGuanJiaResponse:
         return self._post("/api/open/order/detail", payload)
-

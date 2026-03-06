@@ -89,12 +89,12 @@ _ERROR_CODE_MAPPING: dict[str, tuple[XianGuanJiaErrorType, bool]] = {
 
 _NETWORK_ERRNO_SET: frozenset[int] = frozenset(
     {
-        32,   # EPIPE
-        54,   # ECONNRESET (macOS)
-        60,   # ETIMEDOUT (macOS)
-        61,   # ECONNREFUSED (macOS)
-        64,   # EHOSTDOWN
-        65,   # EHOSTUNREACH
+        32,  # EPIPE
+        54,  # ECONNRESET (macOS)
+        60,  # ETIMEDOUT (macOS)
+        61,  # ECONNREFUSED (macOS)
+        64,  # EHOSTDOWN
+        65,  # EHOSTUNREACH
         101,  # ENETUNREACH
         104,  # ECONNRESET (linux)
         110,  # ETIMEDOUT (linux)
@@ -232,9 +232,11 @@ def map_error(
         text = "XianGuanJia error"
 
     exc_cls: type[XianGuanJiaError]
-    if normalized in _RETRYABLE_ERROR_TYPES or (
-        http_status is not None and int(http_status) in _RETRYABLE_HTTP_STATUS
-    ) or retryable_from_code is True:
+    if (
+        normalized in _RETRYABLE_ERROR_TYPES
+        or (http_status is not None and int(http_status) in _RETRYABLE_HTTP_STATUS)
+        or retryable_from_code is True
+    ):
         exc_cls = XianGuanJiaRetryableError
     elif retryable_from_code is False:
         exc_cls = XianGuanJiaNonRetryableError

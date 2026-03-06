@@ -1666,7 +1666,13 @@ async def cmd_virtual_goods(args: argparse.Namespace) -> None:
             _json_out({"ok": False, "action": f"virtual_goods_{method_name}", "error": "service_method_not_available"})
             return
         result = runner(max_events=max(int(args.max_events or 20), 1))
-        _json_out({"ok": True, "action": f"virtual_goods_{method_name}", **(result if isinstance(result, dict) else {"result": result})})
+        _json_out(
+            {
+                "ok": True,
+                "action": f"virtual_goods_{method_name}",
+                **(result if isinstance(result, dict) else {"result": result}),
+            }
+        )
         return
 
     if action == "replay":
@@ -1678,7 +1684,13 @@ async def cmd_virtual_goods(args: argparse.Namespace) -> None:
             _json_out({"ok": False, "action": "virtual_goods_replay", "error": "service_method_not_available"})
             return
         result = runner(event_id=args.event_id, dedupe_key=args.dedupe_key)
-        _json_out({"ok": True, "action": "virtual_goods_replay", **(result if isinstance(result, dict) else {"result": result})})
+        _json_out(
+            {
+                "ok": True,
+                "action": "virtual_goods_replay",
+                **(result if isinstance(result, dict) else {"result": result}),
+            }
+        )
         return
 
     if action == "manual":
@@ -1725,7 +1737,13 @@ async def cmd_virtual_goods(args: argparse.Namespace) -> None:
             _json_out({"ok": False, "action": "virtual_goods_inspect", "error": "service_method_not_available"})
             return
         result = runner(event_id=args.event_id, order_id=args.order_id)
-        _json_out({"ok": True, "action": "virtual_goods_inspect", **(result if isinstance(result, dict) else {"result": result})})
+        _json_out(
+            {
+                "ok": True,
+                "action": "virtual_goods_inspect",
+                **(result if isinstance(result, dict) else {"result": result}),
+            }
+        )
         return
 
     _json_out({"ok": False, "action": "virtual_goods", "error": f"Unknown virtual-goods action: {action}"})

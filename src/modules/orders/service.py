@@ -242,11 +242,7 @@ class OrderFulfillmentService:
             "express_name": str(payload.get("express_name") or "").strip(),
             "express_fee": payload.get("express_fee"),
         }
-        shipping_info = {
-            key: value
-            for key, value in shipping_info.items()
-            if value not in ("", None)
-        }
+        shipping_info = {key: value for key, value in shipping_info.items() if value not in ("", None)}
 
         open_platform = {
             "source": source,
@@ -262,11 +258,7 @@ class OrderFulfillmentService:
             "seller_eid": str(payload.get("seller_eid") or "").strip(),
             "seller_name": str(payload.get("seller_name") or "").strip(),
         }
-        open_platform = {
-            key: value
-            for key, value in open_platform.items()
-            if value not in ("", None)
-        }
+        open_platform = {key: value for key, value in open_platform.items() if value not in ("", None)}
 
         snapshot: dict[str, Any] = {}
         if shipping_info:

@@ -743,8 +743,14 @@ class MimicOps:
         unknown_event_kind = self._vg_int(metrics, "unknown_event_kind")
         timeout_seconds = self._vg_int(metrics, "timeout_seconds")
 
-        funnel_data = funnel_result.get("data") if isinstance(funnel_result, dict) and isinstance(funnel_result.get("data"), dict) else {}
-        funnel_stage_totals = funnel_data.get("stage_totals") if isinstance(funnel_data.get("stage_totals"), dict) else {}
+        funnel_data = (
+            funnel_result.get("data")
+            if isinstance(funnel_result, dict) and isinstance(funnel_result.get("data"), dict)
+            else {}
+        )
+        funnel_stage_totals = (
+            funnel_data.get("stage_totals") if isinstance(funnel_data.get("stage_totals"), dict) else {}
+        )
 
         exception_data = (
             exception_result.get("data")
@@ -758,10 +764,14 @@ class MimicOps:
             if isinstance(fulfillment_result, dict) and isinstance(fulfillment_result.get("data"), dict)
             else {}
         )
-        fulfillment_summary = fulfillment_data.get("summary") if isinstance(fulfillment_data.get("summary"), dict) else {}
+        fulfillment_summary = (
+            fulfillment_data.get("summary") if isinstance(fulfillment_data.get("summary"), dict) else {}
+        )
 
         product_data = (
-            product_result.get("data") if isinstance(product_result, dict) and isinstance(product_result.get("data"), dict) else {}
+            product_result.get("data")
+            if isinstance(product_result, dict) and isinstance(product_result.get("data"), dict)
+            else {}
         )
         product_summary_raw = product_data.get("summary") if isinstance(product_data.get("summary"), dict) else {}
 
@@ -785,7 +795,9 @@ class MimicOps:
                 product_field_state[key] = "placeholder"
 
         exception_pool: list[dict[str, Any]] = [x for x in exception_items if isinstance(x, dict)]
-        if unknown_event_kind > 0 and not any(str(x.get("type") or "").upper() == "UNKNOWN_EVENT_KIND" for x in exception_pool):
+        if unknown_event_kind > 0 and not any(
+            str(x.get("type") or "").upper() == "UNKNOWN_EVENT_KIND" for x in exception_pool
+        ):
             exception_pool.insert(
                 0,
                 {
@@ -795,7 +807,9 @@ class MimicOps:
                     "summary": "检测到未知事件类型回调，需人工排查映射。",
                 },
             )
-        if failed_callbacks > 0 and not any(str(x.get("type") or "").upper() == "FAILED_CALLBACK" for x in exception_pool):
+        if failed_callbacks > 0 and not any(
+            str(x.get("type") or "").upper() == "FAILED_CALLBACK" for x in exception_pool
+        ):
             exception_pool.append(
                 {
                     "priority": "P1",
@@ -804,7 +818,9 @@ class MimicOps:
                     "summary": "回调处理失败，建议优先重放失败回调。",
                 }
             )
-        if timeout_backlog > 0 and not any(str(x.get("type") or "").upper() == "TIMEOUT_BACKLOG" for x in exception_pool):
+        if timeout_backlog > 0 and not any(
+            str(x.get("type") or "").upper() == "TIMEOUT_BACKLOG" for x in exception_pool
+        ):
             exception_pool.append(
                 {
                     "priority": "P1",
@@ -826,9 +842,7 @@ class MimicOps:
                     }
                 )
 
-        stage_totals_int = {
-            str(k): self._vg_int(funnel_stage_totals, str(k)) for k in funnel_stage_totals.keys()
-        }
+        stage_totals_int = {str(k): self._vg_int(funnel_stage_totals, str(k)) for k in funnel_stage_totals.keys()}
         funnel_total = sum(stage_totals_int.values())
 
         return {
@@ -852,7 +866,8 @@ class MimicOps:
                 "failed_orders": self._vg_int(fulfillment_summary, "failed_orders"),
                 "fulfillment_rate_pct": float(
                     fulfillment_summary["fulfillment_rate_pct"]
-                    if "fulfillment_rate_pct" in fulfillment_summary and fulfillment_summary["fulfillment_rate_pct"] is not None
+                    if "fulfillment_rate_pct" in fulfillment_summary
+                    and fulfillment_summary["fulfillment_rate_pct"] is not None
                     else 0.0
                 ),
                 "failure_rate_pct": float(
@@ -862,12 +877,14 @@ class MimicOps:
                 ),
                 "avg_fulfillment_seconds": float(
                     fulfillment_summary["avg_fulfillment_seconds"]
-                    if "avg_fulfillment_seconds" in fulfillment_summary and fulfillment_summary["avg_fulfillment_seconds"] is not None
+                    if "avg_fulfillment_seconds" in fulfillment_summary
+                    and fulfillment_summary["avg_fulfillment_seconds"] is not None
                     else 0.0
                 ),
                 "p95_fulfillment_seconds": float(
                     fulfillment_summary["p95_fulfillment_seconds"]
-                    if "p95_fulfillment_seconds" in fulfillment_summary and fulfillment_summary["p95_fulfillment_seconds"] is not None
+                    if "p95_fulfillment_seconds" in fulfillment_summary
+                    and fulfillment_summary["p95_fulfillment_seconds"] is not None
                     else 0.0
                 ),
             },
@@ -1010,7 +1027,9 @@ class MimicOps:
         exception_pool_raw = (
             data.get("exception_priority_pool") if isinstance(data.get("exception_priority_pool"), dict) else {}
         )
-        exception_items_raw = exception_pool_raw.get("items") if isinstance(exception_pool_raw.get("items"), list) else []
+        exception_items_raw = (
+            exception_pool_raw.get("items") if isinstance(exception_pool_raw.get("items"), list) else []
+        )
 
         callbacks_view = [
             {
@@ -1067,7 +1086,9 @@ class MimicOps:
         ][:5]
 
         exception_items = [x for x in exception_items_raw if isinstance(x, dict)]
-        if unknown_count > 0 and not any(str(x.get("type") or "").upper() == "UNKNOWN_EVENT_KIND" for x in exception_items):
+        if unknown_count > 0 and not any(
+            str(x.get("type") or "").upper() == "UNKNOWN_EVENT_KIND" for x in exception_items
+        ):
             exception_items.insert(
                 0,
                 {
@@ -6522,7 +6543,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 metrics_query = getattr(self.mimic_ops, "get_virtual_goods_metrics", None)
                 if callable(metrics_query):
                     result = metrics_query()
-                    payload = result if isinstance(result, dict) else _error_payload("virtual_goods metrics payload invalid")
+                    payload = (
+                        result if isinstance(result, dict) else _error_payload("virtual_goods metrics payload invalid")
+                    )
                 else:
                     aggregate_query = getattr(self.mimic_ops, "get_dashboard_readonly_aggregate", None)
                     aggregate = aggregate_query() if callable(aggregate_query) else None
@@ -6538,7 +6561,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         if not payload["success"]:
                             payload = aggregate
                     else:
-                        payload = _error_payload("virtual_goods metrics endpoint unavailable", code="VG_QUERY_NOT_AVAILABLE")
+                        payload = _error_payload(
+                            "virtual_goods metrics endpoint unavailable", code="VG_QUERY_NOT_AVAILABLE"
+                        )
                 self._send_json(payload, status=200 if payload.get("success") else 400)
                 return
 

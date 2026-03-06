@@ -125,7 +125,11 @@ class VirtualGoodsCallbackService:
             return True
         if prev == "refunded" and nxt == "delivered":
             return True
-        if prev == "closed" and nxt in {"paid_waiting_delivery", "delivered"} and any(k in ev for k in ("order", "coupon", "code")):
+        if (
+            prev == "closed"
+            and nxt in {"paid_waiting_delivery", "delivered"}
+            and any(k in ev for k in ("order", "coupon", "code"))
+        ):
             return True
         return False
 
@@ -137,13 +141,17 @@ class VirtualGoodsCallbackService:
         headers: dict[str, Any],
         query_params: dict[str, Any],
     ) -> tuple[bool, str, str]:
-        sign = str(
-            headers.get("x-sign")
-            or headers.get("sign")
-            or query_params.get("x-sign")
-            or query_params.get("sign")
-            or ""
-        ).strip().lower()
+        sign = (
+            str(
+                headers.get("x-sign")
+                or headers.get("sign")
+                or query_params.get("x-sign")
+                or query_params.get("sign")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
         ts = str(
             headers.get("x-timestamp")
             or headers.get("timestamp")
@@ -357,7 +365,9 @@ class VirtualGoodsCallbackService:
                     "blocked": "status_regression",
                 }
 
-            fulfillment_status = self._resolve_fulfillment_status(next_status, str(existing.get("fulfillment_status") or ""))
+            fulfillment_status = self._resolve_fulfillment_status(
+                next_status, str(existing.get("fulfillment_status") or "")
+            )
 
             self.store.upsert_order(
                 xianyu_order_id=claimed_order_id,

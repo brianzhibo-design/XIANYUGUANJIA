@@ -132,7 +132,13 @@ class VirtualGoodsService:
 
         errors = []
         if unknown_count:
-            errors.append({"code": "UNKNOWN_EVENT_KIND", "message": "unknown event_kind found in timeout backlog", "count": unknown_count})
+            errors.append(
+                {
+                    "code": "UNKNOWN_EVENT_KIND",
+                    "message": "unknown event_kind found in timeout backlog",
+                    "count": unknown_count,
+                }
+            )
 
         return self._resp(
             ok=True,
@@ -168,7 +174,13 @@ class VirtualGoodsService:
         unknown_count = sum(1 for item in items if item["event_kind"] == "unknown")
         errors = []
         if unknown_count:
-            errors.append({"code": "UNKNOWN_EVENT_KIND", "message": "unknown event_kind found in replay candidates", "count": unknown_count})
+            errors.append(
+                {
+                    "code": "UNKNOWN_EVENT_KIND",
+                    "message": "unknown event_kind found in replay candidates",
+                    "count": unknown_count,
+                }
+            )
 
         return self._resp(
             ok=True,
@@ -287,7 +299,13 @@ class VirtualGoodsService:
 
         errors = []
         if unknown_count:
-            errors.append({"code": "UNKNOWN_EVENT_KIND", "message": "unknown event_kind found in callbacks", "count": unknown_count})
+            errors.append(
+                {
+                    "code": "UNKNOWN_EVENT_KIND",
+                    "message": "unknown event_kind found in callbacks",
+                    "count": unknown_count,
+                }
+            )
 
         order_data = dict(order)
         return self._resp(
@@ -317,10 +335,16 @@ class VirtualGoodsService:
 
         with closing(self._connect()) as conn:
             total_orders = int(conn.execute("SELECT COUNT(1) FROM virtual_goods_orders").fetchone()[0])
-            manual_orders = int(conn.execute("SELECT COUNT(1) FROM virtual_goods_orders WHERE manual_takeover=1").fetchone()[0])
+            manual_orders = int(
+                conn.execute("SELECT COUNT(1) FROM virtual_goods_orders WHERE manual_takeover=1").fetchone()[0]
+            )
             total_callbacks = int(conn.execute("SELECT COUNT(1) FROM virtual_goods_callbacks").fetchone()[0])
-            pending_callbacks = int(conn.execute("SELECT COUNT(1) FROM virtual_goods_callbacks WHERE processed=0").fetchone()[0])
-            processed_callbacks = int(conn.execute("SELECT COUNT(1) FROM virtual_goods_callbacks WHERE processed=1").fetchone()[0])
+            pending_callbacks = int(
+                conn.execute("SELECT COUNT(1) FROM virtual_goods_callbacks WHERE processed=0").fetchone()[0]
+            )
+            processed_callbacks = int(
+                conn.execute("SELECT COUNT(1) FROM virtual_goods_callbacks WHERE processed=1").fetchone()[0]
+            )
             failed_callbacks = int(
                 conn.execute(
                     "SELECT COUNT(1) FROM virtual_goods_callbacks WHERE last_process_error IS NOT NULL AND processed=0"
@@ -332,7 +356,9 @@ class VirtualGoodsService:
                     (cutoff,),
                 ).fetchone()[0]
             )
-            unknown_event_kind = int(conn.execute("SELECT COUNT(1) FROM virtual_goods_callbacks WHERE event_kind='unknown'").fetchone()[0])
+            unknown_event_kind = int(
+                conn.execute("SELECT COUNT(1) FROM virtual_goods_callbacks WHERE event_kind='unknown'").fetchone()[0]
+            )
 
         metrics = {
             "total_orders": total_orders,
@@ -364,7 +390,9 @@ class VirtualGoodsService:
             errors=errors,
         )
 
-    def get_funnel_metrics(self, *, start_date: str | None = None, end_date: str | None = None, limit: int = 500) -> dict[str, Any]:
+    def get_funnel_metrics(
+        self, *, start_date: str | None = None, end_date: str | None = None, limit: int = 500
+    ) -> dict[str, Any]:
         limit = max(1, int(limit))
         where: list[str] = []
         params: list[Any] = []
@@ -398,7 +426,13 @@ class VirtualGoodsService:
 
         errors = []
         if unknown_event_kind > 0:
-            errors.append({"code": "UNKNOWN_EVENT_KIND", "message": "unknown event_kind in exception pool", "count": unknown_event_kind})
+            errors.append(
+                {
+                    "code": "UNKNOWN_EVENT_KIND",
+                    "message": "unknown event_kind in exception pool",
+                    "count": unknown_event_kind,
+                }
+            )
 
         return self._resp(
             ok=True,
@@ -472,7 +506,13 @@ class VirtualGoodsService:
         conversion_rate = round((paid_order_total / exposure_total) * 100, 4) if exposure_total > 0 else 0.0
         errors = []
         if unknown_event_kind > 0:
-            errors.append({"code": "UNKNOWN_EVENT_KIND", "message": "unknown event_kind in exception pool", "count": unknown_event_kind})
+            errors.append(
+                {
+                    "code": "UNKNOWN_EVENT_KIND",
+                    "message": "unknown event_kind in exception pool",
+                    "count": unknown_event_kind,
+                }
+            )
 
         return self._resp(
             ok=True,
@@ -552,7 +592,13 @@ class VirtualGoodsService:
         fail_rate = round((failed_orders / total_orders) * 100, 4) if total_orders > 0 else 0.0
         errors = []
         if unknown_event_kind > 0:
-            errors.append({"code": "UNKNOWN_EVENT_KIND", "message": "unknown event_kind in exception pool", "count": unknown_event_kind})
+            errors.append(
+                {
+                    "code": "UNKNOWN_EVENT_KIND",
+                    "message": "unknown event_kind in exception pool",
+                    "count": unknown_event_kind,
+                }
+            )
 
         return self._resp(
             ok=True,
@@ -571,7 +617,11 @@ class VirtualGoodsService:
                     "failure_rate_pct": fail_rate,
                 },
             },
-            metrics={"rows": len(items), "unknown_event_kind": unknown_event_kind, "source": "ops_fulfillment_eff_daily"},
+            metrics={
+                "rows": len(items),
+                "unknown_event_kind": unknown_event_kind,
+                "source": "ops_fulfillment_eff_daily",
+            },
             errors=errors,
         )
 
@@ -616,7 +666,13 @@ class VirtualGoodsService:
 
         errors = []
         if unknown_event_kind > 0:
-            errors.append({"code": "UNKNOWN_EVENT_KIND", "message": "unknown event_kind in exception pool", "count": unknown_event_kind})
+            errors.append(
+                {
+                    "code": "UNKNOWN_EVENT_KIND",
+                    "message": "unknown event_kind in exception pool",
+                    "count": unknown_event_kind,
+                }
+            )
 
         return self._resp(
             ok=True,
@@ -942,7 +998,13 @@ class VirtualGoodsService:
 
         errors = []
         if unknown_count:
-            errors.append({"code": "UNKNOWN_EVENT_KIND", "message": "unknown event_kind entered timeout metrics", "count": unknown_count})
+            errors.append(
+                {
+                    "code": "UNKNOWN_EVENT_KIND",
+                    "message": "unknown event_kind entered timeout metrics",
+                    "count": unknown_count,
+                }
+            )
 
         return self._resp(
             ok=True,
@@ -950,7 +1012,11 @@ class VirtualGoodsService:
             code="OK",
             message="timeout scan completed",
             data={"timed_out_callback_ids": timed_out, "affected_orders": sorted(affected_orders)},
-            metrics={"timed_out": timed_out, "affected_orders": len(affected_orders), "unknown_event_kind": unknown_count},
+            metrics={
+                "timed_out": timed_out,
+                "affected_orders": len(affected_orders),
+                "unknown_event_kind": unknown_count,
+            },
             errors=errors,
         )
 
@@ -966,17 +1032,23 @@ class VirtualGoodsService:
             )
 
         with closing(self._connect()) as conn:
-            row = conn.execute(f"SELECT * FROM virtual_goods_callbacks WHERE {where_sql} ORDER BY id DESC LIMIT 1", (target,)).fetchone()
+            row = conn.execute(
+                f"SELECT * FROM virtual_goods_callbacks WHERE {where_sql} ORDER BY id DESC LIMIT 1", (target,)
+            ).fetchone()
 
         if not row:
-            return self._resp(ok=False, action=action, code="NOT_FOUND", message="callback not found", data={"target": target})
+            return self._resp(
+                ok=False, action=action, code="NOT_FOUND", message="callback not found", data={"target": target}
+            )
 
         cb = dict(row)
         errors = []
         unknown_count = 0
         if str(cb.get("event_kind") or "") == "unknown":
             unknown_count = 1
-            errors.append({"code": "UNKNOWN_EVENT_KIND", "message": "replay callback has unknown event_kind", "count": 1})
+            errors.append(
+                {"code": "UNKNOWN_EVENT_KIND", "message": "replay callback has unknown event_kind", "count": 1}
+            )
 
         headers = self._loads_json(cb.get("headers_json"), {})
         query_params = headers.get("query_params") if isinstance(headers, dict) else {}
@@ -1038,7 +1110,9 @@ class VirtualGoodsService:
         )
 
     def replay_callback_by_event_id(self, external_event_id: str) -> dict[str, Any]:
-        return self._replay(action="replay_callback_by_event_id", where_sql="external_event_id = ?", value=external_event_id)
+        return self._replay(
+            action="replay_callback_by_event_id", where_sql="external_event_id = ?", value=external_event_id
+        )
 
     def replay_callback_by_dedupe_key(self, dedupe_key: str) -> dict[str, Any]:
         return self._replay(action="replay_callback_by_dedupe_key", where_sql="dedupe_key = ?", value=dedupe_key)

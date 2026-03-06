@@ -404,7 +404,9 @@ class OperationsService:
             return [str(pid) for pid in extracted[:limit]]
         return [f"unknown_{i + 1}" for i in range(limit)]
 
-    async def modify_order_price(self, order_no: str, order_price: int, express_fee: int | None = None) -> dict[str, Any]:
+    async def modify_order_price(
+        self, order_no: str, order_price: int, express_fee: int | None = None
+    ) -> dict[str, Any]:
         if not self.price_api_client:
             return {"success": False, "channel": "order_price_api", "error": "price_api_client_not_configured"}
         try:

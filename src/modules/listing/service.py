@@ -213,7 +213,9 @@ class ListingService:
             return "inactive", False
         return self._to_contract_mapping_status(mapping.get("mapping_status")), True
 
-    def _persist_listing_mapping(self, *, internal_listing_id: str | None, product_id: str | None) -> dict[str, Any] | None:
+    def _persist_listing_mapping(
+        self, *, internal_listing_id: str | None, product_id: str | None
+    ) -> dict[str, Any] | None:
         if not internal_listing_id or not product_id or not self.mapping_store:
             return None
         try:
@@ -297,19 +299,24 @@ class ListingService:
                     "code": "API_CLIENT_NOT_CONFIGURED",
                     "message": "xianguanjia open platform client is not configured",
                 },
-                errors=[{"code": "API_CLIENT_NOT_CONFIGURED", "message": "xianguanjia open platform client is not configured"}],
+                errors=[
+                    {
+                        "code": "API_CLIENT_NOT_CONFIGURED",
+                        "message": "xianguanjia open platform client is not configured",
+                    }
+                ],
             )
 
         response = getattr(client, method_name)(request_payload)
         if response.ok:
             resp_data = response.data if isinstance(response.data, dict) else {}
             product_id = (
-                resp_data.get("xianyu_product_id")
-                or resp_data.get("product_id")
-                or request_payload.get("product_id")
+                resp_data.get("xianyu_product_id") or resp_data.get("product_id") or request_payload.get("product_id")
             )
             if action_key == "create":
-                persisted = self._persist_listing_mapping(internal_listing_id=internal_listing_id, product_id=product_id)
+                persisted = self._persist_listing_mapping(
+                    internal_listing_id=internal_listing_id, product_id=product_id
+                )
                 mapping_status = self._to_contract_mapping_status((persisted or {}).get("mapping_status"))
                 has_mapping = bool(persisted)
             else:
@@ -446,7 +453,9 @@ class ListingService:
                 raise BrowserError("Browser controller is not initialized. Cannot publish.")
 
             product_id, product_url = await self._execute_publish(listing)
-            persisted = self._persist_listing_mapping(internal_listing_id=listing.internal_listing_id, product_id=product_id)
+            persisted = self._persist_listing_mapping(
+                internal_listing_id=listing.internal_listing_id, product_id=product_id
+            )
             mapping_status = self._to_contract_mapping_status((persisted or {}).get("mapping_status"))
 
             result = PublishResult(

@@ -1061,5 +1061,7 @@ class VirtualGoodsStore:
 
     def get_order(self, xianyu_order_id: str) -> dict[str, Any] | None:
         with closing(self._connect()) as conn, conn:
-            row = conn.execute("SELECT * FROM virtual_goods_orders WHERE xianyu_order_id=?", (xianyu_order_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM virtual_goods_orders WHERE xianyu_order_id=?", (xianyu_order_id,)
+            ).fetchone()
             return dict(row) if row else None
