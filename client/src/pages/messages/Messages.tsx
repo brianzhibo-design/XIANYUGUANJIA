@@ -1,16 +1,41 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../api/index';
 import {
   MessageCircle, Send, Bot, User,
   RefreshCw, BarChart3, MessagesSquare, Zap,
-  AlertCircle, Activity, Beaker,
+  AlertCircle, Activity, Beaker, RotateCcw, Sparkles,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'bot';
+  text: string;
+  intent?: string;
+  latency?: number;
+  quote?: any;
+  loading?: boolean;
+  error?: boolean;
+  timestamp: number;
+}
+
 const MSG_TABS = [
   { key: 'logs', label: '回复日志' },
-  { key: 'sandbox', label: '测试沙盒' },
+  { key: 'sandbox', label: '对话沙盒' },
 ];
+
+const QUICK_MESSAGES = [
+  '这个怎么卖？',
+  '从北京寄到上海1公斤多少钱',
+  '有圆通吗',
+  '换韵达呢？',
+  '2公斤的呢',
+  '好的 就这个价发吧',
+];
+
+function generateSessionId() {
+  return `sandbox_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export default function Messages() {
   const [activeTab, setActiveTab] = useState('logs');
@@ -21,8 +46,11 @@ export default function Messages() {
   const [error, setError] = useState<string | null>(null);
 
   const [sandboxInput, setSandboxInput] = useState('');
-  const [sandboxResult, setSandboxResult] = useState<any>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [sandboxTesting, setSandboxTesting] = useState(false);
+  const [sessionId, setSessionId] = useState(generateSessionId);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -53,15 +81,45 @@ export default function Messages() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleTestReply = async () => {
-    if (!sandboxInput.trim()) return;
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+  }, []);
+
+  const handleTestReply = async (overrideMsg?: string) => {
+    const msg = (overrideMsg ?? sandboxInput).trim();
+    if (!msg || sandboxTesting) return;
+
+    const userMsg: ChatMessage = { id: `u_${Date.now()}`, role: 'user', text: msg, timestamp: Date.now() };
+    const botPlaceholder: ChatMessage = { id: `b_${Date.now()}`, role: 'bot', text: '', loading: true, timestamp: Date.now() };
+    setChatMessages(prev => [...prev, userMsg, botPlaceholder]);
+    setSandboxInput('');
     setSandboxTesting(true);
-    setSandboxResult(null);
+    scrollToBottom();
+
     try {
-      const res = await api.post('/test-reply', { message: sandboxInput });
-      setSandboxResult(res.data);
-    } catch (e: any) { setSandboxResult({ error: e.message }); }
-    finally { setSandboxTesting(false); }
+      const res = await api.post('/test-reply', { message: msg, session_id: sessionId });
+      const d = res.data;
+      setChatMessages(prev => prev.map(m => m.id === botPlaceholder.id ? {
+        ...m, loading: false,
+        text: d.reply || d.response || d.text || JSON.stringify(d),
+        intent: d.intent, latency: d.response_time_ms, quote: d.quote,
+      } : m));
+    } catch (e: any) {
+      setChatMessages(prev => prev.map(m => m.id === botPlaceholder.id ? {
+        ...m, loading: false, error: true, text: e.message || '请求失败',
+      } : m));
+    } finally {
+      setSandboxTesting(false);
+      scrollToBottom();
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleNewConversation = () => {
+    setChatMessages([]);
+    setSessionId(generateSessionId());
+    setSandboxInput('');
+    inputRef.current?.focus();
   };
 
   const statCards = stats ? [
@@ -229,45 +287,102 @@ export default function Messages() {
       )}
 
       {activeTab === 'sandbox' && (
-        <div className="xy-card p-6 space-y-6 animate-in fade-in slide-in-from-right-4">
-          <div>
-            <h2 className="text-lg font-bold text-xy-text-primary flex items-center gap-2"><Beaker className="w-5 h-5" /> 测试沙盒</h2>
-            <p className="text-sm text-xy-text-secondary mt-1">模拟买家消息，测试 AI 自动回复效果</p>
-          </div>
-          <div className="flex gap-3">
-            <textarea
-              className="flex-1 xy-input px-4 py-3 h-24 resize-none"
-              placeholder='输入模拟的买家消息，如："这个怎么卖？还有货吗？"'
-              value={sandboxInput}
-              onChange={e => setSandboxInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTestReply(); } }}
-            />
-            <button onClick={handleTestReply} disabled={sandboxTesting || !sandboxInput.trim()} className="xy-btn-primary px-6 self-end">
-              {sandboxTesting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+        <div className="xy-card flex flex-col h-[calc(100vh-200px)] animate-in fade-in slide-in-from-right-4">
+          <div className="px-5 py-3 border-b border-xy-border flex items-center justify-between bg-white rounded-t-xl">
+            <div className="flex items-center gap-2">
+              <Beaker className="w-5 h-5 text-xy-brand-500" />
+              <h2 className="font-bold text-xy-text-primary">对话沙盒</h2>
+              <span className="text-xs text-xy-text-muted bg-xy-gray-100 px-2 py-0.5 rounded-full">
+                {chatMessages.filter(m => m.role === 'user').length} 轮对话
+              </span>
+            </div>
+            <button onClick={handleNewConversation} className="flex items-center gap-1.5 text-sm text-xy-text-secondary hover:text-xy-brand-600 transition-colors px-3 py-1.5 rounded-lg hover:bg-xy-gray-50">
+              <RotateCcw className="w-3.5 h-3.5" /> 新对话
             </button>
           </div>
-          {sandboxResult && (
-            <div className="space-y-4">
-              <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0"><User className="w-4 h-4" /></div>
-                <div className="px-4 py-3 rounded-xl bg-blue-50 border border-blue-200 text-sm flex-1">{sandboxInput}</div>
-              </div>
-              <div className="flex gap-3 flex-row-reverse">
-                <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center flex-shrink-0"><Bot className="w-4 h-4" /></div>
-                <div className="flex-1 min-w-0">
-                  {sandboxResult.error ? (
-                    <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">{sandboxResult.error}</div>
-                  ) : (
-                    <div className="px-4 py-3 rounded-xl bg-orange-50 border border-orange-200 text-sm">
-                      <p className="text-xy-text-primary">{sandboxResult.reply || sandboxResult.response || sandboxResult.text || JSON.stringify(sandboxResult)}</p>
-                      {sandboxResult.intent && <p className="text-xs text-xy-text-muted mt-2">识别意图: {sandboxResult.intent}</p>}
-                      {sandboxResult.latency_ms != null && <p className="text-xs text-xy-text-muted">延迟: {sandboxResult.latency_ms}ms</p>}
-                    </div>
-                  )}
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-xy-gray-50/50">
+            {chatMessages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-sm border border-xy-border">
+                  <Sparkles className="w-8 h-8 text-xy-brand-400" />
                 </div>
+                <p className="text-base font-medium text-xy-text-primary mb-1">模拟真实客户对话</p>
+                <p className="text-sm text-xy-text-secondary max-w-sm mb-6">支持连续上下文，可以先询价再追问换快递、改重量等，系统会记住对话上下文</p>
+                <div className="flex flex-wrap justify-center gap-2 max-w-lg">
+                  {QUICK_MESSAGES.map(msg => (
+                    <button key={msg} onClick={() => handleTestReply(msg)}
+                      className="px-3 py-1.5 text-sm bg-white border border-xy-border rounded-full text-xy-text-secondary hover:text-xy-brand-600 hover:border-xy-brand-300 transition-colors shadow-sm">
+                      {msg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              chatMessages.map(msg => (
+                <div key={msg.id} className={`flex gap-3 ${msg.role === 'bot' ? 'flex-row-reverse' : ''}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    msg.role === 'user' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'
+                  }`}>
+                    {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                  </div>
+                  <div className={`flex flex-col ${msg.role === 'bot' ? 'items-end' : 'items-start'} flex-1 min-w-0 max-w-[80%]`}>
+                    {msg.loading ? (
+                      <div className="px-4 py-3 rounded-xl bg-orange-50 border border-orange-200 text-sm rounded-tr-sm">
+                        <div className="flex items-center gap-2 text-orange-500">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>思考中...</span>
+                        </div>
+                      </div>
+                    ) : msg.error ? (
+                      <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 rounded-tr-sm">{msg.text}</div>
+                    ) : msg.role === 'user' ? (
+                      <div className="px-4 py-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-xy-text-primary rounded-tl-sm">{msg.text}</div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="px-4 py-3 rounded-xl bg-orange-50 border border-orange-200 text-sm text-xy-text-primary rounded-tr-sm whitespace-pre-wrap">{msg.text}</div>
+                        <div className="flex items-center gap-2 text-[11px] text-xy-text-muted px-1">
+                          {msg.intent && <span className="bg-xy-gray-100 px-1.5 py-0.5 rounded">{msg.intent === 'quote' ? '询价' : '通用'}</span>}
+                          {msg.latency != null && <span>{Math.round(msg.latency)}ms</span>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {chatMessages.length > 0 && (
+            <div className="px-5 py-2 border-t border-xy-border bg-xy-gray-50/80">
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_MESSAGES.map(msg => (
+                  <button key={msg} onClick={() => handleTestReply(msg)} disabled={sandboxTesting}
+                    className="px-2.5 py-1 text-xs bg-white border border-xy-border rounded-full text-xy-text-muted hover:text-xy-brand-600 hover:border-xy-brand-300 transition-colors disabled:opacity-50">
+                    {msg}
+                  </button>
+                ))}
               </div>
             </div>
           )}
+
+          <div className="px-4 py-3 border-t border-xy-border bg-white rounded-b-xl">
+            <div className="flex gap-3 items-end">
+              <textarea ref={inputRef}
+                className="flex-1 xy-input px-4 py-2.5 resize-none text-sm min-h-[42px] max-h-[120px]"
+                rows={1}
+                placeholder='输入买家消息，如"从北京寄到上海 1公斤多少钱"'
+                value={sandboxInput}
+                onChange={e => { setSandboxInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTestReply(); } }}
+              />
+              <button onClick={() => handleTestReply()} disabled={sandboxTesting || !sandboxInput.trim()}
+                className="xy-btn-primary p-2.5 rounded-xl disabled:opacity-50 flex-shrink-0">
+                {sandboxTesting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

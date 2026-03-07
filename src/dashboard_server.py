@@ -2766,16 +2766,32 @@ class MimicOps:
             "updated_at": _now_iso(),
         }
 
+    _sandbox_services: dict[str, tuple[float, "MessagesService"]] = {}
+    _SANDBOX_TTL = 1800
+
+    def _get_sandbox_service(self, session_id: str) -> "MessagesService":
+        now = time.time()
+        stale = [k for k, (ts, _) in self._sandbox_services.items() if now - ts > self._SANDBOX_TTL]
+        for k in stale:
+            self._sandbox_services.pop(k, None)
+        entry = self._sandbox_services.get(session_id)
+        if entry is not None:
+            self._sandbox_services[session_id] = (now, entry[1])
+            return entry[1]
+        msg_cfg = get_config().get_section("messages", {})
+        svc = MessagesService(controller=None, config=msg_cfg)
+        self._sandbox_services[session_id] = (now, svc)
+        return svc
+
     def test_reply(self, payload: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter()
-        msg_cfg = get_config().get_section("messages", {})
         message = str(payload.get("message") or payload.get("user_message") or payload.get("user_msg") or "").strip()
         item_title = str(payload.get("item_title") or payload.get("item") or payload.get("item_desc") or "").strip()
+        session_id = str(payload.get("session_id") or "").strip()
         origin = str(payload.get("origin") or "").strip()
         destination = str(payload.get("destination") or "").strip()
         weight_val = payload.get("weight")
 
-        # 兼容旧测试入口：若显式提供了路线参数，则拼成自然语言输入，走与生产一致的询价解析逻辑。
         message_eval = message
         if origin and destination and weight_val not in {None, ""}:
             extras: list[str] = []
@@ -2795,8 +2811,12 @@ class MimicOps:
                 structured = f"{structured} {' '.join(extras)}"
             message_eval = f"{message} {structured}".strip() if message else structured
 
-        service = MessagesService(controller=None, config=msg_cfg)
-        reply, detail = _run_async(service._generate_reply_with_quote(message_eval, item_title=item_title))
+        if session_id:
+            service = self._get_sandbox_service(session_id)
+        else:
+            msg_cfg = get_config().get_section("messages", {})
+            service = MessagesService(controller=None, config=msg_cfg)
+        reply, detail = _run_async(service._generate_reply_with_quote(message_eval, item_title=item_title, session_id=session_id))
 
         quote_part: dict[str, Any] | None = None
         if isinstance(detail, dict) and bool(detail.get("is_quote")):

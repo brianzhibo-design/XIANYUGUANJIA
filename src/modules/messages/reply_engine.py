@@ -50,7 +50,7 @@ DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
     {
         "name": "availability",
         "keywords": ["在吗", "还在", "有货吗", "有吗"],
-        "reply": "在的，可以直接下单，拍下后我会尽快处理。",
+        "reply": "在的，请问需要寄什么快递？请发送 寄件城市-收件城市-重量（kg），我帮你查最优价格。",
     },
     {
         "name": "card_code_delivery",
