@@ -61,8 +61,8 @@ DEFAULT_COURIER_LOCK_TEMPLATE = (
     "下单流程：\n"
     "1. 先拍下链接，先不要付款；\n"
     "2. 我改价后你再付款；\n"
-    "3. 付款后系统自动发放兑换码，用兑换码到小程序下单即可。\n"
-    "付款后的地址和手机号在小程序填写，这里无需提供。"
+    "3. 付款后系统自动发放兑换码，用兑换码到小橙序下单即可。\n"
+    "付款后的地址和手机号在小橙序填写，这里无需提供。"
 )
 
 
@@ -104,16 +104,15 @@ class MessagesService:
         self.send_confirm_delay_seconds = tuple(self.config.get("send_confirm_delay_seconds", [0.15, 0.35]))
 
         self.reply_prefix = self.config.get("reply_prefix", "")
-        self.default_reply = self.config.get("default_reply", "您好，宝贝在的，感兴趣可以直接拍下。")
+        self.default_reply = self.config.get("default_reply", "你好，请问需要寄什么快递？请发送 寄件城市-收件城市-重量（kg），我帮你查最优价格。")
         self.virtual_default_reply = self.config.get(
             "virtual_default_reply",
-            "在的，这是虚拟商品，拍下后会尽快在聊天内给你处理结果。",
+            "在的，虚拟商品拍下后系统会自动处理。如需改价请先联系我。",
         )
         self.max_replies_per_run = int(self.config.get("max_replies_per_run", 10))
 
         self.keyword_replies: dict[str, str] = {
-            "还在": "在的，商品还在，直接拍就可以。",
-            "在吗": "在的，有需要可以直接下单。",
+            "还在": "在的，请问需要寄什么快递？请发送 寄件城市-收件城市-重量（kg）。",
             "最低": "价格已经尽量实在了，诚心要的话可以小刀。",
             "便宜": "价格是参考同款成色定的，诚心要可以聊。",
             "包邮": "默认不包邮，具体看地区可以商量。",
@@ -164,7 +163,7 @@ class MessagesService:
         }
         self.quote_missing_template = self.config.get(
             "quote_missing_template",
-            "询价格式：xx省 - xx省 - 重量（kg）\n长宽高（单位cm）",
+            "为了给你报最准确的价格，麻烦提供一下：{fields}\n格式示例：广东省 - 浙江省 - 3kg 30x20x15cm",
         )
         self.force_non_empty_reply = bool(self.config.get("force_non_empty_reply", True))
         self.non_empty_reply_fallback = (
@@ -175,7 +174,7 @@ class MessagesService:
             ).strip()
             or DEFAULT_NON_EMPTY_REPLY_FALLBACK
         )
-        self.strict_format_reply_enabled = bool(self.config.get("strict_format_reply_enabled", False))
+        self.strict_format_reply_enabled = bool(self.config.get("strict_format_reply_enabled", True))
         self.quote_reply_all_couriers = bool(self.config.get("quote_reply_all_couriers", True))
         self.quote_reply_max_couriers = max(1, int(self.config.get("quote_reply_max_couriers", 10)))
         self.quote_failed_template = self.config.get(
@@ -375,6 +374,7 @@ class MessagesService:
             eta = self._format_eta_days(result.eta_minutes)
             lines.append(f"{index}. {courier_name}：{float(result.total_fee):.2f}元（预计{eta}）")
         lines.append("回复“选XX快递”即可按对应渠道安排。")
+        lines.append("下单流程：先拍下链接不付款→我改价后再付款→系统自动发兑换码，用兑换码到小橙序下单。")
         return "\n".join(lines)
 
     def _should_use_ws_transport(self) -> bool:
@@ -996,11 +996,18 @@ class MessagesService:
                 "selected_courier": selected_courier,
             }
 
+        is_virtual = self.reply_engine._is_virtual_context(
+            self.reply_engine._normalize_text(message_text), item_title
+        )
+
         request, missing, extracted_fields, memory_hit = self._build_quote_request_with_context(
             message_text,
             session_id=session_id,
         )
-        if missing and (is_quote_intent or self.strict_format_reply_enabled or force_standard_format):
+        if missing and (
+            is_quote_intent
+            or ((self.strict_format_reply_enabled or force_standard_format) and not is_virtual)
+        ):
             fields = "、".join([self.quote_missing_prompts[field] for field in missing])
             prompt = self.quote_missing_template.format(fields=fields)
             strict_enforced = bool(self.strict_format_reply_enabled and not is_quote_intent)
