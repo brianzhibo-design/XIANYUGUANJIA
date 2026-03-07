@@ -259,7 +259,7 @@ class Config:
             },
             "quote": {
                 "enabled": True,
-                "mode": "rule_only",
+                "mode": "cost_table_plus_markup",
                 "ttl_seconds": 90,
                 "max_stale_seconds": 300,
                 "timeout_ms": 3000,
