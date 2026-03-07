@@ -11,6 +11,7 @@ const Navbar = () => {
     { to: '/products', label: '商品' },
     { to: '/orders', label: '订单' },
     { to: '/messages', label: '消息' },
+    { to: '/accounts', label: '账户' },
   ]
 
   const isActive = (path: string): boolean => location.pathname === path || location.pathname.startsWith(path + '/')

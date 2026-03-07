@@ -9,6 +9,7 @@ import Orders from './pages/Orders'
 import AutoPublish from './pages/products/AutoPublish'
 import ProductList from './pages/products/ProductList'
 import SystemConfig from './pages/config/SystemConfig'
+import AccountList from './pages/accounts/AccountList'
 import Messages from './pages/messages/Messages'
 
 function App() {
@@ -25,7 +26,7 @@ function App() {
               <Route path="/products/auto-publish" element={<AutoPublish />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/messages" element={<Messages />} />
-              <Route path="/accounts" element={<Navigate to="/config" replace />} />
+              <Route path="/accounts" element={<AccountList />} />
               <Route path="/config" element={<SystemConfig />} />
               <Route path="/analytics" element={<Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
