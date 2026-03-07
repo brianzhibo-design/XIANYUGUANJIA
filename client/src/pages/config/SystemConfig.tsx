@@ -3,7 +3,7 @@ import { getSystemConfig, getConfigSections, saveSystemConfig } from '../../api/
 import { api } from '../../api/index';
 import { useStoreCategory, CATEGORY_META } from '../../contexts/StoreCategoryContext';
 import toast from 'react-hot-toast';
-import { Settings, Save, AlertCircle, RefreshCw, Send, Bell, Cookie, CheckCircle2, XCircle, ExternalLink, Info, ShieldAlert, ShieldCheck, Shield, Download, Plug, ChevronDown, ChevronUp, Activity, Timer, FileText, Zap, DollarSign } from 'lucide-react';
+import { Settings, Save, AlertCircle, RefreshCw, Send, Bell, Cookie, CheckCircle2, XCircle, ExternalLink, Info, ShieldAlert, ShieldCheck, Shield, Download, Plug, ChevronDown, ChevronUp, Activity, Timer, FileText, Zap, DollarSign, Upload, Filter } from 'lucide-react';
 
 const REPLY_PRESETS = {
   express: {
@@ -159,6 +159,9 @@ export default function SystemConfig() {
   const [autoGrabProgress, setAutoGrabProgress] = useState<any>(null);
   const [pluginGuideOpen, setPluginGuideOpen] = useState(false);
   const [pluginImporting, setPluginImporting] = useState(false);
+  const [cookieFileUploading, setCookieFileUploading] = useState(false);
+  const [cookieFileResult, setCookieFileResult] = useState<any>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [xgjTesting, setXgjTesting] = useState(false);
   const [xgjTestResult, setXgjTestResult] = useState<any>(null);
   const [aiTesting, setAiTesting] = useState(false);
@@ -166,6 +169,7 @@ export default function SystemConfig() {
   const [autoRefresh, setAutoRefresh] = useState<any>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pluginFileRef = useRef<HTMLInputElement>(null);
+  const cookieFileRef = useRef<HTMLInputElement>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchAutoRefreshStatus = useCallback(async () => {
@@ -395,6 +399,55 @@ export default function SystemConfig() {
     }
   }, []);
 
+  const handleCookieFileUpload = useCallback(async (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    setCookieFileUploading(true);
+    setCookieFileResult(null);
+    setCookieResult(null);
+    const formData = new FormData();
+    Array.from(fileList).forEach(f => formData.append('file', f));
+    try {
+      const res = await api.post('/import-cookie-plugin', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const data = res.data || {};
+      setCookieFileResult(data);
+      if (data.success) {
+        toast.success(`Cookie 导入成功（提取 ${data.cookie_items || 0} 项闲鱼 Cookie）`);
+        setCurrentCookieHealth({ ok: true, message: '文件导入更新' });
+        fetchConfig();
+      } else {
+        toast.error(data.error || data.hint || '导入失败');
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err.message;
+      setCookieFileResult({ success: false, error: msg });
+      toast.error('导入失败: ' + msg);
+    } finally {
+      setCookieFileUploading(false);
+      if (cookieFileRef.current) cookieFileRef.current.value = '';
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    handleCookieFileUpload(e.dataTransfer.files);
+  }, [handleCookieFileUpload]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
   const handleXgjTest = useCallback(async () => {
     setXgjTesting(true);
     setXgjTestResult(null);
@@ -584,12 +637,86 @@ export default function SystemConfig() {
           </div>
         )}
 
-        {/* Cookie 输入 */}
+        {/* Cookie 文件上传区 */}
+        <div
+          className={`relative rounded-lg border-2 border-dashed transition-colors ${
+            isDragging
+              ? 'border-xy-brand-400 bg-xy-brand-50'
+              : 'border-xy-gray-300 hover:border-xy-brand-300 bg-xy-gray-50'
+          }`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+        >
+          <input
+            ref={cookieFileRef}
+            type="file"
+            accept=".txt,.json,.log,.cookies,.csv,.tsv,.har,.zip"
+            onChange={e => handleCookieFileUpload(e.target.files)}
+            className="hidden"
+            id="cookie-file-upload"
+          />
+          <label
+            htmlFor="cookie-file-upload"
+            className="flex flex-col items-center gap-2 px-6 py-5 cursor-pointer"
+          >
+            {cookieFileUploading ? (
+              <RefreshCw className="w-8 h-8 text-xy-brand-400 animate-spin" />
+            ) : (
+              <Upload className="w-8 h-8 text-xy-gray-400" />
+            )}
+            <div className="text-center">
+              <span className="text-sm font-medium text-xy-text-primary">
+                {cookieFileUploading ? '正在导入...' : '点击上传 Cookie 文件，或拖拽到此处'}
+              </span>
+              <p className="text-xs text-xy-text-secondary mt-1">
+                支持 cookies.txt / JSON / .zip 格式，系统自动过滤并提取闲鱼域名 Cookie
+              </p>
+            </div>
+          </label>
+          <div className="px-4 pb-3">
+            <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-blue-50 border border-blue-100 text-xs text-blue-700">
+              <Filter className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <p>插件导出的 Cookie 文件通常包含所有网站的 Cookie，系统会自动过滤，只保留 goofish.com 域名下的闲鱼 Cookie，其他网站数据不会被读取或存储。</p>
+            </div>
+          </div>
+        </div>
+
+        {/* 文件上传结果 */}
+        {cookieFileResult && (
+          <div className={`px-4 py-3 rounded-lg border text-sm ${
+            cookieFileResult.success
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            <div className="flex items-center gap-2 mb-1">
+              {cookieFileResult.success ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+              <span className="font-medium">
+                {cookieFileResult.success
+                  ? `导入成功 — 提取 ${cookieFileResult.cookie_items || 0} 项 Cookie（评级: ${cookieFileResult.cookie_grade || '未知'}）`
+                  : '导入失败'}
+              </span>
+            </div>
+            {cookieFileResult.success && cookieFileResult.source_file && (
+              <p className="ml-6 text-xs">来源: {cookieFileResult.source_file} | 格式: {cookieFileResult.detected_format}</p>
+            )}
+            {cookieFileResult.error && <p className="ml-6">{cookieFileResult.error}</p>}
+            {cookieFileResult.hint && <p className="ml-6 text-orange-700">{cookieFileResult.hint}</p>}
+            {cookieFileResult.missing_required?.length > 0 && (
+              <p className="ml-6 mt-1 text-xs">缺少字段: {cookieFileResult.missing_required.join(', ')}</p>
+            )}
+            {cookieFileResult.skipped_files?.length > 0 && (
+              <p className="ml-6 mt-1 text-xs text-gray-500">跳过文件: {cookieFileResult.skipped_files.join(', ')}</p>
+            )}
+          </div>
+        )}
+
+        {/* Cookie 手动粘贴 */}
         <div>
-          <label className="xy-label">粘贴 Cookie</label>
+          <label className="xy-label">手动粘贴 Cookie</label>
           <textarea
-            className="xy-input px-3 py-2 h-32 font-mono text-xs"
-            placeholder={'支持以下格式：\n1. HTTP Header: cookie2=xxx; sgcookie=yyy; ...\n2. JSON: [{"name":"cookie2","value":"xxx"}, ...]\n3. Netscape cookies.txt\n4. DevTools 表格复制'}
+            className="xy-input px-3 py-2 h-28 font-mono text-xs"
+            placeholder={'也可以手动粘贴（系统会自动过滤非闲鱼域名）：\n1. HTTP Header: cookie2=xxx; sgcookie=yyy; ...\n2. JSON: [{"name":"cookie2","value":"xxx"}, ...]\n3. Netscape cookies.txt（支持全站导出，自动过滤）\n4. DevTools 表格复制'}
             value={cookieText}
             onChange={e => { setCookieText(e.target.value); setCookieResult(null); }}
           />
@@ -765,9 +892,19 @@ export default function SystemConfig() {
               {cookieResult.ok ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
               <span className="font-medium">
                 评级: {cookieResult.grade} — {cookieResult.ok ? 'Cookie 有效' : 'Cookie 无效'}
+                {cookieResult.cookie_items > 0 && ` (${cookieResult.cookie_items} 项)`}
               </span>
             </div>
             {cookieResult.message && <p className="ml-6">{cookieResult.message}</p>}
+            {cookieResult.domain_filter && cookieResult.domain_filter.rejected > 0 && (
+              <p className="ml-6 mt-1 text-xs flex items-center gap-1">
+                <Filter className="w-3 h-3" />
+                域名过滤：检测到 {cookieResult.domain_filter.checked} 条记录，已过滤 {cookieResult.domain_filter.rejected} 条非闲鱼域名
+                {cookieResult.domain_filter.rejected_samples?.length > 0 && (
+                  <span className="text-gray-500">（如 {cookieResult.domain_filter.rejected_samples.slice(0, 3).join('、')}）</span>
+                )}
+              </p>
+            )}
             {cookieResult.actions?.length > 0 && (
               <ul className="ml-6 mt-1 list-disc list-inside">
                 {cookieResult.actions.map((a: string, i: number) => <li key={i}>{a}</li>)}

@@ -3920,6 +3920,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     self._send_json({"ok": False, "grade": "F", "message": "Cookie 不能为空"}, status=400)
                     return
                 diagnosis = self.mimic_ops.diagnose_cookie(cookie_text)
+                domain_filter = self.mimic_ops._cookie_domain_filter_stats(cookie_text)
                 grade = diagnosis.get("grade", "F")
                 self._send_json({
                     "ok": grade in ("A", "B"),
@@ -3929,6 +3930,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "required_present": diagnosis.get("required_present", []),
                     "required_missing": diagnosis.get("required_missing", []),
                     "cookie_items": diagnosis.get("cookie_items", 0),
+                    "domain_filter": domain_filter,
                 })
                 return
 
