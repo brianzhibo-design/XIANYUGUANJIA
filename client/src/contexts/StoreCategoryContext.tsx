@@ -1,7 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { api } from '../api/index';
 
-const CATEGORY_META = {
+export interface CategoryMeta {
+  label: string;
+  icon: string;
+  desc: string;
+}
+
+export const CATEGORY_META: Record<string, CategoryMeta> = {
   express:      { label: '快递代发',     icon: '📦', desc: '转转、闲鱼代发快递包裹' },
   exchange:     { label: '兑换码/卡密', icon: '🔑', desc: '游戏兑换码、充值卡密等虚拟商品' },
   recharge:     { label: '充值代充',     icon: '💳', desc: '游戏代充、会员充值' },
@@ -29,9 +35,18 @@ const UNIVERSAL_FEATURES = new Set([
   'auto-publish', 'listing',
 ]);
 
-const StoreCategoryContext = createContext(null);
+export interface StoreCategoryContextValue {
+  category: string;
+  meta: CategoryMeta;
+  allCategories: Record<string, CategoryMeta>;
+  switchCategory: (cat: string) => Promise<void>;
+  isFeatureVisible: (featureKey: string) => boolean;
+  loading: boolean;
+}
 
-export function StoreCategoryProvider({ children }) {
+const StoreCategoryContext = createContext<StoreCategoryContextValue | null>(null);
+
+export function StoreCategoryProvider({ children }: { children: ReactNode }) {
   const [category, setCategory] = useState('express');
   const [loading, setLoading] = useState(true);
 
@@ -45,7 +60,7 @@ export function StoreCategoryProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const switchCategory = useCallback(async (newCat) => {
+  const switchCategory = useCallback(async (newCat: string) => {
     if (!CATEGORY_META[newCat]) return;
     setCategory(newCat);
     try {
@@ -55,7 +70,7 @@ export function StoreCategoryProvider({ children }) {
     }
   }, []);
 
-  const isFeatureVisible = useCallback((featureKey) => {
+  const isFeatureVisible = useCallback((featureKey: string) => {
     if (UNIVERSAL_FEATURES.has(featureKey)) return true;
     if (category === 'express') return EXPRESS_FEATURES.has(featureKey);
     return VIRTUAL_FEATURES.has(featureKey);
@@ -70,10 +85,8 @@ export function StoreCategoryProvider({ children }) {
   );
 }
 
-export function useStoreCategory() {
+export function useStoreCategory(): StoreCategoryContextValue {
   const ctx = useContext(StoreCategoryContext);
   if (!ctx) throw new Error('useStoreCategory must be used within StoreCategoryProvider');
   return ctx;
 }
-
-export { CATEGORY_META };

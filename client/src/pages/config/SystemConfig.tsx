@@ -3,7 +3,41 @@ import { getSystemConfig, getConfigSections, saveSystemConfig } from '../../api/
 import { api } from '../../api/index';
 import { useStoreCategory, CATEGORY_META } from '../../contexts/StoreCategoryContext';
 import toast from 'react-hot-toast';
-import { Settings, Save, AlertCircle, RefreshCw, Send, Bell, Cookie, CheckCircle2, XCircle, ExternalLink, Info, ShieldAlert, ShieldCheck, Shield, Download, Plug, ChevronDown, ChevronUp, Activity, Timer } from 'lucide-react';
+import { Settings, Save, AlertCircle, RefreshCw, Send, Bell, Cookie, CheckCircle2, XCircle, ExternalLink, Info, ShieldAlert, ShieldCheck, Shield, Download, Plug, ChevronDown, ChevronUp, Activity, Timer, FileText, Zap, DollarSign } from 'lucide-react';
+
+const REPLY_PRESETS = {
+  express: {
+    label: '快递代发话术',
+    default_reply: '您好！我们提供全国快递代发服务。请告诉我始发地、目的地和大概重量，我帮您查询报价。\n付款后请提供完整的收件信息（姓名、电话、地址），我们会尽快安排发货。',
+    virtual_default_reply: '',
+  },
+  exchange: {
+    label: '兑换码/卡密话术',
+    default_reply: '您好！本商品为兑换码/卡密，购买后系统自动发送到聊天窗口。\n如遇兑换问题请联系客服，我们会第一时间协助处理。',
+    virtual_default_reply: '【自动发货】您的兑换码已发送，请查收聊天消息。\n使用方法：复制兑换码 → 打开对应平台 → 兑换/充值\n如有问题请随时联系我们。',
+  },
+  generic: {
+    label: '通用话术',
+    default_reply: '您好！感谢您的咨询。请问有什么可以帮您的吗？',
+    virtual_default_reply: '您好！本商品为虚拟商品，购买后自动发送。如有问题请联系客服。',
+  },
+};
+
+const PRICING_PRESETS = {
+  conservative: { label: '保守定价', desc: '高利润率，低降价幅度', min_margin_percent: 20, max_discount_percent: 10, auto_adjust: false },
+  balanced: { label: '均衡定价', desc: '平衡利润与销量', min_margin_percent: 10, max_discount_percent: 20, auto_adjust: true },
+  aggressive: { label: '激进定价', desc: '低利润率，高降价幅度，追求销量', min_margin_percent: 5, max_discount_percent: 35, auto_adjust: true },
+};
+
+const SECTION_GUIDES: Record<string, string> = {
+  xianguanjia: '闲管家是连接闲鱼平台的核心网关，提供订单管理、消息推送、商品操作等 API。配置后系统可自动处理订单和消息。',
+  ai: 'AI 提供商负责智能回复、意图识别等功能。选择合适的模型并填入 API Key 即可启用。推荐使用百炼千问（Qwen），中文电商场景最稳定。',
+  oss: '阿里云 OSS 用于存储商品图片等静态资源。如果不需要图片自动上传功能，可跳过此配置。',
+  auto_publish: '自动上架功能根据选定品类和模板，自动将商品发布到闲鱼。启用前请确保 AI 和闲管家配置完成。',
+  order_reminder: '催单设置控制系统自动提醒买家付款的策略。设置静默时段可避免打扰用户。',
+  delivery: '发货规则控制自动发货的触发条件。虚拟商品建议启用自动发货，快递品类建议配合闲管家使用。',
+  notifications: '配置告警渠道后，Cookie 过期、订单异常、售后介入等重要事件会实时推送通知。',
+};
 
 const RISK_LEVEL_CONFIG = {
   normal:  { label: '正常',     color: 'green',  icon: ShieldCheck, bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800' },
@@ -12,7 +46,7 @@ const RISK_LEVEL_CONFIG = {
   unknown: { label: '未检测',   color: 'gray',   icon: Shield,      bg: 'bg-gray-50',  border: 'border-gray-200',  text: 'text-gray-600' },
 };
 
-const RECOVERY_STAGE_LABELS = {
+const RECOVERY_STAGE_LABELS: Record<string, string> = {
   monitoring: '监控中',
   healthy: '健康',
   recover_triggered: '恢复已触发',
@@ -22,7 +56,7 @@ const RECOVERY_STAGE_LABELS = {
   token_error: 'Token 异常',
 };
 
-function getRecoveryGuide(riskLevel, recoveryStage) {
+function getRecoveryGuide(riskLevel: string, recoveryStage: string) {
   if (riskLevel === 'normal') return null;
   if (riskLevel === 'warning') {
     return {
@@ -109,30 +143,30 @@ const AI_PROVIDER_GUIDES = {
 
 export default function SystemConfig() {
   const { category, switchCategory } = useStoreCategory();
-  const [sections, setSections] = useState([]);
-  const [config, setConfig] = useState({});
+  const [sections, setSections] = useState<any[]>([]);
+  const [config, setConfig] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('');
 
   const [cookieText, setCookieText] = useState('');
   const [cookieValidating, setCookieValidating] = useState(false);
-  const [cookieResult, setCookieResult] = useState(null);
-  const [currentCookieHealth, setCurrentCookieHealth] = useState(null);
+  const [cookieResult, setCookieResult] = useState<any>(null);
+  const [currentCookieHealth, setCurrentCookieHealth] = useState<any>(null);
 
-  const [riskStatus, setRiskStatus] = useState(null);
+  const [riskStatus, setRiskStatus] = useState<any>(null);
   const [autoGrabbing, setAutoGrabbing] = useState(false);
-  const [autoGrabProgress, setAutoGrabProgress] = useState(null);
+  const [autoGrabProgress, setAutoGrabProgress] = useState<any>(null);
   const [pluginGuideOpen, setPluginGuideOpen] = useState(false);
   const [pluginImporting, setPluginImporting] = useState(false);
   const [xgjTesting, setXgjTesting] = useState(false);
-  const [xgjTestResult, setXgjTestResult] = useState(null);
+  const [xgjTestResult, setXgjTestResult] = useState<any>(null);
   const [aiTesting, setAiTesting] = useState(false);
-  const [aiTestResult, setAiTestResult] = useState(null);
-  const [autoRefresh, setAutoRefresh] = useState(null);
-  const eventSourceRef = useRef(null);
-  const pluginFileRef = useRef(null);
-  const refreshTimerRef = useRef(null);
+  const [aiTestResult, setAiTestResult] = useState<any>(null);
+  const [autoRefresh, setAutoRefresh] = useState<any>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const pluginFileRef = useRef<HTMLInputElement>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchAutoRefreshStatus = useCallback(async () => {
     try {
@@ -213,9 +247,9 @@ export default function SystemConfig() {
     }
   };
 
-  const [testingSend, setTestingSend] = useState(null);
+  const [testingSend, setTestingSend] = useState<string | null>(null);
 
-  const handleChange = (sectionKey, fieldKey, value) => {
+  const handleChange = (sectionKey: string, fieldKey: string, value: any) => {
     setConfig(prev => ({
       ...prev,
       [sectionKey]: {
@@ -225,7 +259,7 @@ export default function SystemConfig() {
     }));
   };
 
-  const handleTestNotification = async (channel) => {
+  const handleTestNotification = async (channel: string) => {
     const notifyCfg = config.notifications || {};
     const webhookKey = channel === 'feishu' ? 'feishu_webhook' : 'wechat_webhook';
     const webhookUrl = notifyCfg[webhookKey] || '';
@@ -241,7 +275,7 @@ export default function SystemConfig() {
       } else {
         toast.error(res.data?.error || '发送失败');
       }
-    } catch (err) {
+    } catch (err: any) {
       toast.error('发送失败: ' + (err?.response?.data?.error || err.message));
     } finally {
       setTestingSend(null);
@@ -258,7 +292,7 @@ export default function SystemConfig() {
     try {
       const res = await api.post('/cookie/validate', { cookie: cookieText });
       setCookieResult(res.data);
-    } catch (err) {
+    } catch (err: any) {
       setCookieResult({ ok: false, grade: 'F', message: err?.response?.data?.message || '验证失败' });
     } finally {
       setCookieValidating(false);
@@ -313,7 +347,7 @@ export default function SystemConfig() {
         eventSourceRef.current = null;
         setAutoGrabbing(false);
       };
-    } catch (err) {
+    } catch (err: any) {
       toast.error('启动自动获取失败: ' + (err?.response?.data?.error || err.message));
       setAutoGrabbing(false);
     }
@@ -336,7 +370,7 @@ export default function SystemConfig() {
     window.open('/api/download-cookie-plugin', '_blank');
   }, []);
 
-  const handlePluginFileImport = useCallback(async (e) => {
+  const handlePluginFileImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
     setPluginImporting(true);
@@ -353,7 +387,7 @@ export default function SystemConfig() {
       } else {
         toast.error(res.data?.error || '导入失败');
       }
-    } catch (err) {
+    } catch (err: any) {
       toast.error('导入失败: ' + (err?.response?.data?.error || err.message));
     } finally {
       setPluginImporting(false);
@@ -374,7 +408,7 @@ export default function SystemConfig() {
         setXgjTestResult({ ok: false, message: xgj?.message || '连接失败' });
         toast.error('闲管家连接失败: ' + (xgj?.message || '未知错误'));
       }
-    } catch (err) {
+    } catch (err: any) {
       setXgjTestResult({ ok: false, message: err.message || '请求失败' });
       toast.error('连接测试异常');
     } finally {
@@ -405,7 +439,7 @@ export default function SystemConfig() {
         setAiTestResult({ ok: false, message: res.data?.message || '连接失败' });
         toast.error('AI 连接失败: ' + (res.data?.message || '未知错误'));
       }
-    } catch (err) {
+    } catch (err: any) {
       const msg = err?.response?.data?.message || err.message || '请求失败';
       setAiTestResult({ ok: false, message: msg });
       toast.error('AI 测试异常: ' + msg);
@@ -416,8 +450,29 @@ export default function SystemConfig() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <RefreshCw className="w-8 h-8 animate-spin text-xy-brand-500" />
+      <div className="xy-page max-w-5xl xy-enter">
+        <div className="flex justify-between mb-6">
+          <div className="w-1/3">
+            <div className="h-8 bg-xy-gray-200 rounded-lg w-1/2 mb-2 animate-pulse"></div>
+            <div className="h-4 bg-xy-gray-200 rounded w-2/3 animate-pulse"></div>
+          </div>
+        </div>
+        <div className="flex flex-col md:flex-row gap-6">
+          <div className="md:w-64 flex-shrink-0">
+            <div className="xy-card p-4 space-y-2">
+              {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-10 bg-xy-gray-100 rounded animate-pulse"></div>)}
+            </div>
+          </div>
+          <div className="flex-1 xy-card p-6 space-y-6">
+            <div className="h-6 bg-xy-gray-200 rounded w-1/4 animate-pulse mb-8"></div>
+            {[1, 2, 3].map(i => (
+              <div key={i} className="space-y-2">
+                <div className="h-4 bg-xy-gray-200 rounded w-32 animate-pulse"></div>
+                <div className="h-10 bg-xy-gray-100 rounded animate-pulse"></div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -715,7 +770,7 @@ export default function SystemConfig() {
             {cookieResult.message && <p className="ml-6">{cookieResult.message}</p>}
             {cookieResult.actions?.length > 0 && (
               <ul className="ml-6 mt-1 list-disc list-inside">
-                {cookieResult.actions.map((a, i) => <li key={i}>{a}</li>)}
+                {cookieResult.actions.map((a: string, i: number) => <li key={i}>{a}</li>)}
               </ul>
             )}
             {cookieResult.required_missing?.length > 0 && (
@@ -842,7 +897,9 @@ export default function SystemConfig() {
                 <button
                   key={sec.key}
                   onClick={() => setActiveTab(sec.key)}
-                  className={`text-left px-5 py-4 text-sm font-medium transition-colors border-l-4 ${
+                  aria-selected={activeTab === sec.key}
+                  role="tab"
+                  className={`text-left px-5 py-4 text-sm font-medium transition-colors border-l-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-xy-brand-500 ${
                     activeTab === sec.key 
                       ? 'border-l-xy-brand-500 bg-xy-brand-50 text-xy-brand-600' 
                       : 'border-l-transparent text-xy-text-secondary hover:bg-xy-gray-50'
@@ -895,20 +952,168 @@ export default function SystemConfig() {
 
           {activeTab === 'cookie' && renderCookieSection()}
 
-          {currentSection && currentSection.key !== 'cookie' && currentSection.key !== 'store_category' && (
+          {activeTab === 'auto_reply' && (
+            <div className="xy-card p-6 animate-in fade-in slide-in-from-right-4 space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-xy-text-primary flex items-center gap-2"><FileText className="w-5 h-5" /> 自动回复设置</h2>
+                <p className="text-sm text-xy-text-secondary mt-1">配置自动回复开关、AI 意图识别和回复模板</p>
+              </div>
+
+              {/* 基础开关 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex items-center justify-between p-4 bg-xy-gray-50 rounded-xl border border-xy-border">
+                  <div>
+                    <p className="font-medium text-xy-text-primary">启用自动回复</p>
+                    <p className="text-xs text-xy-text-secondary mt-0.5">收到买家消息时自动生成回复</p>
+                  </div>
+                  <button
+                    className={`w-12 h-6 rounded-full transition-colors relative ${config.auto_reply?.enabled !== false ? 'bg-green-500' : 'bg-gray-300'}`}
+                    onClick={() => handleChange('auto_reply', 'enabled', !(config.auto_reply?.enabled !== false))}
+                  >
+                    <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${config.auto_reply?.enabled !== false ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-xy-gray-50 rounded-xl border border-xy-border">
+                  <div>
+                    <p className="font-medium text-xy-text-primary">AI 意图识别</p>
+                    <p className="text-xs text-xy-text-secondary mt-0.5">使用 AI 分析买家消息意图后生成针对性回复</p>
+                  </div>
+                  <button
+                    className={`w-12 h-6 rounded-full transition-colors relative ${config.auto_reply?.ai_intent_enabled ? 'bg-green-500' : 'bg-gray-300'}`}
+                    onClick={() => handleChange('auto_reply', 'ai_intent_enabled', !config.auto_reply?.ai_intent_enabled)}
+                  >
+                    <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${config.auto_reply?.ai_intent_enabled ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* 预设模板选择 */}
+              <div>
+                <h3 className="text-sm font-bold text-xy-text-primary mb-3 flex items-center gap-2"><Zap className="w-4 h-4 text-amber-500" /> 一键应用预设话术</h3>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(REPLY_PRESETS).map(([key, preset]) => (
+                    <button key={key} onClick={() => {
+                      handleChange('auto_reply', 'default_reply', preset.default_reply);
+                      if (preset.virtual_default_reply) handleChange('auto_reply', 'virtual_default_reply', preset.virtual_default_reply);
+                      toast.success(`已应用「${preset.label}」预设`);
+                    }} className="px-3 py-1.5 text-sm border border-xy-border rounded-lg hover:bg-xy-brand-50 hover:border-xy-brand-300 transition-colors">
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 模板编辑 */}
+              <div className="space-y-4">
+                <div>
+                  <label className="xy-label">通用回复模板</label>
+                  <textarea className="xy-input px-3 py-2 h-28 resize-none" placeholder="买家消息的默认自动回复内容..." value={config.auto_reply?.default_reply || ''} onChange={e => handleChange('auto_reply', 'default_reply', e.target.value)} />
+                </div>
+                <div>
+                  <label className="xy-label">虚拟商品回复模板</label>
+                  <textarea className="xy-input px-3 py-2 h-28 resize-none" placeholder="虚拟商品（兑换码/卡密）的专用回复模板..." value={config.auto_reply?.virtual_default_reply || ''} onChange={e => handleChange('auto_reply', 'virtual_default_reply', e.target.value)} />
+                </div>
+              </div>
+
+              {/* 变量说明 */}
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-sm text-blue-700">
+                <p className="font-medium mb-2">模板变量说明</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  <div><code className="bg-blue-100 px-1 rounded">{'{{buyer_name}}'}</code> 买家昵称</div>
+                  <div><code className="bg-blue-100 px-1 rounded">{'{{item_title}}'}</code> 商品标题</div>
+                  <div><code className="bg-blue-100 px-1 rounded">{'{{item_price}}'}</code> 商品价格</div>
+                  <div><code className="bg-blue-100 px-1 rounded">{'{{order_id}}'}</code> 订单号</div>
+                </div>
+                <p className="mt-2 text-xs text-blue-500">提示：模板保存后，可在「消息中心 &gt; 测试沙盒」中模拟测试效果</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'pricing' && (
+            <div className="xy-card p-6 animate-in fade-in slide-in-from-right-4 space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-xy-text-primary flex items-center gap-2"><DollarSign className="w-5 h-5" /> 定价规则</h2>
+                <p className="text-sm text-xy-text-secondary mt-1">配置自动调价策略，控制利润率和降价幅度</p>
+              </div>
+
+              {/* 当前生效配置 */}
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: '自动调价', value: config.pricing?.auto_adjust ? '已启用' : '未启用', color: config.pricing?.auto_adjust ? 'text-green-600' : 'text-xy-text-muted' },
+                  { label: '最低利润率', value: `${config.pricing?.min_margin_percent ?? 10}%`, color: 'text-xy-brand-600' },
+                  { label: '最大降价幅度', value: `${config.pricing?.max_discount_percent ?? 20}%`, color: 'text-orange-600' },
+                ].map(card => (
+                  <div key={card.label} className="p-4 bg-xy-gray-50 rounded-xl border border-xy-border text-center">
+                    <p className="text-xs text-xy-text-secondary">{card.label}</p>
+                    <p className={`text-xl font-bold mt-1 ${card.color}`}>{card.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* 预设方案 */}
+              <div>
+                <h3 className="text-sm font-bold text-xy-text-primary mb-3">快速应用预设方案</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {Object.entries(PRICING_PRESETS).map(([key, preset]) => (
+                    <button key={key} onClick={() => {
+                      handleChange('pricing', 'auto_adjust', preset.auto_adjust);
+                      handleChange('pricing', 'min_margin_percent', preset.min_margin_percent);
+                      handleChange('pricing', 'max_discount_percent', preset.max_discount_percent);
+                      toast.success(`已应用「${preset.label}」方案`);
+                    }} className="text-left p-4 rounded-xl border-2 border-xy-border hover:border-xy-brand-300 hover:bg-xy-brand-50 transition-all">
+                      <p className="font-bold text-xy-text-primary">{preset.label}</p>
+                      <p className="text-xs text-xy-text-secondary mt-1">{preset.desc}</p>
+                      <p className="text-xs text-xy-text-muted mt-2">利润率 {preset.min_margin_percent}% / 降价 {preset.max_discount_percent}%</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 自定义配置 */}
+              <div className="space-y-4 pt-4 border-t border-xy-border">
+                <h3 className="text-sm font-bold text-xy-text-primary">自定义配置</h3>
+                <div className="flex items-center justify-between">
+                  <div><p className="font-medium text-xy-text-primary">自动调价</p><p className="text-xs text-xy-text-secondary">系统根据市场行情和库存自动调整价格</p></div>
+                  <button className={`w-12 h-6 rounded-full transition-colors relative ${config.pricing?.auto_adjust ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => handleChange('pricing', 'auto_adjust', !config.pricing?.auto_adjust)}>
+                    <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${config.pricing?.auto_adjust ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="xy-label">最低利润率 (%)</label>
+                    <input type="number" className="xy-input px-3 py-2" value={config.pricing?.min_margin_percent ?? 10} onChange={e => handleChange('pricing', 'min_margin_percent', Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <label className="xy-label">最大降价幅度 (%)</label>
+                    <input type="number" className="xy-input px-3 py-2" value={config.pricing?.max_discount_percent ?? 20} onChange={e => handleChange('pricing', 'max_discount_percent', Number(e.target.value))} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 text-sm text-amber-700">
+                <p><strong>提示：</strong>快递品类用户可在「商品管理 &gt; 加价规则」中配置更精细的路线加价，此处的定价规则为全局兜底策略。</p>
+              </div>
+            </div>
+          )}
+
+          {currentSection && currentSection.key !== 'cookie' && currentSection.key !== 'store_category' && currentSection.key !== 'auto_reply' && currentSection.key !== 'pricing' && (
             <div className="xy-card p-6 animate-in fade-in slide-in-from-right-4">
-              <h2 className="text-lg font-bold text-xy-text-primary mb-6 pb-4 border-b border-xy-border">
+              <h2 className="text-lg font-bold text-xy-text-primary mb-2">
                 {currentSection.name}
               </h2>
+              {SECTION_GUIDES[currentSection.key] && (
+                <p className="text-sm text-xy-text-secondary mb-6 pb-4 border-b border-xy-border">{SECTION_GUIDES[currentSection.key]}</p>
+              )}
+              {!SECTION_GUIDES[currentSection.key] && <div className="mb-6 pb-4 border-b border-xy-border" />}
               
               <div className="space-y-6 max-w-2xl">
-                {currentSection.fields?.map(field => {
+                {currentSection.fields?.map((field: any) => {
                   const sectionData = config[currentSection.key] || {};
                   const value = sectionData[field.key] !== undefined ? sectionData[field.key] : (field.default || '');
 
                   if (field.required_when) {
                     const [condKey, condVal] = Object.entries(field.required_when)[0];
-                    const actual = sectionData[condKey] !== undefined ? sectionData[condKey] : (currentSection.fields.find(f => f.key === condKey)?.default || '');
+                    const actual = sectionData[condKey] !== undefined ? sectionData[condKey] : (currentSection.fields.find((f: any) => f.key === condKey)?.default || '');
                     if (actual !== condVal) return null;
                   }
 
@@ -940,18 +1145,18 @@ export default function SystemConfig() {
                           value={value}
                           onChange={(e) => handleChange(currentSection.key, field.key, e.target.value)}
                         >
-                          {field.options?.map(opt => (
+                          {field.options?.map((opt: string) => (
                             <option key={opt} value={opt}>{field.labels?.[opt] || opt}</option>
                           ))}
                         </select>
                       ) : field.type === 'combobox' ? (() => {
                         const providerModels = currentSection.key === 'ai'
                           ? (AI_PROVIDER_GUIDES[sectionData.provider || 'qwen']?.models || [])
-                          : (field.options || []).map(o => typeof o === 'string' ? { value: o, label: o } : o);
-                        const optionValues = providerModels.map(m => m.value);
+                          : (field.options || []).map((o: any) => typeof o === 'string' ? { value: o, label: o } : o);
+                        const optionValues = providerModels.map((m: any) => m.value);
                         const isCustom = value && !optionValues.includes(value);
                         return (
-                          <div className="space-y-2">
+                          <div className="space-y-2" key={field.key}>
                             <select
                               className="xy-input px-3 py-2"
                               value={isCustom ? '__custom__' : value}
@@ -963,7 +1168,7 @@ export default function SystemConfig() {
                                 }
                               }}
                             >
-                              {providerModels.map(m => (
+                              {providerModels.map((m: any) => (
                                 <option key={m.value} value={m.value}>{m.label}</option>
                               ))}
                               <option value="__custom__">自定义模型...</option>

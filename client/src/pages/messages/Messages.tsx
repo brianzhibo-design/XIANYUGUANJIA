@@ -1,71 +1,57 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../../api/index';
 import {
-  MessageCircle, Send, Bot, User, Clock,
+  MessageCircle, Send, Bot, User,
   RefreshCw, BarChart3, MessagesSquare, Zap,
-  AlertCircle, Activity, FileText, Beaker, Save,
+  AlertCircle, Activity, Beaker,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const MSG_TABS = [
   { key: 'logs', label: '回复日志' },
-  { key: 'templates', label: '回复模板' },
   { key: 'sandbox', label: '测试沙盒' },
 ];
 
 export default function Messages() {
   const [activeTab, setActiveTab] = useState('logs');
-  const [stats, setStats] = useState(null);
-  const [replies, setReplies] = useState([]);
+  const [logView, setLogView] = useState('list');
+  const [stats, setStats] = useState<any>(null);
+  const [replies, setReplies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const [template, setTemplate] = useState('');
-  const [templateLoading, setTemplateLoading] = useState(false);
-  const [templateSaving, setTemplateSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [sandboxInput, setSandboxInput] = useState('');
-  const [sandboxResult, setSandboxResult] = useState(null);
+  const [sandboxResult, setSandboxResult] = useState<any>(null);
   const [sandboxTesting, setSandboxTesting] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [statusRes, repliesRes] = await Promise.all([
-        api.get('/status'),
-        api.get('/replies'),
-      ]);
+      const statusRes = await api.get('/status');
       setStats(statusRes.data.message_stats || null);
-      setReplies(Array.isArray(repliesRes.data) ? repliesRes.data : []);
-    } catch (err) {
+
+      try {
+        const repliesRes = await api.get('/replies');
+        const d = repliesRes.data;
+        if (Array.isArray(d)) {
+          setReplies(d);
+        } else if (d?.logs && Array.isArray(d.logs)) {
+          setReplies(d.logs);
+        } else {
+          setReplies([]);
+        }
+      } catch {
+        setReplies([]);
+      }
+    } catch (err: any) {
       setError(err.message || '无法连接后端');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchTemplate = useCallback(async () => {
-    setTemplateLoading(true);
-    try {
-      const res = await api.get('/get-template');
-      setTemplate(res.data?.template || res.data?.content || '');
-    } catch { /* ignore */ }
-    finally { setTemplateLoading(false); }
-  }, []);
-
   useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { if (activeTab === 'templates') fetchTemplate(); }, [activeTab, fetchTemplate]);
-
-  const handleSaveTemplate = async () => {
-    setTemplateSaving(true);
-    try {
-      const res = await api.post('/save-template', { template });
-      if (res.data?.success || res.data?.ok) toast.success('模板保存成功');
-      else toast.error(res.data?.error || '保存失败');
-    } catch (e) { toast.error(e.message || '保存失败'); }
-    finally { setTemplateSaving(false); }
-  };
 
   const handleTestReply = async () => {
     if (!sandboxInput.trim()) return;
@@ -74,7 +60,7 @@ export default function Messages() {
     try {
       const res = await api.post('/test-reply', { message: sandboxInput });
       setSandboxResult(res.data);
-    } catch (e) { setSandboxResult({ error: e.message }); }
+    } catch (e: any) { setSandboxResult({ error: e.message }); }
     finally { setSandboxTesting(false); }
   };
 
@@ -88,10 +74,26 @@ export default function Messages() {
 
   if (loading) {
     return (
-      <div className="xy-page xy-enter max-w-6xl flex items-center justify-center h-[calc(100vh-100px)]">
-        <div className="flex flex-col items-center gap-3 text-xy-text-muted">
-          <RefreshCw className="w-8 h-8 animate-spin text-xy-brand-500" />
-          <span>正在加载消息数据...</span>
+      <div className="xy-page xy-enter max-w-6xl">
+        <div className="flex justify-between mb-6">
+          <div className="w-1/3">
+            <div className="h-8 bg-xy-gray-200 rounded-lg w-1/2 mb-3 animate-pulse"></div>
+            <div className="h-4 bg-xy-gray-200 rounded w-2/3 animate-pulse"></div>
+          </div>
+        </div>
+        <div className="xy-card flex h-[calc(100vh-200px)]">
+          <div className="w-1/3 border-r border-xy-border p-4 space-y-4">
+            <div className="h-6 bg-xy-gray-200 rounded w-1/3 animate-pulse mb-6"></div>
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="h-16 bg-xy-gray-100 rounded-xl animate-pulse"></div>
+            ))}
+          </div>
+          <div className="flex-1 p-6 space-y-6">
+            <div className="h-6 bg-xy-gray-200 rounded w-1/4 animate-pulse mb-8"></div>
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-24 bg-xy-gray-100 rounded-xl animate-pulse"></div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -119,12 +121,14 @@ export default function Messages() {
           <h1 className="xy-title flex items-center gap-2">
             <MessageCircle className="w-6 h-6 text-xy-brand-500" /> 消息中心
           </h1>
-          <p className="xy-subtitle mt-1">自动回复日志、模板管理和测试沙盒</p>
+          <p className="xy-subtitle mt-1">自动回复日志和测试沙盒（模板配置已移至「系统设置 &gt; 自动回复」）</p>
         </div>
         <div className="flex bg-xy-gray-100 p-1 rounded-xl">
           {MSG_TABS.map(t => (
             <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${activeTab === t.key ? 'bg-white shadow-sm text-xy-text-primary' : 'text-xy-text-secondary hover:text-xy-text-primary'}`}>
+              aria-selected={activeTab === t.key}
+              role="tab"
+              className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-xy-brand-500 focus-visible:ring-offset-2 ${activeTab === t.key ? 'bg-white shadow-sm text-xy-text-primary' : 'text-xy-text-secondary hover:text-xy-text-primary'}`}>
               {t.label}
             </button>
           ))}
@@ -132,9 +136,14 @@ export default function Messages() {
       </div>
 
       {activeTab === 'logs' && (
-        <div className="xy-card flex h-[calc(100vh-200px)] overflow-hidden">
-          {/* Left sidebar - stats */}
-          <div className="w-1/3 min-w-[260px] max-w-[320px] border-r border-xy-border flex flex-col bg-xy-gray-50">
+        <>
+        <div className="md:hidden flex bg-xy-gray-100 p-1 rounded-xl mb-4">
+          <button onClick={() => setLogView('stats')} className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${logView === 'stats' ? 'bg-white shadow-sm text-xy-text-primary' : 'text-xy-text-secondary'}`}>统计概览</button>
+          <button onClick={() => setLogView('list')} className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${logView === 'list' ? 'bg-white shadow-sm text-xy-text-primary' : 'text-xy-text-secondary'}`}>回复日志</button>
+        </div>
+
+        <div className="xy-card flex flex-col md:flex-row h-[calc(100vh-200px)] md:h-[calc(100vh-200px)] overflow-hidden">
+          <div className={`${logView === 'list' ? 'hidden md:flex' : 'flex'} md:w-1/3 md:min-w-[260px] md:max-w-[320px] border-b md:border-b-0 md:border-r border-xy-border flex-col bg-xy-gray-50`}>
             <div className="p-4 border-b border-xy-border bg-white">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="font-bold text-lg flex items-center gap-2"><MessageCircle className="w-5 h-5 text-xy-brand-500" /> 消息概览</h2>
@@ -144,24 +153,26 @@ export default function Messages() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {statCards.map(card => (
-                <div key={card.label} className="bg-white rounded-xl p-4 border border-xy-border shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${card.color}`}>
-                      <card.icon className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-xy-text-primary">{card.value}</p>
-                      <p className="text-xs text-xy-text-secondary">{card.label}</p>
+              {statCards.map(card => {
+                const IconComponent = card.icon;
+                return (
+                  <div key={card.label} className="bg-white rounded-xl p-4 border border-xy-border shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${card.color}`}>
+                        <IconComponent className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-xy-text-primary">{card.value}</p>
+                        <p className="text-xs text-xy-text-secondary">{card.label}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          {/* Right - reply logs */}
-          <div className="flex-1 flex flex-col bg-white">
+          <div className={`${logView === 'stats' ? 'hidden md:flex' : 'flex'} flex-1 flex-col bg-white`}>
             <div className="px-6 py-4 border-b border-xy-border flex justify-between items-center bg-white shadow-sm z-10">
               <div>
                 <h3 className="font-bold text-lg text-xy-text-primary">自动回复日志</h3>
@@ -173,9 +184,12 @@ export default function Messages() {
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-xy-gray-50/50">
               {replies.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-xy-text-muted">
-                  <MessageCircle className="w-16 h-16 mb-4 text-xy-gray-200" />
-                  <p>暂无自动回复记录</p>
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm border border-xy-border">
+                    <MessageCircle className="w-10 h-10 text-xy-gray-300" />
+                  </div>
+                  <p className="text-base font-medium text-xy-text-primary mb-1">暂无自动回复记录</p>
+                  <p className="text-sm text-xy-text-secondary max-w-xs">系统启动后，自动回复的消息会在此处显示。回复模板可在「系统设置 &gt; 自动回复」中配置。</p>
                 </div>
               ) : (
                 replies.map((reply, idx) => (
@@ -211,40 +225,7 @@ export default function Messages() {
             </div>
           </div>
         </div>
-      )}
-
-      {activeTab === 'templates' && (
-        <div className="xy-card p-6 space-y-6 animate-in fade-in slide-in-from-right-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-xy-text-primary flex items-center gap-2"><FileText className="w-5 h-5" /> 回复模板</h2>
-              <p className="text-sm text-xy-text-secondary mt-1">配置自动回复的话术模板，支持变量替换</p>
-            </div>
-            <button onClick={handleSaveTemplate} disabled={templateSaving} className="xy-btn-primary flex items-center gap-2">
-              {templateSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              保存模板
-            </button>
-          </div>
-          {templateLoading ? (
-            <div className="py-12 text-center text-xy-text-muted"><RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />加载中...</div>
-          ) : (
-            <textarea
-              className="xy-input px-4 py-3 h-80 font-mono text-sm resize-none"
-              placeholder="输入自动回复模板内容..."
-              value={template}
-              onChange={e => setTemplate(e.target.value)}
-            />
-          )}
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-sm text-blue-700">
-            <p className="font-medium mb-2">模板变量说明</p>
-            <ul className="list-disc list-inside space-y-1">
-              <li><code className="bg-blue-100 px-1 rounded">{'{{buyer_name}}'}</code> — 买家昵称</li>
-              <li><code className="bg-blue-100 px-1 rounded">{'{{item_title}}'}</code> — 商品标题</li>
-              <li><code className="bg-blue-100 px-1 rounded">{'{{item_price}}'}</code> — 商品价格</li>
-              <li><code className="bg-blue-100 px-1 rounded">{'{{order_id}}'}</code> — 订单号</li>
-            </ul>
-          </div>
-        </div>
+        </>
       )}
 
       {activeTab === 'sandbox' && (

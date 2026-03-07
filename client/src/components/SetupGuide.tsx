@@ -5,16 +5,36 @@ import { CheckCircle, Circle, ArrowRight, X, Zap, Cookie, Settings, Bot, Play, C
 
 const DISMISS_KEY = 'xianyu_setup_guide_dismissed';
 
+interface ChecksState {
+  nodeBackend: boolean | null;
+  pythonBackend: boolean | null;
+  xgjConfigured: boolean | null;
+  aiConfigured: boolean | null;
+  cookieSet: boolean | null;
+}
+
+interface StepItem {
+  key: string;
+  label: string;
+  desc: string;
+  done: boolean;
+  action: string | null;
+  actionLabel: string | null;
+  icon: React.ComponentType<{ className?: string }> | null;
+  hint: string;
+  validated?: boolean;
+}
+
 export default function SetupGuide() {
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === '1');
-  const [checks, setChecks] = useState({
+  const [checks, setChecks] = useState<ChecksState>({
     nodeBackend: null,
     pythonBackend: null,
     xgjConfigured: null,
     aiConfigured: null,
     cookieSet: null,
   });
-  const [details, setDetails] = useState({});
+  const [details, setDetails] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -25,14 +45,14 @@ export default function SetupGuide() {
 
   const runChecks = async () => {
     setLoading(true);
-    const result = {
+    const result: ChecksState = {
       nodeBackend: false,
       pythonBackend: false,
       xgjConfigured: false,
       aiConfigured: false,
       cookieSet: false,
     };
-    const det = {};
+    const det: Record<string, string> = {};
 
     try {
       const res = await api.get('/config');
@@ -83,10 +103,21 @@ export default function SetupGuide() {
 
   const allDone = checks.nodeBackend && checks.pythonBackend && checks.xgjConfigured && checks.aiConfigured && checks.cookieSet;
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="xy-card mb-8 p-6 animate-pulse">
+        <div className="h-8 bg-xy-gray-100 rounded w-1/3 mb-6"></div>
+        <div className="space-y-3">
+          <div className="h-16 bg-xy-gray-50 rounded-xl"></div>
+          <div className="h-16 bg-xy-gray-50 rounded-xl"></div>
+          <div className="h-16 bg-xy-gray-50 rounded-xl"></div>
+        </div>
+      </div>
+    );
+  }
   if (allDone) return null;
 
-  const steps = [
+  const steps: StepItem[] = [
     {
       key: 'cookieSet',
       label: '获取闲鱼 Cookie',
@@ -231,10 +262,10 @@ export default function SetupGuide() {
         </div>
 
         <div className="mt-4 flex justify-between items-center">
-          <button onClick={runChecks} className="text-sm text-xy-brand-500 hover:text-xy-brand-600 font-medium flex items-center gap-1">
+          <button onClick={runChecks} className="text-sm text-xy-brand-500 hover:text-xy-brand-600 font-medium flex items-center gap-1 transition-colors">
             <RotateCcw className="w-3.5 h-3.5" /> 重新检测
           </button>
-          <button onClick={handleDismiss} className="text-sm text-xy-text-muted hover:text-xy-text-primary">
+          <button onClick={handleDismiss} className="text-sm text-xy-text-muted hover:text-xy-text-primary transition-colors">
             稍后配置，跳过引导
           </button>
         </div>

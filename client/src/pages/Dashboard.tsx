@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import SetupGuide from '../components/SetupGuide'
 import ApiStatusPanel from '../components/ApiStatusPanel'
 import { useStoreCategory } from '../contexts/StoreCategoryContext'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 
 const TABS = [
   { key: 'overview', label: '概览' },
@@ -42,12 +43,12 @@ const Dashboard = () => {
       if (results.every(r => r.status === 'rejected')) throw new Error('所有接口均请求失败');
 
       if (summaryRes?.data) {
-        const s = summaryRes.data;
+        const raw = summaryRes.data.data || summaryRes.data;
         setStats({
-          products: s.active_products ?? 0,
-          orders: s.today_orders ?? s.today_operations ?? 0,
-          messages: s.unread_messages ?? s.total_wants ?? 0,
-          replies: s.today_replies ?? s.total_sales ?? 0
+          products: raw.active_products ?? 0,
+          orders: raw.today_operations ?? 0,
+          messages: raw.total_wants ?? 0,
+          replies: raw.total_sales ?? 0
         });
       }
       if (opsRes?.data) {
@@ -72,21 +73,53 @@ const Dashboard = () => {
     setAnalyticsLoading(true);
     try {
       const [trendRes, topRes] = await Promise.all([getTrendData(metric, days), getTopProducts(10)]);
-      if (trendRes.data) setTrendData(Array.isArray(trendRes.data) ? trendRes.data : (trendRes.data.trend || []));
-      if (topRes.data) setTopProducts(Array.isArray(topRes.data) ? topRes.data : (topRes.data.products || []));
+      if (trendRes.data) {
+        const td = trendRes.data.data || trendRes.data;
+        setTrendData(Array.isArray(td) ? td : (td.trend || []));
+      }
+      if (topRes.data) {
+        const tp = topRes.data.data || topRes.data;
+        setTopProducts(Array.isArray(tp) ? tp : (tp.products || []));
+      }
     } catch { toast.error('加载分析数据失败'); }
     finally { setAnalyticsLoading(false); }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-64px)]">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-xy-brand-500"></div>
+      <div className="xy-page p-6 xy-enter">
+        <div className="flex justify-between mb-6">
+          <div className="w-1/3">
+            <div className="h-8 bg-xy-gray-200 rounded-lg w-1/2 mb-3 animate-pulse"></div>
+            <div className="h-4 bg-xy-gray-200 rounded w-1/3 animate-pulse"></div>
+          </div>
+          <div className="flex gap-3">
+            <div className="h-10 bg-xy-gray-200 rounded-xl w-32 animate-pulse"></div>
+            <div className="h-10 bg-xy-gray-200 rounded-xl w-10 animate-pulse"></div>
+          </div>
+        </div>
+        <div className="h-10 bg-xy-gray-200 rounded-xl w-48 mb-6 animate-pulse"></div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="xy-card p-6 h-32 bg-xy-gray-100 animate-pulse border-none"></div>
+          ))}
+        </div>
+        <div className="grid md:grid-cols-3 gap-8">
+          <div className="md:col-span-2 xy-card h-96 bg-xy-gray-100 animate-pulse border-none"></div>
+          <div className="space-y-6">
+            <div className="xy-card h-64 bg-xy-gray-100 animate-pulse border-none"></div>
+            <div className="xy-card h-32 bg-xy-gray-100 animate-pulse border-none"></div>
+          </div>
+        </div>
       </div>
     );
   }
 
-  const cookieHealth = sysStatus?.modules?.account_health?.details?.default || { health_score: 100, status: 'good' };
+  const ckh = sysStatus?.cookie_health || {};
+  const cookieHealth = {
+    health_score: ckh.score ?? 100,
+    status: ckh.healthy === false ? 'warning' : 'good',
+  };
 
   return (
     <div className="xy-page xy-enter">
@@ -132,9 +165,9 @@ const Dashboard = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
             {[
               { label: '在售商品', value: stats.products, icon: ShoppingBag, color: 'bg-xy-brand-50', iconColor: 'text-xy-brand-500' },
-              { label: '今日订单', value: stats.orders, icon: FileText, color: 'bg-blue-50', iconColor: 'text-blue-500' },
-              { label: '未读消息', value: stats.messages, icon: MessageCircle, color: 'bg-red-50', iconColor: 'text-red-500' },
-              { label: '今日自动回复', value: stats.replies, icon: CheckCircle, color: 'bg-green-50', iconColor: 'text-green-500' },
+              { label: '今日操作', value: stats.orders, icon: FileText, color: 'bg-blue-50', iconColor: 'text-blue-500' },
+              { label: '总想要数', value: stats.messages, icon: MessageCircle, color: 'bg-red-50', iconColor: 'text-red-500' },
+              { label: '总成交数', value: stats.replies, icon: CheckCircle, color: 'bg-green-50', iconColor: 'text-green-500' },
             ].map(card => (
               <div key={card.label} className="xy-card p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -156,9 +189,12 @@ const Dashboard = () => {
               </div>
               <div className="divide-y divide-xy-border">
                 {recentOps.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <AlertCircle className="h-10 w-10 text-xy-gray-300 mx-auto mb-3" />
-                    <p className="text-xy-text-secondary">暂无近期操作记录</p>
+                  <div className="p-12 flex flex-col items-center justify-center text-center">
+                    <div className="w-16 h-16 bg-xy-gray-50 rounded-full flex items-center justify-center mb-4">
+                      <Clock className="w-8 h-8 text-xy-gray-400" />
+                    </div>
+                    <p className="text-base font-medium text-xy-text-primary mb-1">暂无近期操作</p>
+                    <p className="text-sm text-xy-text-secondary">系统自动执行的操作会显示在这里</p>
                   </div>
                 ) : (
                   recentOps.map((op, idx) => (
@@ -235,23 +271,30 @@ const Dashboard = () => {
                   ))}
                 </div>
               </div>
-              <div className="h-64 flex items-end justify-between gap-1 mt-4 border-b border-xy-border pb-2 relative">
+              <div className="h-64 mt-4 relative">
                 {analyticsLoading ? (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/50">
-                    <RefreshCw className="w-6 h-6 animate-spin text-xy-brand-500" />
+                  <div className="absolute inset-0 z-10 flex items-end gap-2 p-4 bg-white/80">
+                    {[...Array(7)].map((_, i) => (
+                      <div key={i} className="flex-1 bg-xy-gray-100 rounded-t-md animate-pulse" style={{ height: `${Math.max(20, Math.random() * 100)}%` }}></div>
+                    ))}
                   </div>
                 ) : trendData.length > 0 ? (
-                  trendData.map((day, i) => (
-                    <div key={i} className="w-full flex flex-col items-center group relative">
-                      <div className="w-full bg-xy-brand-200 group-hover:bg-xy-brand-400 transition-colors rounded-t-sm" style={{ height: `${Math.max(5, (day.value / Math.max(...trendData.map(d => d.value), 1)) * 100)}%` }}></div>
-                      <div className="opacity-0 group-hover:opacity-100 absolute bottom-full mb-2 bg-xy-gray-900 text-white text-xs py-1 px-2 rounded whitespace-nowrap z-10 pointer-events-none transition-opacity">
-                        {day.date}: {day.value}
-                      </div>
-                    </div>
-                  ))
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={trendData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                      <XAxis dataKey="date" tickFormatter={v => v.slice(5)} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                      <Tooltip labelFormatter={v => `日期: ${v}`} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }} />
+                      <Bar dataKey="value" fill="#f97316" radius={[4, 4, 0, 0]} name={metric === 'views' ? '浏览量' : metric === 'wants' ? '想要数' : '成交量'} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-xy-text-muted">
-                    <Calendar className="w-8 h-8 mb-2" /><p>暂无趋势数据</p>
+                  <div className="w-full h-full flex flex-col items-center justify-center text-center">
+                    <div className="w-12 h-12 bg-xy-gray-50 rounded-full flex items-center justify-center mb-3">
+                      <Calendar className="w-6 h-6 text-xy-gray-400" />
+                    </div>
+                    <p className="text-sm font-medium text-xy-text-primary mb-1">暂无趋势数据</p>
+                    <p className="text-xs text-xy-text-secondary">当前所选时间段内没有记录</p>
                   </div>
                 )}
               </div>
@@ -269,8 +312,8 @@ const Dashboard = () => {
                   topProducts.map((p, idx) => (
                     <div key={idx} className="flex gap-3 items-center">
                       <div className="w-6 h-6 rounded-full bg-xy-gray-100 flex items-center justify-center text-xs font-bold text-xy-text-secondary flex-shrink-0">{idx + 1}</div>
-                      <div className="w-12 h-12 bg-xy-gray-200 rounded border border-xy-border overflow-hidden flex-shrink-0">
-                        {p.pic_url && <img src={p.pic_url} className="w-full h-full object-cover" alt="" />}
+                      <div className="w-12 h-12 bg-xy-gray-200 rounded border border-xy-border overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {p.pic_url ? <img src={p.pic_url} className="w-full h-full object-cover" alt="" /> : <Package className="w-5 h-5 text-xy-gray-400" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-xy-text-primary truncate">{p.title}</p>
@@ -279,7 +322,13 @@ const Dashboard = () => {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-10 text-xy-text-muted">暂无商品数据</div>
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="w-12 h-12 bg-xy-gray-50 rounded-full flex items-center justify-center mb-3">
+                      <Package className="w-6 h-6 text-xy-gray-400" />
+                    </div>
+                    <p className="text-sm font-medium text-xy-text-primary mb-1">暂无商品数据</p>
+                    <p className="text-xs text-xy-text-secondary">暂时没有产生数据的爆款商品</p>
+                  </div>
                 )}
               </div>
             </div>
