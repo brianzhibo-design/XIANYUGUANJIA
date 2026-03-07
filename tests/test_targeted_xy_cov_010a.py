@@ -75,7 +75,8 @@ def test_doctor_extra_checks_non_lite_quote_needed_and_api_payload_missing(monke
 
     web_ui = next(c for c in checks if c["name"] == "Web UI 端口")
     assert web_ui["passed"] is True
-    assert web_ui["meta"]["port"] == 8080
+    # FRONTEND_PORT defaults to 5173 in .env.example
+    assert web_ui["meta"]["port"] == 5173
 
     dashboard_daemon = next(c for c in checks if c["name"] == "Dashboard守护状态")
     assert dashboard_daemon["passed"] is False

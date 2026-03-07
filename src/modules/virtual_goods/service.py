@@ -547,7 +547,7 @@ class VirtualGoodsService:
                 "refund_order_count": None,
                 "exception_count": None,
                 "manual_takeover_count": None,
-                "conversion_rate_pct": None,
+                "conversion_rate_pct": 0.0,
             }
             stable_field_state = {
                 "exposure_count": "placeholder",
