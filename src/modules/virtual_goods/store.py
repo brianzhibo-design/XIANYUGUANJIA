@@ -4,10 +4,11 @@ import json
 import os
 import socket
 import sqlite3
+from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from .models import ORDER_STATUS_VALUES, normalize_order_status
 
@@ -1062,5 +1063,7 @@ class VirtualGoodsStore:
 
     def get_order(self, xianyu_order_id: str) -> dict[str, Any] | None:
         with closing(self._connect()) as conn, conn:
-            row = conn.execute("SELECT * FROM virtual_goods_orders WHERE xianyu_order_id=?", (xianyu_order_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM virtual_goods_orders WHERE xianyu_order_id=?", (xianyu_order_id,)
+            ).fetchone()
             return dict(row) if row else None

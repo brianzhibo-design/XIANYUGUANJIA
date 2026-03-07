@@ -1,22 +1,38 @@
-## What does this PR do?
+## 📋 描述
 
-Brief description of the change.
+<!-- 描述这个 PR 做了什么 -->
 
-## Related issue
+## 🔗 相关 Issue
 
-Closes #
+<!-- Fixes #(issue) -->
 
-## Type of change
+## 📝 变更类型
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Refactoring (no behavior change)
-- [ ] Documentation
-- [ ] CI / build
+- [ ] 🐛 Bug 修复
+- [ ] ✨ 新功能
+- [ ] 💥 破坏性变更
+- [ ] 📚 文档更新
+- [ ] 🔧 配置/工具
+- [ ] ♻️ 代码重构
+- [ ] ⚡ 性能优化
+- [ ] 🧪 测试
 
-## Checklist
+## ✅ 检查清单
 
-- [ ] I've read [CONTRIBUTING.md](../CONTRIBUTING.md)
-- [ ] Linting passes (`ruff check src/`)
-- [ ] Tests pass (`pytest tests/`)
-- [ ] I've updated docs if needed
+- [ ] 代码遵循项目编码规范（ruff lint 通过）
+- [ ] 添加了必要的测试
+- [ ] 更新了相关文档
+- [ ] 所有测试通过
+- [ ] 本地测试通过
+
+## 🧪 测试说明
+
+<!-- 描述你如何测试这些变更 -->
+
+## 📸 截图（如适用）
+
+<!-- 添加截图说明变更 -->
+
+## 💡 其他说明
+
+<!-- 任何其他需要说明的信息 -->

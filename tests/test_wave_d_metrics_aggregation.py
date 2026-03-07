@@ -6,7 +6,9 @@ from src.modules.virtual_goods.service import VirtualGoodsService
 
 
 def _svc(temp_dir) -> VirtualGoodsService:
-    return VirtualGoodsService(db_path=str(temp_dir / "wave_d_metrics_agg.db"), config={"xianguanjia": {"app_key": "ak", "app_secret": "as"}})
+    return VirtualGoodsService(
+        db_path=str(temp_dir / "wave_d_metrics_agg.db"), config={"xianguanjia": {"app_key": "ak", "app_secret": "as"}}
+    )
 
 
 def test_wave_d_aggregate_metrics_use_ops_tables_and_include_unknown_event_kind(temp_dir) -> None:
@@ -55,8 +57,13 @@ def test_wave_d_aggregate_metrics_use_ops_tables_and_include_unknown_event_kind(
 
     product = svc.get_product_operation_metrics(limit=50)
     assert product["metrics"]["source"] == "ops_item_daily_snapshot"
+    assert product["metrics"]["has_ops_snapshot_data"] is True
     assert product["data"]["summary"]["paid_order_count"] == 10
     assert product["data"]["summary"]["conversion_rate_pct"] == 10.0
+    assert product["data"]["field_state"]["paid_order_count"] == "available"
+    assert product["data"]["field_class"]["paid_order_count"] == "real_source"
+    assert product["data"]["optional_fields"]["views"]["state"] == "placeholder_disabled"
+    assert product["data"]["optional_fields"]["views"]["reason"] == "no_stable_source"
     assert product["metrics"]["unknown_event_kind"] == 1
 
     fulfillment = svc.get_fulfillment_efficiency_metrics(limit=50)
@@ -69,3 +76,18 @@ def test_wave_d_aggregate_metrics_use_ops_tables_and_include_unknown_event_kind(
     assert exceptions["metrics"]["source"] == "ops_exception_pool"
     assert exceptions["metrics"]["unknown_event_kind"] == 2
     assert exceptions["data"]["items"][0]["type"] == "UNKNOWN_EVENT_KIND"
+
+
+def test_wave_d_product_metrics_empty_snapshot_must_be_placeholder_not_fake_zero(temp_dir) -> None:
+    svc = _svc(temp_dir)
+
+    out = svc.get_product_operation_metrics(limit=50)
+
+    assert out["metrics"]["source"] == "ops_item_daily_snapshot"
+    assert out["metrics"]["has_ops_snapshot_data"] is False
+    assert out["data"]["summary"]["exposure_count"] is None
+    assert out["data"]["summary"]["conversion_rate_pct"] is None
+    assert out["data"]["field_state"]["exposure_count"] == "placeholder"
+    assert out["data"]["field_class"]["exposure_count"] == "placeholder_disabled"
+    assert out["data"]["optional_fields"]["sales"]["state"] == "placeholder_disabled"
+    assert out["data"]["optional_fields"]["sales"]["reason"] == "no_stable_source"

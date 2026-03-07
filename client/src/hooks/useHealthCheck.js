@@ -16,6 +16,7 @@ const EMPTY = {
 export default function useHealthCheck(enabled = true) {
   const [health, setHealth] = useState(EMPTY);
   const timerRef = useRef(null);
+  const mountedRef = useRef(true);
 
   const check = useCallback(async () => {
     const next = { loading: false, lastChecked: new Date().toISOString() };
@@ -24,6 +25,8 @@ export default function useHealthCheck(enabled = true) {
       nodeApi.get('/health/check'),
       pyApi.get('/api/health/check'),
     ]);
+
+    if (!mountedRef.current) return;
 
     if (nodeRes.status === 'fulfilled') {
       const d = nodeRes.value.data;
@@ -55,10 +58,14 @@ export default function useHealthCheck(enabled = true) {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     if (!enabled) return;
     check();
     timerRef.current = setInterval(check, POLL_INTERVAL);
-    return () => clearInterval(timerRef.current);
+    return () => {
+      mountedRef.current = false;
+      clearInterval(timerRef.current);
+    };
   }, [enabled, check]);
 
   return { ...health, refresh: check };

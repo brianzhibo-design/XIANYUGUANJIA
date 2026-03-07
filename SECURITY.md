@@ -1,32 +1,92 @@
-# Security Policy
+# 🛡️ 安全说明
 
-## Supported Versions
+## 概述
 
-| Version | Supported |
-|---------|-----------|
-| 4.x     | ✅ Active |
-| < 4.0   | ❌ EOL    |
+xianyu-openclaw 项目重视安全性。本文档说明已知的安全考虑因素和最佳实践。
 
-## Reporting a Vulnerability
+## ⚠️ 免责声明
 
-**Do NOT open a public issue for security vulnerabilities.**
+**本项目仅供学习和研究使用。** 使用本工具时：
 
-Please report security issues by emailing the maintainer or using [GitHub's private vulnerability reporting](https://github.com/G3niusYukki/xianyu-openclaw/security/advisories/new).
+1. 遵守闲鱼平台用户协议
+2. 控制操作频率，避免对平台造成压力
+3. 不用于任何违法违规用途
+4. 生产环境使用前请进行充分的测试
 
-Include:
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Suggested fix (if any)
+## 🔒 安全措施
 
-We will respond within 48 hours and provide a fix timeline.
+### 数据加密
 
-## Security Measures
+- **Cookie 加密**：使用 AES-256 (Fernet) 加密存储
+- **密钥管理**：支持环境变量或文件存储
+- **文件权限**：密钥文件自动设置 600 权限
 
-This project implements:
+### 配置安全
 
-- **AES-encrypted cookie storage** (`src/core/crypto.py`) — Xianyu cookies are encrypted at rest using Fernet symmetric encryption
-- **Parameterized SQL** — All database queries use parameterized statements to prevent SQL injection
-- **Rate limiting** — Configurable delays between operations to avoid platform detection
-- **No credential logging** — Cookies and API keys are never written to logs
-- **Environment-based secrets** — All sensitive values are loaded from environment variables, not config files
+```bash
+# 推荐：使用环境变量
+export ENCRYPTION_KEY="your-secure-key-here"
+
+# 不推荐：明文存储
+# 避免在代码中硬编码敏感信息
+```
+
+### 合规策略
+
+- **禁词过滤**：内置敏感词过滤机制
+- **频率限制**：账号/会话级请求限制
+- **审计日志**：完整操作记录
+- **内容检查**：发送前合规检查
+
+## 🚨 报告安全问题
+
+如果你发现安全漏洞，请：
+
+1. **不要** 在公开 Issue 中报告
+2. 发送邮件至：**haoyang056@gmail.com**
+3. 提供详细的复现步骤
+4. 等待修复后再公开
+
+## 📋 安全最佳实践
+
+### 生产环境
+
+- [ ] 使用强加密密钥
+- [ ] 启用审计日志
+- [ ] 配置飞书告警
+- [ ] 定期备份数据
+- [ ] 监控异常行为
+- [ ] 定期更新依赖
+
+### Cookie 管理
+
+- [ ] 定期更新 Cookie
+- [ ] 启用健康检查
+- [ ] 配置失效告警
+- [ ] 不要共享 Cookie
+
+### 运行安全
+
+- [ ] 使用非 root 用户运行
+- [ ] 限制容器资源
+- [ ] 配置防火墙规则
+- [ ] 启用日志轮转
+
+## 🔍 安全扫描
+
+项目使用以下安全工具：
+
+| 工具 | 用途 |
+|------|------|
+| Bandit | Python 代码安全扫描 |
+| Safety | 依赖漏洞检查 |
+| Codecov | 测试覆盖率 |
+| OpenSSF | 安全评分卡 |
+
+## 📞 联系方式
+
+如有安全问题，请联系项目维护者。
+
+---
+
+**记住：安全是每个人的责任。**

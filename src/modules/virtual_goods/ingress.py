@@ -53,7 +53,9 @@ class VirtualGoodsIngress:
     @classmethod
     def _map_external_ack(cls, internal_result: dict[str, Any]) -> dict[str, Any]:
         processed = bool(internal_result.get("processed"))
-        replay_already_processed = bool(internal_result.get("duplicate")) and str(internal_result.get("processed_state") or "") == "processed"
+        replay_already_processed = (
+            bool(internal_result.get("duplicate")) and str(internal_result.get("processed_state") or "") == "processed"
+        )
 
         if processed or replay_already_processed:
             return dict(cls._SUCCESS_ACK)

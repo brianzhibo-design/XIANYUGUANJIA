@@ -5,7 +5,9 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 
 const xianguanjiaRoutes = require('./routes/xianguanjia');
+const { loadXgjConfig, signRequest } = require('./routes/xianguanjia');
 const configRoutes = require('./routes/config');
+const axios = require('axios');
 
 const app = express();
 
@@ -46,27 +48,6 @@ app.get('/api/health/check', async (req, res) => {
   } catch (err) {
     result.python = { ok: false, message: err.code === 'ECONNREFUSED' ? '服务未启动' : (err.message || '连接失败') };
   }
-
-  // XGJ API connectivity
-  const { loadXgjConfig, signRequest } = (() => {
-    const crypto = require('crypto');
-    const fs = require('fs');
-    const path = require('path');
-    const CONFIG_FILE = path.join(__dirname, '../data/system_config.json');
-    function md5(str) { return crypto.createHash('md5').update(str, 'utf8').digest('hex'); }
-    function sign(appKey, appSecret, body, ts) { return md5(`${appKey},${md5(body || '')},${ts},${appSecret}`); }
-    function load() {
-      try {
-        if (fs.existsSync(CONFIG_FILE)) {
-          const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-          const xgj = config.xianguanjia || {};
-          return { appKey: xgj.app_key || process.env.XGJ_APP_KEY || '', appSecret: xgj.app_secret || process.env.XGJ_APP_SECRET || '', baseUrl: xgj.base_url || process.env.XGJ_BASE_URL || 'https://open.goofish.pro' };
-        }
-      } catch {}
-      return { appKey: process.env.XGJ_APP_KEY || '', appSecret: process.env.XGJ_APP_SECRET || '', baseUrl: process.env.XGJ_BASE_URL || 'https://open.goofish.pro' };
-    }
-    return { loadXgjConfig: load, signRequest: sign };
-  })();
 
   try {
     const cfg = loadXgjConfig();

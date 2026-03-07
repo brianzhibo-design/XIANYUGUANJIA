@@ -125,3 +125,5 @@ router.post('/order/receive', handleWebhook);
 router.post('/product/receive', handleWebhook);
 
 module.exports = router;
+module.exports.loadXgjConfig = loadXgjConfig;
+module.exports.signRequest = signRequest;

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable
-
+from collections.abc import Callable
+from typing import Any
 
 KNOWN_EVENT_KINDS = {"order", "refund", "voucher", "coupon", "code"}
 
@@ -69,7 +69,7 @@ class VirtualGoodsScheduler:
                     result["errors"].append(str(out.get("error") or "timeout_resolve_failed"))
                 else:
                     metrics["resolved"] += 1
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 metrics["failed"] += 1
                 result["errors"].append(str(exc))
 
@@ -117,7 +117,7 @@ class VirtualGoodsScheduler:
                     result["errors"].append(str(out.get("error") or "callback_replay_failed"))
                 else:
                     metrics["succeeded"] += 1
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 metrics["failed"] += 1
                 result["errors"].append(str(exc))
 
@@ -153,7 +153,7 @@ class VirtualGoodsScheduler:
                     result["errors"].append(str(out.get("error") or "manual_observe_failed"))
                 else:
                     metrics["observed"] += 1
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 metrics["failed"] += 1
                 result["errors"].append(str(exc))
 

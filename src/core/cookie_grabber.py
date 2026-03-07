@@ -113,7 +113,7 @@ class CookieGrabber:
 
     async def _grab_from_browser_db(self) -> str | None:
         """Level 1：从本地浏览器 Cookie 数据库读取。"""
-        self._update(GrabStage.READING_DB, "正在读取浏览器 Cookie...", "如果弹出"钥匙串访问"弹窗，请点击"允许"", 10)
+        self._update(GrabStage.READING_DB, "正在读取浏览器 Cookie...", '如果弹出"钥匙串访问"弹窗，请点击"允许"', 10)
 
         browsers = [
             ("Chrome", self._read_chrome),

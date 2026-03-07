@@ -104,9 +104,11 @@ class PriceExecutionService:
         strategy_meta: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         strategy_meta = dict(strategy_meta or {})
-        resolved_scope = str(
-            price_scope or strategy_meta.get("price_scope") or ("order" if str(order_id).strip() else "product")
-        ).strip().lower()
+        resolved_scope = (
+            str(price_scope or strategy_meta.get("price_scope") or ("order" if str(order_id).strip() else "product"))
+            .strip()
+            .lower()
+        )
         if resolved_scope not in {"order", "product"}:
             raise ValueError(f"Unsupported price_scope: {resolved_scope}")
         if resolved_scope == "order" and not str(order_id).strip():
@@ -177,9 +179,7 @@ class PriceExecutionService:
         except (TypeError, ValueError):
             return await self._await_if_needed(func(**variants[0]))
 
-        accepts_var_kwargs = any(
-            param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
-        )
+        accepts_var_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())
         parameter_names = set(signature.parameters)
 
         for kwargs in variants:

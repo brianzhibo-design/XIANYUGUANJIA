@@ -69,10 +69,13 @@ class Config:
             self._load_env_file()
             self._resolve_env_variables()
             self._set_defaults()
+            self._apply_env_overrides()
         else:
             if config_path:
                 self.logger.error(f"指定的配置文件不存在: {config_path}，使用默认配置")
             self._set_defaults()
+            self._load_env_file()
+            self._apply_env_overrides()
 
     def _find_config_file(self) -> str | None:
         """
@@ -171,7 +174,7 @@ class Config:
                 "logs_dir": "logs",
                 "runtime": "auto",
             },
-            "openclaw": {
+            "browser_runtime": {
                 "host": "localhost",
                 "port": 9222,
                 "timeout": 30,
@@ -296,18 +299,72 @@ class Config:
                     if key not in self._config[section]:
                         self._config[section][key] = value
 
+        if "browser_runtime" not in self._config and "openclaw" in self._config:
+            self._config["browser_runtime"] = dict(self._config["openclaw"])
+        if "openclaw" not in self._config and "browser_runtime" in self._config:
+            self._config["openclaw"] = dict(self._config["browser_runtime"])
+
+    def _apply_env_overrides(self) -> None:
+        """将常用运行时环境变量映射到结构化配置。"""
+
+        def parse_value(raw: str, value_type: str) -> Any:
+            text = str(raw)
+            if value_type == "bool":
+                return text.strip().lower() in {"1", "true", "yes", "on", "enabled"}
+            if value_type == "int":
+                try:
+                    return int(text.strip())
+                except ValueError:
+                    return None
+            if value_type == "float":
+                try:
+                    return float(text.strip())
+                except ValueError:
+                    return None
+            return text
+
+        overrides = [
+            ("app", "runtime", "APP_RUNTIME", "str"),
+            ("ai", "provider", "AI_PROVIDER", "str"),
+            ("ai", "api_key", "AI_API_KEY", "str"),
+            ("ai", "base_url", "AI_BASE_URL", "str"),
+            ("ai", "model", "AI_MODEL", "str"),
+            ("ai", "temperature", "AI_TEMPERATURE", "float"),
+            ("messages", "enabled", "MESSAGES_ENABLED", "bool"),
+            ("messages", "transport", "MESSAGES_TRANSPORT", "str"),
+            ("messages", "default_reply", "MESSAGES_DEFAULT_REPLY", "str"),
+            ("messages", "virtual_default_reply", "MESSAGES_VIRTUAL_DEFAULT_REPLY", "str"),
+            ("messages", "max_replies_per_run", "MESSAGES_MAX_REPLIES_PER_RUN", "int"),
+        ]
+
+        for section, key, env_key, value_type in overrides:
+            raw = os.getenv(env_key)
+            if raw in {None, ""}:
+                continue
+            value = parse_value(raw, value_type)
+            if value is None:
+                continue
+            section_payload = self._config.setdefault(section, {})
+            if not isinstance(section_payload, dict):
+                section_payload = {}
+                self._config[section] = section_payload
+            section_payload[key] = value
+
     def get(self, key: str, default: Any = None) -> Any:
         """
         获取配置值
 
         Args:
-            key: 配置键，支持点号分隔的路径，如 "openclaw.host"
+            key: 配置键，支持点号分隔的路径，如 "browser_runtime.host"
             default: 默认值
 
         Returns:
             配置值
         """
+        alias_map = {"openclaw": "browser_runtime"}
         keys = key.split(".")
+        if keys and keys[0] in alias_map:
+            keys[0] = alias_map[keys[0]]
         value = self._config
 
         for k in keys:
@@ -329,6 +386,10 @@ class Config:
         Returns:
             配置段落字典
         """
+        if section == "openclaw":
+            section = "browser_runtime"
+        if section == "browser_runtime" and section not in self._config and "openclaw" in self._config:
+            return self._config.get("openclaw", default or {})
         return self._config.get(section, default or {})
 
     @property
@@ -338,8 +399,13 @@ class Config:
 
     @property
     def openclaw(self) -> dict[str, Any]:
-        """OpenClaw配置"""
-        return self.get_section("openclaw")
+        """兼容旧字段名。"""
+        return self.get_section("browser_runtime")
+
+    @property
+    def browser_runtime(self) -> dict[str, Any]:
+        """浏览器运行时配置"""
+        return self.get_section("browser_runtime")
 
     @property
     def ai(self) -> dict[str, Any]:

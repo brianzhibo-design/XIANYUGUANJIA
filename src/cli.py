@@ -1,7 +1,7 @@
 """
 闲鱼自动化工具 CLI
 
-供 OpenClaw Agent 通过 bash tool 调用的命令行接口。
+供自动化脚本、测试和运维任务调用的命令行接口。
 所有命令输出结构化 JSON，方便 Agent 解析结果。
 
 用法:
@@ -42,6 +42,7 @@ def _json_out(data: Any) -> None:
 
 
 _MODULE_TARGETS = ("presales", "operations", "aftersales")
+_EXPECTED_PROJECT_ROOT = "/Users/peterzhang/xianyu-openclaw"
 
 _BENCH_QUOTE_MESSAGES = [
     "安徽到上海 1kg 圆通多少钱",
@@ -203,14 +204,14 @@ def _module_check_summary(target: str, doctor_report: dict[str, Any]) -> dict[st
     checks = doctor_report.get("checks", [])
     check_map = {str(item.get("name", "")): item for item in checks}
 
-    required_names = {"Python版本", "数据库", "配置文件", "闲鱼Cookie"}
+    required_names = {"Python版本", "数据库", "配置文件", "闲鱼Cookie", "模块解释器锁定"}
     if target == "presales":
         required_names.add("消息首响SLA")
 
     required_checks = [check_map[name] for name in required_names if name in check_map]
     blockers = [item for item in required_checks if not bool(item.get("passed", False))]
 
-    gateway_item = check_map.get("OpenClaw Gateway")
+    gateway_item = check_map.get("Legacy Browser Gateway") or check_map.get("OpenClaw Gateway")
     lite_item = check_map.get("Lite 浏览器驱动")
 
     if uses_ws_only:
@@ -240,9 +241,9 @@ def _module_check_summary(target: str, doctor_report: dict[str, Any]) -> dict[st
                     "name": "浏览器运行时",
                     "passed": False,
                     "critical": True,
-                    "message": "auto 模式下 OpenClaw Gateway 与 Lite 驱动均不可用",
+                    "message": "auto 模式下 legacy browser gateway 与 Lite 驱动均不可用",
                     "suggestion": (
-                        "启动 Gateway（docker compose up -d）或安装 Playwright"
+                        "启动 legacy gateway（docker compose up -d）或安装 Playwright"
                         "（pip install playwright && playwright install chromium）。"
                     ),
                     "meta": {"runtime": runtime},
@@ -262,6 +263,21 @@ def _module_check_summary(target: str, doctor_report: dict[str, Any]) -> dict[st
 
 
 _MODULE_RUNTIME_DIR = Path("data/module_runtime")
+
+
+def _resolve_python_exec() -> str:
+    configured = str(os.getenv("OPENCLAW_PYTHON_EXEC", "")).strip() or str(os.getenv("PYTHON_EXEC", "")).strip()
+    if configured:
+        candidate = Path(configured).expanduser()
+        if not candidate.is_absolute():
+            candidate = (Path.cwd() / candidate).resolve()
+        try:
+            if candidate.exists() and candidate.is_file():
+                return str(candidate)
+        except OSError:
+            pass
+    # Use abspath for cross-platform compatibility (avoids WindowsPath issue on Linux)
+    return os.path.abspath(sys.executable)
 
 
 def _module_state_path(target: str) -> Path:
@@ -300,8 +316,9 @@ def _process_alive(pid: int) -> bool:
 
 
 def _build_module_start_command(target: str, args: argparse.Namespace) -> list[str]:
+    python_exec = _resolve_python_exec()
     cmd = [
-        sys.executable,
+        python_exec,
         "-m",
         "src.cli",
         "module",
@@ -365,7 +382,11 @@ def _start_background_module(target: str, args: argparse.Namespace) -> dict[str,
     log_file = _module_log_path(target)
     log_file.parent.mkdir(parents=True, exist_ok=True)
     handle = open(log_file, "a", encoding="utf-8")
-    handle.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] start target={target} cmd={' '.join(cmd)}\n")
+    python_exec = cmd[0] if cmd else _resolve_python_exec()
+    handle.write(
+        f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] start target={target} "
+        f"python_exec={python_exec} cmd={' '.join(cmd)}\n"
+    )
     handle.flush()
 
     popen_kwargs: dict[str, Any] = {
@@ -383,6 +404,7 @@ def _start_background_module(target: str, args: argparse.Namespace) -> dict[str,
     state = {
         "target": target,
         "pid": proc.pid,
+        "python_exec": python_exec,
         "log_file": str(log_file),
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "command": cmd,
@@ -927,12 +949,21 @@ async def cmd_doctor(args: argparse.Namespace) -> None:
 
     report = run_doctor(skip_gateway=bool(args.skip_gateway), skip_quote=bool(args.skip_quote))
     strict = bool(args.strict)
-    strict_ready = bool(report.get("ready", False)) and report.get("summary", {}).get("warning_failed", 0) == 0
+    project_root = str(Path.cwd().resolve())
+    project_root_match = project_root == _EXPECTED_PROJECT_ROOT
+    strict_ready = (
+        bool(report.get("ready", False))
+        and report.get("summary", {}).get("warning_failed", 0) == 0
+        and project_root_match
+    )
 
     output = {
         **report,
         "strict": strict,
         "strict_ready": strict_ready,
+        "project_root": project_root,
+        "expected_project_root": _EXPECTED_PROJECT_ROOT,
+        "project_root_match": project_root_match,
     }
     _json_out(output)
 
@@ -1637,7 +1668,13 @@ async def cmd_virtual_goods(args: argparse.Namespace) -> None:
             _json_out({"ok": False, "action": f"virtual_goods_{method_name}", "error": "service_method_not_available"})
             return
         result = runner(max_events=max(int(args.max_events or 20), 1))
-        _json_out({"ok": True, "action": f"virtual_goods_{method_name}", **(result if isinstance(result, dict) else {"result": result})})
+        _json_out(
+            {
+                "ok": True,
+                "action": f"virtual_goods_{method_name}",
+                **(result if isinstance(result, dict) else {"result": result}),
+            }
+        )
         return
 
     if action == "replay":
@@ -1649,7 +1686,13 @@ async def cmd_virtual_goods(args: argparse.Namespace) -> None:
             _json_out({"ok": False, "action": "virtual_goods_replay", "error": "service_method_not_available"})
             return
         result = runner(event_id=args.event_id, dedupe_key=args.dedupe_key)
-        _json_out({"ok": True, "action": "virtual_goods_replay", **(result if isinstance(result, dict) else {"result": result})})
+        _json_out(
+            {
+                "ok": True,
+                "action": "virtual_goods_replay",
+                **(result if isinstance(result, dict) else {"result": result}),
+            }
+        )
         return
 
     if action == "manual":
@@ -1696,7 +1739,13 @@ async def cmd_virtual_goods(args: argparse.Namespace) -> None:
             _json_out({"ok": False, "action": "virtual_goods_inspect", "error": "service_method_not_available"})
             return
         result = runner(event_id=args.event_id, order_id=args.order_id)
-        _json_out({"ok": True, "action": "virtual_goods_inspect", **(result if isinstance(result, dict) else {"result": result})})
+        _json_out(
+            {
+                "ok": True,
+                "action": "virtual_goods_inspect",
+                **(result if isinstance(result, dict) else {"result": result}),
+            }
+        )
         return
 
     _json_out({"ok": False, "action": "virtual_goods", "error": f"Unknown virtual-goods action: {action}"})
@@ -1705,7 +1754,7 @@ async def cmd_virtual_goods(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="xianyu-cli",
-        description="闲鱼自动化工具 CLI — 供 OpenClaw Agent 调用",
+        description="闲鱼自动化工具 CLI",
     )
     sub = parser.add_subparsers(dest="command", help="可用命令")
 
@@ -1839,7 +1888,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # doctor
     p = sub.add_parser("doctor", help="运行系统自检并输出修复建议")
-    p.add_argument("--skip-gateway", action="store_true", help="跳过 OpenClaw Gateway 连通性检查")
+    p.add_argument("--skip-gateway", action="store_true", help="跳过 Legacy Gateway 连通性检查")
     p.add_argument("--skip-quote", action="store_true", help="跳过自动报价成本源检查")
     p.add_argument("--strict", action="store_true", help="警告也按失败处理（返回非0）")
 

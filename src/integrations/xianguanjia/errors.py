@@ -89,12 +89,12 @@ _ERROR_CODE_MAPPING: dict[str, tuple[XianGuanJiaErrorType, bool]] = {
 
 _NETWORK_ERRNO_SET: frozenset[int] = frozenset(
     {
-        32,   # EPIPE
-        54,   # ECONNRESET (macOS)
-        60,   # ETIMEDOUT (macOS)
-        61,   # ECONNREFUSED (macOS)
-        64,   # EHOSTDOWN
-        65,   # EHOSTUNREACH
+        32,  # EPIPE
+        54,  # ECONNRESET (macOS)
+        60,  # ETIMEDOUT (macOS)
+        61,  # ECONNREFUSED (macOS)
+        64,  # EHOSTDOWN
+        65,  # EHOSTUNREACH
         101,  # ENETUNREACH
         104,  # ECONNRESET (linux)
         110,  # ETIMEDOUT (linux)
@@ -121,7 +121,7 @@ def _normalize_error_type(error_type: XianGuanJiaErrorType | str | None) -> Xian
 def _is_timeout_error(exc: BaseException) -> bool:
     timeout_types: tuple[type[BaseException], ...] = (TimeoutError, socket.timeout)
     if httpx is not None:
-        timeout_types = timeout_types + (httpx.TimeoutException,)
+        timeout_types = (*timeout_types, httpx.TimeoutException)
     return isinstance(exc, timeout_types)
 
 
@@ -146,7 +146,7 @@ def _is_transport_error(exc: BaseException) -> bool:
         BrokenPipeError,
     )
     if httpx is not None:
-        transport_types = transport_types + (httpx.TransportError,)
+        transport_types = (*transport_types, httpx.TransportError)
 
     if isinstance(exc, transport_types):
         return True
@@ -232,9 +232,11 @@ def map_error(
         text = "XianGuanJia error"
 
     exc_cls: type[XianGuanJiaError]
-    if normalized in _RETRYABLE_ERROR_TYPES or (
-        http_status is not None and int(http_status) in _RETRYABLE_HTTP_STATUS
-    ) or retryable_from_code is True:
+    if (
+        normalized in _RETRYABLE_ERROR_TYPES
+        or (http_status is not None and int(http_status) in _RETRYABLE_HTTP_STATUS)
+        or retryable_from_code is True
+    ):
         exc_cls = XianGuanJiaRetryableError
     elif retryable_from_code is False:
         exc_cls = XianGuanJiaNonRetryableError
