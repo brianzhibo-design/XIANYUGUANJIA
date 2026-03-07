@@ -243,7 +243,17 @@ class WorkflowStore:
                     session_id,
                 ),
             )
-            return cur.rowcount > 0
+            changed = cur.rowcount > 0
+
+        if changed and enabled:
+            from src.core.notify import send_system_notification
+            send_system_notification(
+                f"【闲鱼自动化】⚠️ 会话已转人工\n"
+                f"会话: {session_id}\n"
+                f"AI 自动回复已暂停，请及时处理该会话。",
+                event="manual_takeover",
+            )
+        return changed
 
     def transition_state(
         self,

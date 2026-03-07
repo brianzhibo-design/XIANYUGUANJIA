@@ -622,6 +622,16 @@ class OrderFulfillmentService:
                     detail["shipping_info"] = shipping_ctx
                 if api_error:
                     detail["api_error"] = api_error
+                    from src.core.notify import send_system_notification
+                    item_title = (order.get("item_title") or order_id)[:30]
+                    send_system_notification(
+                        f"【闲鱼自动化】⚠️ 发货失败\n"
+                        f"订单: {order_id}\n"
+                        f"商品: {item_title}\n"
+                        f"错误: {api_error[:100]}\n"
+                        f"已降级为手动发货，请尽快处理。",
+                        event="ship_fail",
+                    )
             next_status = "shipping" if detail.get("channel") == "xianguanjia_api" else "processing"
 
         with self._connect() as conn:
@@ -750,6 +760,17 @@ class OrderFulfillmentService:
                 "after_sales",
                 {"issue_type": issue_type, "reply": reply},
             )
+
+        from src.core.notify import send_system_notification
+        item_title = (order.get("item_title") or order_id)[:30]
+        send_system_notification(
+            f"【闲鱼自动化】⚠️ 售后介入\n"
+            f"订单: {order_id}\n"
+            f"商品: {item_title}\n"
+            f"类型: {issue_type}\n"
+            f"请尽快在闲鱼/闲管家处理该售后问题。",
+            event="after_sales",
+        )
 
         return {
             "order_id": order_id,

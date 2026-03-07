@@ -375,6 +375,18 @@ class VirtualGoodsCallbackService:
                 callback_status="processed",
                 fulfillment_status=fulfillment_status,
             )
+
+            if next_status == "delivery_failed":
+                from src.core.notify import send_system_notification
+                product_id = self._pick(claimed_payload, "xianyu_product_id", "product_id", "item_id") or ""
+                send_system_notification(
+                    f"【闲鱼自动化】⚠️ 虚拟商品发码失败\n"
+                    f"订单: {claimed_order_id}\n"
+                    f"商品ID: {product_id}\n"
+                    f"请检查库存和发码逻辑，手动补发。",
+                    event="order_fail",
+                )
+
             self.store.mark_callback_processed(claimed_id)
             return {
                 "ok": True,

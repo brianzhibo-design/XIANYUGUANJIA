@@ -6816,6 +6816,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send_json(payload, status=200 if payload.get("success") else 400)
                 return
 
+            if path == "/api/cookie/validate":
+                body = self._read_json_body()
+                cookie_text = str(body.get("cookie") or body.get("text") or "").strip()
+                if not cookie_text:
+                    self._send_json({"ok": False, "grade": "F", "message": "Cookie 不能为空"}, status=400)
+                    return
+                diagnosis = self.mimic_ops.diagnose_cookie(cookie_text)
+                grade = diagnosis.get("grade", "F")
+                self._send_json({
+                    "ok": grade in ("A", "B"),
+                    "grade": grade,
+                    "message": diagnosis.get("message", ""),
+                    "actions": diagnosis.get("actions", []),
+                    "required_present": diagnosis.get("required_present", []),
+                    "required_missing": diagnosis.get("required_missing", []),
+                    "cookie_items": diagnosis.get("cookie_items", 0),
+                })
+                return
+
             if path == "/api/import-routes":
                 try:
                     files = self._read_multipart_files()

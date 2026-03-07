@@ -140,6 +140,14 @@ class CookieGrabber:
 
         self._update(GrabStage.FAILED, "Cookie 获取失败",
                      "所有自动方式均未成功，请手动粘贴 Cookie（F12 → Network → 复制 Cookie 请求头）")
+
+        from src.core.notify import send_system_notification
+        send_system_notification(
+            "【闲鱼自动化】⚠️ Cookie 自动获取全部失败\n"
+            "三级策略（浏览器数据库 → Chrome Profile → QR 扫码登录）均未成功。\n"
+            "请尽快手动打开 Dashboard 更新 Cookie，否则消息自动回复将中断。",
+            event="cookie_expire",
+        )
         return GrabResult(ok=False, error="所有获取方式均失败")
 
     # ------------------------------------------------------------------
@@ -722,61 +730,9 @@ class CookieAutoRefresher:
                 logger.error(f"Cookie 刷新回调失败: {exc}")
 
     @staticmethod
-    def _load_notify_config() -> dict[str, Any]:
-        """从 system_config.json 读取通知配置。"""
-        import json
-        config_path = Path(__file__).resolve().parents[2] / "data" / "system_config.json"
-        try:
-            if config_path.exists():
-                data = json.loads(config_path.read_text(encoding="utf-8"))
-                return data.get("notifications", {})
-        except Exception:
-            pass
-        return {}
-
-    def _send_notification(self, title: str, body: str, *, event: str = "") -> None:
-        """根据配置向飞书/企业微信发送通知。"""
-        cfg = self._load_notify_config()
-        if not cfg:
-            return
-
-        event_toggle_map = {
-            "cookie_expire": "notify_cookie_expire",
-            "cookie_refresh": "notify_cookie_refresh",
-            "sla_alert": "notify_sla_alert",
-            "order_fail": "notify_order_fail",
-        }
-        toggle_key = event_toggle_map.get(event, "")
-        if toggle_key and not cfg.get(toggle_key, True):
-            return
-
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(self._do_send(cfg, body))
-        except Exception as exc:
-            logger.error(f"发送告警通知失败: {exc}")
-        finally:
-            loop.close()
-
-    @staticmethod
-    async def _do_send(cfg: dict[str, Any], text: str) -> None:
-        if cfg.get("feishu_enabled") and cfg.get("feishu_webhook"):
-            from src.modules.messages.notifications import FeishuNotifier
-            notifier = FeishuNotifier(cfg["feishu_webhook"])
-            ok = await notifier.send_text(text)
-            if ok:
-                logger.info("告警通知已发送至飞书")
-            else:
-                logger.warning("飞书通知发送失败")
-
-        if cfg.get("wechat_enabled") and cfg.get("wechat_webhook"):
-            from src.modules.messages.notifications import WeChatNotifier
-            notifier = WeChatNotifier(cfg["wechat_webhook"])
-            ok = await notifier.send_text(text)
-            if ok:
-                logger.info("告警通知已发送至企业微信")
-            else:
-                logger.warning("企业微信通知发送失败")
+    def _send_notification(title: str, body: str, *, event: str = "") -> None:
+        from src.core.notify import send_system_notification
+        send_system_notification(body, event=event)
 
     @staticmethod
     def _check_health(cookie_text: str) -> tuple[bool, str]:

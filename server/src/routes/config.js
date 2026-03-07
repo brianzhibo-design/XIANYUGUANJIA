@@ -94,10 +94,10 @@ router.get('/sections', (req, res) => {
         key: 'ai',
         name: 'AI 配置',
         fields: [
-          { key: 'provider', label: '提供商', type: 'select', options: ['qwen', 'glm', 'deepseek'], default: 'qwen' },
+          { key: 'provider', label: '提供商', type: 'select', options: ['qwen', 'glm', 'deepseek', 'openai', 'moonshot', 'yi'], default: 'qwen' },
           { key: 'api_key', label: 'API Key', type: 'password', required: true },
           { key: 'model', label: '模型', type: 'text', default: 'qwen-plus-latest' },
-          { key: 'base_url', label: 'API 地址', type: 'text' },
+          { key: 'base_url', label: 'API 地址', type: 'text', placeholder: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
         ],
       },
       {
@@ -172,6 +172,9 @@ router.get('/sections', (req, res) => {
           { key: 'notify_cookie_refresh', label: 'Cookie 刷新成功通知', type: 'toggle', default: true },
           { key: 'notify_sla_alert', label: 'SLA 异常告警', type: 'toggle', default: true },
           { key: 'notify_order_fail', label: '订单异常告警', type: 'toggle', default: true },
+          { key: 'notify_after_sales', label: '售后介入告警', type: 'toggle', default: true },
+          { key: 'notify_ship_fail', label: '发货失败告警', type: 'toggle', default: true },
+          { key: 'notify_manual_takeover', label: '人工接管告警', type: 'toggle', default: true },
         ],
       },
     ],
