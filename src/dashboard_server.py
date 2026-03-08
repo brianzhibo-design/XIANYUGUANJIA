@@ -96,6 +96,58 @@ def _extract_json_payload(text: str) -> Any | None:
     return None
 
 
+_YAML_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "config.yaml"
+_YAML_EXAMPLE_PATH = Path(__file__).resolve().parents[1] / "config" / "config.example.yaml"
+
+_AUTO_REPLY_TO_YAML_KEYS = {
+    "default_reply": "default_reply",
+    "virtual_default_reply": "virtual_default_reply",
+    "enabled": "enabled",
+    "ai_intent_enabled": "ai_intent_enabled",
+}
+
+
+def _sync_system_config_to_yaml(sys_config: dict[str, Any]) -> None:
+    """Write relevant system_config fields back to config.yaml so the runtime picks them up."""
+    yaml_path = _YAML_CONFIG_PATH if _YAML_CONFIG_PATH.exists() else _YAML_EXAMPLE_PATH
+    if not yaml_path.exists():
+        return
+    try:
+        raw = yaml_path.read_text(encoding="utf-8")
+        cfg = yaml.safe_load(raw) or {}
+    except Exception:
+        return
+
+    changed = False
+
+    ar = sys_config.get("auto_reply")
+    if isinstance(ar, dict):
+        msgs = cfg.setdefault("messages", {})
+        for src_key, dst_key in _AUTO_REPLY_TO_YAML_KEYS.items():
+            if src_key in ar:
+                msgs[dst_key] = ar[src_key]
+                changed = True
+
+    for section_key in ("pricing", "delivery"):
+        sec = sys_config.get(section_key)
+        if isinstance(sec, dict):
+            cfg.setdefault(section_key, {}).update(sec)
+            changed = True
+
+    store = sys_config.get("store")
+    if isinstance(store, dict) and "category" in store:
+        cfg.setdefault("store", {})["category"] = store["category"]
+        changed = True
+
+    if changed:
+        try:
+            tmp = yaml_path.with_suffix(".tmp")
+            tmp.write_text(yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False), encoding="utf-8")
+            tmp.rename(yaml_path)
+        except Exception as exc:
+            logger.warning("Failed to sync config to YAML: %s", exc)
+
+
 DEFAULT_WEIGHT_TEMPLATE = (
     "{origin_province}到{dest_province} {billing_weight}kg 首单价格\n"
     "{courier}: {price} 元\n"
@@ -438,13 +490,22 @@ class MimicOps:
             db_path=str(self.project_root / "data" / "orders.db"),
             config=self._xianguanjia_service_config(),
         )
+
+        sys_cfg = _read_system_config()
+        delivery_cfg = sys_cfg.get("delivery", {})
+        auto_delivery_override = delivery_cfg.get("auto_delivery")
+        if auto_delivery_override is not None:
+            use_auto = bool(auto_delivery_override) and settings["configured"]
+        else:
+            use_auto = bool(
+                settings["configured"] and settings["auto_ship_enabled"] and settings["auto_ship_on_paid"]
+            )
+
         try:
             result = service.process_callback(
                 data,
                 dry_run=self._to_bool(data.get("dry_run"), default=False),
-                auto_deliver=bool(
-                    settings["configured"] and settings["auto_ship_enabled"] and settings["auto_ship_on_paid"]
-                ),
+                auto_deliver=use_auto,
             )
         except Exception as exc:
             return _error_payload(f"回调处理失败: {exc}", code="XGJ_CALLBACK_FAILED")
@@ -453,6 +514,7 @@ class MimicOps:
             "configured": settings["configured"],
             "auto_ship_enabled": settings["auto_ship_enabled"],
             "auto_ship_on_paid": settings["auto_ship_on_paid"],
+            "auto_delivery_source": "system_config" if auto_delivery_override is not None else "env",
         }
         return result
 
@@ -3711,6 +3773,71 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     self._send_json(asdict(s))
                 return
 
+            # ---------- Setup Progress ----------
+            if path == "/api/config/setup-progress":
+                cfg = _read_system_config()
+                xgj = cfg.get("xianguanjia", {})
+                ai_cfg = cfg.get("ai", {})
+                oss_cfg = cfg.get("oss", {})
+                store = cfg.get("store", {})
+                ar = cfg.get("auto_reply", {})
+                notif = cfg.get("notifications", {})
+
+                def _has_real(d: dict, key: str) -> bool:
+                    v = d.get(key, "")
+                    return bool(v) and "****" not in str(v)
+
+                checks = {
+                    "store_category": bool(store.get("category")),
+                    "xianguanjia": _has_real(xgj, "app_key"),
+                    "ai": _has_real(ai_cfg, "api_key"),
+                    "oss": _has_real(oss_cfg, "access_key_id"),
+                    "auto_reply": bool(ar.get("default_reply")),
+                    "notifications": bool(notif.get("feishu_enabled") or notif.get("wechat_enabled")),
+                }
+                done = sum(1 for v in checks.values() if v)
+                total = len(checks)
+                self._send_json({
+                    "ok": True,
+                    **checks,
+                    "overall_percent": int(done / total * 100) if total else 0,
+                })
+                return
+
+            # ---------- Auto-Publish Scheduler ----------
+            if path == "/api/auto-publish/status":
+                from src.modules.listing.scheduler import AutoPublishScheduler
+                sched = AutoPublishScheduler()
+                self._send_json({"ok": True, **sched.get_status()})
+                return
+
+            # ---------- Brand Assets ----------
+            if path == "/api/brand-assets":
+                from src.modules.listing.brand_assets import BrandAssetManager
+                mgr = BrandAssetManager()
+                cat_filter = parse_qs(parsed.query).get("category", [None])[0]
+                self._send_json({"ok": True, "assets": mgr.list_assets(cat_filter)})
+                return
+
+            if path.startswith("/api/brand-assets/file/"):
+                fname = path.split("/api/brand-assets/file/", 1)[1]
+                if not fname or ".." in fname or "/" in fname:
+                    self._send_json(_error_payload("Invalid filename"), status=400)
+                    return
+                fpath = Path("data/brand_assets") / fname
+                if fpath.is_file():
+                    ct, _ = mimetypes.guess_type(str(fpath))
+                    data = fpath.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", ct or "application/octet-stream")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.end_headers()
+                    self.wfile.write(data)
+                else:
+                    self._send_json(_error_payload("File not found", code="NOT_FOUND"), status=404)
+                return
+
             # ---------- Config CRUD (migrated from Node.js) ----------
             if path == "/api/config":
                 self._send_json({"ok": True, "config": _read_system_config()})
@@ -3780,9 +3907,30 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         clean[k] = v
                     current[section] = {**(current.get(section) or {}), **clean}
                 _write_system_config(current)
+                _sync_system_config_to_yaml(current)
                 self._send_json({"ok": True, "message": "Configuration updated", "config": current})
                 return
 
+            self._send_json(_error_payload("Not Found", code="NOT_FOUND"), status=404)
+        except Exception as e:
+            self._send_json(_error_payload(str(e), code="INTERNAL_ERROR"), status=500)
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+        try:
+            if path.startswith("/api/brand-assets/"):
+                asset_id = path.split("/api/brand-assets/", 1)[1].strip("/")
+                if not asset_id:
+                    self._send_json(_error_payload("Missing asset id"), status=400)
+                    return
+                from src.modules.listing.brand_assets import BrandAssetManager
+                mgr = BrandAssetManager()
+                if mgr.delete_asset(asset_id):
+                    self._send_json({"ok": True, "message": "Asset deleted"})
+                else:
+                    self._send_json(_error_payload("Asset not found", code="NOT_FOUND"), status=404)
+                return
             self._send_json(_error_payload("Not Found", code="NOT_FOUND"), status=404)
         except Exception as e:
             self._send_json(_error_payload(str(e), code="INTERNAL_ERROR"), status=500)
@@ -3792,6 +3940,95 @@ class DashboardHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         try:
+            if path == "/api/orders/remind":
+                body = self._read_json_body()
+                order_id = str(body.get("order_id", "")).strip()
+                session_id = str(body.get("session_id", "")).strip()
+                if not order_id:
+                    self._send_json(_error_payload("Missing order_id"), status=400)
+                    return
+
+                from src.modules.followup.service import FollowUpEngine
+                engine = FollowUpEngine.from_system_config()
+
+                if not getattr(engine, "_reminder_enabled", True):
+                    self._send_json({"ok": False, "error": "催单功能未启用", "reason": "disabled"})
+                    return
+
+                use_session = session_id or order_id
+                result = engine.process_unpaid_order(
+                    session_id=use_session,
+                    order_id=order_id,
+                )
+
+                if result.get("eligible") and session_id:
+                    template_text = result.get("template_text", "")
+                    if template_text:
+                        try:
+                            import asyncio
+                            from src.modules.messages.service import MessagesService
+                            msgs_cfg = {}
+                            try:
+                                from src.core.config import get_config
+                                msgs_cfg = get_config().messages
+                            except Exception:
+                                pass
+                            svc = MessagesService(msgs_cfg)
+                            loop = asyncio.new_event_loop()
+                            sent = loop.run_until_complete(
+                                svc.reply_to_session(session_id, template_text)
+                            )
+                            loop.close()
+                            result["message_sent"] = sent
+                        except Exception as send_err:
+                            result["message_sent"] = False
+                            result["send_error"] = str(send_err)
+                elif result.get("eligible") and not session_id:
+                    result["message_sent"] = False
+                    result["send_note"] = "no_session_id_provided"
+
+                self._send_json({"ok": True, **result})
+                return
+
+            if path == "/api/brand-assets/upload":
+                import cgi
+                content_type = self.headers.get("Content-Type", "")
+                if "multipart/form-data" in content_type:
+                    form = cgi.FieldStorage(
+                        fp=self.rfile,
+                        headers=self.headers,
+                        environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": content_type},
+                    )
+                    file_item = form["file"] if "file" in form else None
+                    name = form.getvalue("name", "unnamed")
+                    cat = form.getvalue("category", "default")
+                    if file_item is None or not getattr(file_item, "file", None):
+                        self._send_json(_error_payload("Missing file field"), status=400)
+                        return
+                    file_data = file_item.file.read()
+                    fname = getattr(file_item, "filename", "") or "upload.png"
+                    ext = fname.rsplit(".", 1)[-1] if "." in fname else "png"
+                else:
+                    body = self._read_json_body()
+                    import base64
+                    b64 = body.get("file_data", "")
+                    file_data = base64.b64decode(b64) if b64 else b""
+                    name = body.get("name", "unnamed")
+                    cat = body.get("category", "default")
+                    ext = body.get("file_ext", "png")
+                    if not file_data:
+                        self._send_json(_error_payload("Missing file_data"), status=400)
+                        return
+
+                from src.modules.listing.brand_assets import BrandAssetManager
+                mgr = BrandAssetManager()
+                try:
+                    asset = mgr.add_asset(name, cat, file_data, ext)
+                    self._send_json({"ok": True, "asset": asset})
+                except ValueError as ve:
+                    self._send_json(_error_payload(str(ve)), status=400)
+                return
+
             if path == "/api/ai/test":
                 import time as _t
                 body = self._read_json_body()
@@ -3923,7 +4160,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 domain_filter = self.mimic_ops._cookie_domain_filter_stats(cookie_text)
                 grade = diagnosis.get("grade", "F")
                 self._send_json({
-                    "ok": grade in ("A", "B"),
+                    "ok": grade in ("可用", "高风险"),
                     "grade": grade,
                     "message": diagnosis.get("message", ""),
                     "actions": diagnosis.get("actions", []),

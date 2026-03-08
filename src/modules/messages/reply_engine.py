@@ -122,7 +122,17 @@ class ReplyStrategyEngine:
         compliance_enabled: bool = True,
         dedup_enabled: bool = True,
         bargain_tracking_enabled: bool = True,
+        category: str | None = None,
     ):
+        self.category = category or ""
+        self.category_config: dict[str, Any] = {}
+        if self.category:
+            try:
+                from src.core.config import load_category_config
+                self.category_config = load_category_config(self.category)
+            except Exception:
+                pass
+
         self.default_reply = default_reply
         self.virtual_default_reply = virtual_default_reply or default_reply
         self.reply_prefix = reply_prefix
@@ -133,6 +143,9 @@ class ReplyStrategyEngine:
         self.virtual_product_keywords = [
             kw.lower() for kw in (virtual_product_keywords or DEFAULT_VIRTUAL_PRODUCT_KEYWORDS) if str(kw).strip()
         ]
+
+        self.ai_system_role = self.category_config.get("ai_prompts", {}).get("system_role", "")
+        self.category_forbidden_keywords = self.category_config.get("compliance", {}).get("forbidden_keywords", [])
 
         rules_data = intent_rules if isinstance(intent_rules, list) and intent_rules else DEFAULT_INTENT_RULES
         parsed_rules = [self._parse_rule(rule) for rule in rules_data]

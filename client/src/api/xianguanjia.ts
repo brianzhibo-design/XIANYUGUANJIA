@@ -11,7 +11,7 @@ export const getOrders = (payload: Record<string, any>): Promise<AxiosResponse> 
   proxyXgjApi('/api/open/order/list', payload);
 
 export const unpublishProduct = (productId: string): Promise<AxiosResponse> =>
-  proxyXgjApi('/api/open/product/unpublish', { product_id: productId });
+  proxyXgjApi('/api/open/product/downShelf', { product_id: productId });
 
 export const publishProduct = (productId: string): Promise<AxiosResponse> =>
   proxyXgjApi('/api/open/product/publish', { product_id: productId });

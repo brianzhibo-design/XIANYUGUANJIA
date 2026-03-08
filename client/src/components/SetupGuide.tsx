@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/index';
-import { CheckCircle, Circle, ArrowRight, X, Zap, Cookie, Settings, Bot, Play, ChevronRight, RotateCcw, Info, XCircle } from 'lucide-react';
+import { CheckCircle, Circle, ArrowRight, X, Zap, Cookie, Settings, Bot, Play, ChevronRight, RotateCcw, Info, XCircle, Bell } from 'lucide-react';
 
 const DISMISS_KEY = 'xianyu_setup_guide_dismissed';
 
@@ -11,6 +11,7 @@ interface ChecksState {
   xgjConfigured: boolean | null;
   aiConfigured: boolean | null;
   cookieSet: boolean | null;
+  notifyConfigured: boolean | null;
 }
 
 interface StepItem {
@@ -33,6 +34,7 @@ export default function SetupGuide() {
     xgjConfigured: null,
     aiConfigured: null,
     cookieSet: null,
+    notifyConfigured: null,
   });
   const [details, setDetails] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -51,6 +53,7 @@ export default function SetupGuide() {
       xgjConfigured: false,
       aiConfigured: false,
       cookieSet: false,
+      notifyConfigured: false,
     };
     const det: Record<string, string> = {};
 
@@ -63,6 +66,11 @@ export default function SetupGuide() {
       result.xgjConfigured = !!(xgj.app_key && !String(xgj.app_key).includes('****') && xgj.app_secret && !String(xgj.app_secret).includes('****'));
       const ai = cfg.ai || {};
       result.aiConfigured = !!(ai.api_key && !String(ai.api_key).includes('****'));
+      const notif = cfg.notifications || {};
+      const hasFeishu = !!(notif.feishu_enabled && notif.feishu_webhook && !String(notif.feishu_webhook).includes('****'));
+      const hasWechat = !!(notif.wechat_enabled && notif.wechat_webhook && !String(notif.wechat_webhook).includes('****'));
+      result.notifyConfigured = hasFeishu || hasWechat;
+      if (result.notifyConfigured) det.notify = hasFeishu && hasWechat ? '飞书 + 企业微信' : hasFeishu ? '飞书' : '企业微信';
     } catch { /* backend unavailable */ }
 
     try {
@@ -101,7 +109,7 @@ export default function SetupGuide() {
 
   if (dismissed) return null;
 
-  const allDone = checks.nodeBackend && checks.pythonBackend && checks.xgjConfigured && checks.aiConfigured && checks.cookieSet;
+  const allDone = checks.nodeBackend && checks.pythonBackend && checks.xgjConfigured && checks.aiConfigured && checks.cookieSet && checks.notifyConfigured;
 
   if (loading) {
     return (
@@ -133,7 +141,7 @@ export default function SetupGuide() {
       label: '配置闲管家 API',
       desc: '连接闲管家开放平台，实现消息同步和订单管理',
       done: checks.xgjConfigured,
-      action: '/config',
+      action: '/config?tab=integrations',
       actionLabel: '去配置',
       icon: Settings,
       hint: details.xgj || '前往闲管家开放平台注册应用，获取 AppKey 和 AppSecret',
@@ -144,11 +152,22 @@ export default function SetupGuide() {
       label: '配置 AI 服务',
       desc: '启用智能自动回复、意图识别和内容生成',
       done: checks.aiConfigured,
-      action: '/config',
+      action: '/config?tab=integrations',
       actionLabel: '去配置',
       icon: Bot,
       hint: details.ai || '支持 DeepSeek、通义千问等 OpenAI 兼容 API，填入 API Key 即可',
       validated: !!details.ai,
+    },
+    {
+      key: 'notifyConfigured',
+      label: '配置告警通知',
+      desc: '接收 Cookie 过期、订单异常等重要事件推送',
+      done: checks.notifyConfigured,
+      action: '/config?tab=notifications',
+      actionLabel: '去配置',
+      icon: Bell,
+      hint: details.notify || '支持飞书和企业微信群机器人 Webhook',
+      validated: !!details.notify,
     },
     {
       key: 'nodeBackend',
@@ -178,7 +197,8 @@ export default function SetupGuide() {
     { label: '获取 Cookie', icon: '1' },
     { label: '配置闲管家', icon: '2' },
     { label: '配置 AI', icon: '3' },
-    { label: '开始运行', icon: '4' },
+    { label: '告警通知', icon: '4' },
+    { label: '开始运行', icon: '5' },
   ];
 
   return (

@@ -30,6 +30,7 @@ _MY_PAGE_URL = "https://www.goofish.com/personal"
 _LOGIN_TIMEOUT_MS = 300_000  # 5 minutes
 _AUTH_COOKIES = {"unb", "cookie2", "sgcookie"}
 _WEAK_LOGIN_COOKIES = {"_m_h5_tk", "_tb_token_"}
+_SESSION_COOKIES = {"_m_h5_tk", "_m_h5_tk_enc"}
 
 
 class GrabStage(str, Enum):
@@ -104,13 +105,22 @@ class CookieGrabber:
         if self._cancel:
             return GrabResult(ok=False, error="已取消")
         if cookie:
-            valid = await self._validate(cookie)
-            if valid:
-                self._save(cookie, source="browser_db")
-                self._update(GrabStage.SUCCESS, "Cookie 获取成功！",
-                             "从浏览器数据库直接读取，Cookie 有效期约 7-30 天", 100)
-                return GrabResult(ok=True, cookie_str=cookie, source="browser_db",
-                                  message="从浏览器数据库获取成功")
+            if not self._has_session_fields(cookie):
+                logger.info("Level 1: Cookie 缺少会话字段 (_m_h5_tk)，尝试 Level 1+ 补全...")
+                enriched = await self._enrich_with_session_cookies(cookie)
+                if enriched:
+                    cookie = enriched
+                else:
+                    logger.info("Level 1+: 会话字段补全失败，继续下一级别")
+                    cookie = None
+            if cookie:
+                valid = await self._validate(cookie)
+                if valid:
+                    self._save(cookie, source="browser_db")
+                    self._update(GrabStage.SUCCESS, "Cookie 获取成功！",
+                                 "从浏览器数据库直接读取，Cookie 有效期约 7-30 天", 100)
+                    return GrabResult(ok=True, cookie_str=cookie, source="browser_db",
+                                      message="从浏览器数据库获取成功")
 
         # Level 1.5: Playwright persistent context 复用 Chrome Profile
         cookie = await self._grab_from_profile()
@@ -520,6 +530,107 @@ class CookieGrabber:
                 or "passport" in url_lower or "qrcode" in url_lower)
 
     # ------------------------------------------------------------------
+    # Level 1+: Playwright 注入 Cookie 补全会话字段
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _has_session_fields(cookie_str: str) -> bool:
+        """检查 cookie_str 是否包含 _m_h5_tk 会话字段。"""
+        pairs = {p.split("=", 1)[0].strip() for p in cookie_str.split(";") if "=" in p}
+        return bool(pairs & _SESSION_COOKIES)
+
+    async def _enrich_with_session_cookies(self, cookie_str: str) -> str | None:
+        """用 Playwright headless 注入已有 Cookie，访问页面让 mtop 下发会话字段，再提取完整 Cookie。"""
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            logger.debug("Level 1+: playwright 未安装，无法补全会话字段")
+            return None
+
+        self._update(GrabStage.VALIDATING, "正在补全会话字段...",
+                     "通过 Playwright 注入 Cookie 获取 _m_h5_tk", 85)
+
+        pw = None
+        browser = None
+        try:
+            pw = await async_playwright().start()
+
+            launch_kwargs: dict[str, Any] = {
+                "headless": True,
+                "args": ["--disable-blink-features=AutomationControlled"],
+            }
+            for channel in ("chrome", "msedge", None):
+                try:
+                    kw = {**launch_kwargs}
+                    if channel:
+                        kw["channel"] = channel
+                    browser = await pw.chromium.launch(**kw)
+                    break
+                except Exception:
+                    continue
+
+            if not browser:
+                logger.info("Level 1+: 无法启动浏览器")
+                return None
+
+            context = await browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent=(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                ),
+            )
+
+            cookies_to_inject = []
+            for pair in cookie_str.split(";"):
+                pair = pair.strip()
+                if "=" not in pair:
+                    continue
+                name, value = pair.split("=", 1)
+                cookies_to_inject.append({
+                    "name": name.strip(),
+                    "value": value.strip(),
+                    "domain": ".goofish.com",
+                    "path": "/",
+                })
+
+            if cookies_to_inject:
+                await context.add_cookies(cookies_to_inject)
+
+            page = await context.new_page()
+            try:
+                await page.goto(_MY_PAGE_URL, wait_until="domcontentloaded", timeout=20000)
+            except Exception as exc:
+                logger.debug(f"Level 1+: 导航失败: {exc}")
+
+            await asyncio.sleep(5)
+
+            all_cookies = await context.cookies()
+            enriched = self._extract_goofish_cookies(all_cookies)
+
+            if enriched and self._has_session_fields(enriched):
+                logger.info(f"Level 1+: 会话字段补全成功 ({len(enriched)} chars)")
+                return enriched
+
+            logger.info("Level 1+: 补全后仍缺少会话字段")
+            return None
+
+        except Exception as exc:
+            logger.info(f"Level 1+: 会话字段补全失败: {exc}")
+            return None
+        finally:
+            if browser:
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
+            if pw:
+                try:
+                    await pw.stop()
+                except Exception:
+                    pass
+
+    # ------------------------------------------------------------------
     # Validation & persistence
     # ------------------------------------------------------------------
 
@@ -529,14 +640,27 @@ class CookieGrabber:
             from src.core.cookie_health import CookieHealthChecker
             checker = CookieHealthChecker(cookie_str, timeout_seconds=10.0)
             result = checker.check_sync(force=True)
-            if result.get("healthy"):
-                logger.info("Cookie 验证通过")
-                return True
-            logger.warning(f"Cookie 验证失败: {result.get('message', 'unknown')}")
-            return False
+            if not result.get("healthy"):
+                logger.warning(f"Cookie 验证失败: {result.get('message', 'unknown')}")
+                return False
+            logger.info("Cookie 在线探测通过，检查字段完整性...")
         except Exception as exc:
-            logger.warning(f"Cookie 验证异常，跳过验证: {exc}")
-            return True
+            logger.warning(f"Cookie 验证异常，跳过在线探测: {exc}")
+
+        try:
+            from src.dashboard_server import MimicOps
+            ops = MimicOps.__new__(MimicOps)
+            diag = ops.diagnose_cookie(cookie_str)
+            grade = diag.get("grade", "")
+            if grade == "不可用":
+                missing = diag.get("required_missing", [])
+                logger.warning(f"Cookie 完整性诊断不可用，缺少: {missing}")
+                return False
+            logger.info(f"Cookie 完整性诊断: {grade}")
+        except Exception as exc:
+            logger.debug(f"Cookie 完整性诊断跳过: {exc}")
+
+        return True
 
     def _save(self, cookie_str: str, source: str = "auto") -> None:
         self._update(GrabStage.SAVING, "正在保存 Cookie...", "", 95)
@@ -673,11 +797,20 @@ class CookieAutoRefresher:
 
         logger.info(f"Cookie 自动检查: 不健康 ({msg})，尝试静默刷新...")
 
-        # 2) 尝试 Level 1 静默获取
+        # 2) 尝试 Level 1 静默获取 + 会话字段补全
         loop = asyncio.new_event_loop()
         try:
             grabber = CookieGrabber()
             new_cookie = loop.run_until_complete(grabber._grab_from_browser_db())
+            if new_cookie and not CookieGrabber._has_session_fields(new_cookie):
+                logger.info("自动刷新: Cookie 缺少会话字段，尝试 Level 1+ 补全...")
+                enriched = loop.run_until_complete(
+                    grabber._enrich_with_session_cookies(new_cookie)
+                )
+                if enriched:
+                    new_cookie = enriched
+                else:
+                    logger.info("自动刷新: 会话字段补全失败")
         finally:
             loop.close()
 

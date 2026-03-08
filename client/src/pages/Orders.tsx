@@ -65,7 +65,7 @@ export default function Orders() {
   const handleShip = async (orderId: string) => {
     setActionLoading(prev => ({ ...prev, [orderId]: 'ship' }));
     try {
-      const res = await proxyXgjApi('/api/open/order/delivery', { order_id: orderId });
+      const res = await proxyXgjApi('/api/open/order/ship', { order_id: orderId });
       if (res.data?.ok) { toast.success('发货成功'); fetchOrders(); }
       else toast.error(res.data?.error || '发货失败');
     } catch { toast.error('发货请求失败'); }
@@ -82,8 +82,38 @@ export default function Orders() {
     finally { setActionLoading(prev => ({ ...prev, [orderId]: null })); }
   };
 
-  const handleRemind = async () => {
-    toast('催单提醒已记录，系统将自动跟进', { icon: '📋' });
+  const [remindStatus, setRemindStatus] = useState<Record<string, string>>({});
+
+  const handleRemind = async (orderId: string) => {
+    setActionLoading(prev => ({ ...prev, [orderId]: 'remind' }));
+    try {
+      const res = await api.post('/orders/remind', { order_id: orderId });
+      const d = res.data;
+      if (d?.ok && d?.eligible) {
+        if (d.message_sent) {
+          toast.success('催单消息已发送');
+          setRemindStatus(prev => ({ ...prev, [orderId]: 'sent' }));
+        } else {
+          toast('催单已记录，下次该买家发消息时将自动发送', { icon: '📋' });
+          setRemindStatus(prev => ({ ...prev, [orderId]: 'pending' }));
+        }
+      } else if (d?.ok && !d?.eligible) {
+        const reason = d.reason || '';
+        const msg = reason.includes('silent') ? '当前处于静默时段，稍后自动发送'
+          : reason.includes('cooldown') ? `催单冷却中，请${d.next_eligible || '稍后'}再试`
+          : reason.includes('max') ? '今日催单次数已达上限'
+          : reason.includes('dnd') ? '该买家在免打扰名单中'
+          : `暂不可催单：${reason}`;
+        toast(msg, { icon: '⏳' });
+        setRemindStatus(prev => ({ ...prev, [orderId]: 'cooldown' }));
+      } else {
+        toast.error(d?.error || '催单失败');
+      }
+    } catch {
+      toast.error('催单请求失败');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [orderId]: null }));
+    }
   };
 
   const toggleDetail = async (orderId: string) => {
@@ -209,8 +239,19 @@ export default function Orders() {
                     <div className="flex flex-col gap-2 justify-end">
                       {order.status === 1 && (
                         <>
-                          <button onClick={handleRemind} className="xy-btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 hover:text-blue-600 hover:border-blue-200">
-                            <BellRing className="w-3.5 h-3.5" /> 催单
+                          <button
+                            onClick={() => handleRemind(order.order_id)}
+                            disabled={actionLoading[order.order_id] === 'remind'}
+                            className={`xy-btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
+                              remindStatus[order.order_id] === 'sent' ? 'text-green-600 border-green-200' :
+                              remindStatus[order.order_id] === 'cooldown' ? 'text-orange-500 border-orange-200' :
+                              'hover:text-blue-600 hover:border-blue-200'
+                            }`}
+                          >
+                            <BellRing className="w-3.5 h-3.5" />
+                            {actionLoading[order.order_id] === 'remind' ? '催单中...' :
+                             remindStatus[order.order_id] === 'sent' ? '已催' :
+                             remindStatus[order.order_id] === 'cooldown' ? '冷却中' : '催单'}
                           </button>
                           {priceEditOrder === order.order_id ? (
                             <div className="flex items-center gap-1.5">

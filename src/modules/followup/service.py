@@ -64,6 +64,36 @@ class FollowUpEngine:
         self._policy_version = "v1"
         self._init_db()
 
+    @classmethod
+    def from_system_config(cls) -> "FollowUpEngine":
+        """Create engine with policy/templates from system_config.json order_reminder section."""
+        try:
+            from src.dashboard.config_service import read_system_config
+            cfg = read_system_config().get("order_reminder", {})
+        except Exception:
+            cfg = {}
+
+        policy = FollowUpPolicy(
+            max_touches_per_day=int(cfg.get("max_daily", 2)),
+            min_interval_hours=float(cfg.get("min_interval_hours", 4.0)),
+            silent_hours_start=int(cfg.get("silent_start", 22)),
+            silent_hours_end=int(cfg.get("silent_end", 8)),
+        )
+
+        templates = None
+        raw_templates = cfg.get("templates")
+        if isinstance(raw_templates, str) and raw_templates.strip():
+            parts = [p.strip() for p in raw_templates.split("---") if p.strip()]
+            if parts:
+                templates = [{"id": f"custom_{i}", "text": t} for i, t in enumerate(parts)]
+
+        enabled = cfg.get("enabled", True)
+        engine = cls(policy=policy)
+        engine._reminder_enabled = bool(enabled)
+        if templates:
+            engine._order_reminder_templates = templates
+        return engine
+
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         with closing(sqlite3.connect(self.db_path)) as conn, conn:
@@ -364,11 +394,15 @@ class FollowUpEngine:
 
     # ── 催单（未支付订单提醒）────────────────────────────────
 
-    ORDER_REMINDER_TEMPLATES = [
+    DEFAULT_ORDER_REMINDER_TEMPLATES = [
         {"id": "order_unpaid_1", "text": "您好，您的订单还没有完成支付哦~ 如有疑问可以随时问我，确认需要的话请尽快支付，我好给您安排发货。"},
         {"id": "order_unpaid_2", "text": "提醒一下，您有一笔待支付订单，商品已为您预留，请在规定时间内完成支付，以免影响发货哦~"},
         {"id": "order_final", "text": "最后提醒：您的订单即将超时关闭，如果还需要请尽快支付。若已不需要请忽略此消息。"},
     ]
+
+    @property
+    def ORDER_REMINDER_TEMPLATES(self) -> list[dict[str, str]]:
+        return getattr(self, "_order_reminder_templates", None) or self.DEFAULT_ORDER_REMINDER_TEMPLATES
 
     def process_unpaid_order(
         self,

@@ -221,6 +221,131 @@ def _tpl_game(p: dict[str, Any]) -> str:
     )
 
 
+_BRAND_GRID_STYLE = """
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    width: 750px; height: 1000px; overflow: hidden;
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, %(bg_from)s 0%%, %(bg_to)s 100%%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 40px;
+}
+.card {
+    background: rgba(255,255,255,0.96); border-radius: 24px;
+    padding: 40px; width: 100%%; height: 100%%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+    display: flex; flex-direction: column;
+}
+.badge {
+    display: inline-block; background: %(accent)s; color: #fff;
+    font-size: 13px; font-weight: 600; padding: 5px 14px;
+    border-radius: 20px; margin-bottom: 16px; align-self: flex-start;
+}
+.title {
+    font-size: 28px; font-weight: 700; color: #1a1a2e;
+    line-height: 1.3; margin-bottom: 20px;
+}
+.grid {
+    flex: 1; display: grid;
+    grid-template-columns: %(cols)s;
+    gap: 20px; align-content: center; justify-items: center;
+    padding: 16px 0;
+}
+.brand-item {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 10px;
+}
+.brand-item img {
+    width: 100px; height: 100px;
+    object-fit: contain; border-radius: 16px;
+    background: #f8f8f8; padding: 8px;
+    border: 2px solid #f0f0f0;
+}
+.brand-item span {
+    font-size: 14px; font-weight: 500; color: #444;
+}
+.bottom-info {
+    margin-top: auto; padding-top: 16px;
+    border-top: 1px solid #f0f0f0; text-align: center;
+}
+.bottom-info .price {
+    font-size: 36px; font-weight: 800; color: %(accent)s;
+}
+.bottom-info .tagline {
+    font-size: 14px; color: #999; margin-top: 6px;
+}
+"""
+
+_BRAND_GRID_HTML = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><style>%(style)s</style></head>
+<body>
+<div class="card">
+  %(badge_html)s
+  <div class="title">%(title)s</div>
+  <div class="grid">%(grid_items)s</div>
+  <div class="bottom-info">
+    %(price_html)s
+    %(tagline_html)s
+  </div>
+</div>
+</body>
+</html>"""
+
+_BRAND_CATEGORY_THEMES: dict[str, dict[str, str]] = {
+    "express": {"bg_from": "#e0f2fe", "bg_to": "#dbeafe", "accent": "#0284c7", "badge": "全国快递代发"},
+    "exchange": {"bg_from": "#ede9fe", "bg_to": "#e0e7ff", "accent": "#7c3aed", "badge": "兑换码/卡密"},
+    "recharge": {"bg_from": "#fef3c7", "bg_to": "#fde68a", "accent": "#d97706", "badge": "充值代充"},
+    "movie_ticket": {"bg_from": "#fce7f3", "bg_to": "#fce4ec", "accent": "#db2777", "badge": "电影票代购"},
+    "account": {"bg_from": "#dcfce7", "bg_to": "#d1fae5", "accent": "#16a34a", "badge": "账号交易"},
+    "game": {"bg_from": "#fee2e2", "bg_to": "#fecaca", "accent": "#dc2626", "badge": "游戏道具"},
+}
+
+
+def _tpl_brand_grid(p: dict[str, Any]) -> str:
+    """品牌图标网格模板 — 将品牌 logo 排列组合成商品主图。"""
+    brand_items: list[dict[str, str]] = p.get("brand_items", [])
+    cat = p.get("category", "express")
+    theme = _BRAND_CATEGORY_THEMES.get(cat, _BRAND_CATEGORY_THEMES["express"])
+
+    n = len(brand_items)
+    if n <= 1:
+        cols = "1fr"
+    elif n <= 4:
+        cols = "repeat(2, 1fr)"
+    elif n <= 6:
+        cols = "repeat(3, 1fr)"
+    else:
+        cols = "repeat(4, 1fr)"
+
+    grid_html = ""
+    for item in brand_items[:12]:
+        img_src = _e(item.get("src", ""))
+        name = _e(item.get("name", ""))
+        grid_html += f'<div class="brand-item"><img src="{img_src}" alt="{name}"><span>{name}</span></div>\n'
+
+    style = _BRAND_GRID_STYLE % {
+        "bg_from": theme["bg_from"],
+        "bg_to": theme["bg_to"],
+        "accent": theme["accent"],
+        "cols": cols,
+    }
+
+    price = p.get("price")
+    price_html = f'<div class="price">¥{_e(str(price))}</div>' if price else ""
+    tagline = p.get("tagline", "")
+    tagline_html = f'<div class="tagline">{_e(tagline)}</div>' if tagline else ""
+
+    return _BRAND_GRID_HTML % {
+        "style": style,
+        "badge_html": f'<span class="badge">{_e(p.get("badge", theme["badge"]))}</span>',
+        "title": _e(p.get("title", "")),
+        "grid_items": grid_html,
+        "price_html": price_html,
+        "tagline_html": tagline_html,
+    }
+
+
 TEMPLATES: dict[str, Any] = {
     "express": {"name": "快递代发", "render": _tpl_express},
     "recharge": {"name": "充值卡", "render": _tpl_recharge},
@@ -228,6 +353,7 @@ TEMPLATES: dict[str, Any] = {
     "account": {"name": "账号", "render": _tpl_account},
     "movie_ticket": {"name": "电影票", "render": _tpl_movie_ticket},
     "game": {"name": "游戏", "render": _tpl_game},
+    "brand_grid": {"name": "品牌组合", "render": _tpl_brand_grid},
 }
 
 

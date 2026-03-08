@@ -26,7 +26,7 @@ class GeoResolver:
             return
 
         payload = json.loads(self.mapping_file.read_text(encoding="utf-8"))
-        city_map = payload.get("city_to_province", {}) if isinstance(payload, dict) else {}
+        city_map = payload if isinstance(payload, dict) else {}
 
         normalized_city_map: dict[str, str] = {}
         province_aliases: dict[str, str] = {}

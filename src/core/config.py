@@ -465,3 +465,43 @@ def get_config(config_path: str | None = None) -> Config:
         Config实例
     """
     return Config(config_path)
+
+
+_CATEGORY_CACHE: dict[str, dict] = {}
+
+
+def load_category_config(category_id: str) -> dict:
+    """Load a category YAML file from config/categories/{category_id}.yaml.
+
+    Returns cached result on subsequent calls. Returns empty dict if
+    the file does not exist or fails to parse.
+    """
+    if category_id in _CATEGORY_CACHE:
+        return _CATEGORY_CACHE[category_id]
+
+    cat_path = os.path.join("config", "categories", f"{category_id}.yaml")
+    result: dict = {}
+    if os.path.exists(cat_path):
+        try:
+            with open(cat_path, encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            if isinstance(data, dict):
+                result = data
+        except Exception:
+            pass
+    _CATEGORY_CACHE[category_id] = result
+    return result
+
+
+def get_active_category() -> str:
+    """Return the currently active store category from system_config.json, defaulting to 'express'."""
+    try:
+        sys_cfg_path = os.path.join("server", "data", "system_config.json")
+        if os.path.exists(sys_cfg_path):
+            import json
+            with open(sys_cfg_path, encoding="utf-8") as f:
+                sys_cfg = json.load(f)
+            return sys_cfg.get("store", {}).get("category", "express")
+    except Exception:
+        pass
+    return "express"

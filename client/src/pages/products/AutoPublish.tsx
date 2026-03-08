@@ -1,8 +1,78 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTemplates, previewListing, publishListing } from '../../api/listing';
+import { api } from '../../api/index';
 import toast from 'react-hot-toast';
-import { Wand2, Image as ImageIcon, Send, RefreshCw, AlertCircle } from 'lucide-react';
+import { Wand2, Image as ImageIcon, Send, RefreshCw, AlertCircle, Calendar, TrendingUp, Package, Clock } from 'lucide-react';
+
+function SchedulerPanel() {
+  const [status, setStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/auto-publish/status')
+      .then(res => { if (res.data?.ok) setStatus(res.data); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="xy-card p-6 mb-6">
+        <div className="h-20 bg-xy-gray-100 rounded-xl animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!status) return null;
+
+  const { schedule, state, today_plan } = status;
+  const actionLabels: Record<string, string> = {
+    cold_start: '冷启动 — 新建链接',
+    steady_replace: '稳定运营 — 替换最差链接',
+    skip: '今日已执行',
+  };
+
+  return (
+    <div className="xy-card p-6 mb-6 animate-in fade-in slide-in-from-top-2">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-bold text-xy-text-primary flex items-center gap-2">
+          <Calendar className="w-5 h-5 text-emerald-500" /> 自动上架调度
+        </h2>
+        <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-medium">
+          全品类统一策略
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="bg-xy-gray-50 rounded-xl p-3 text-center border border-xy-border">
+          <p className="text-xs text-xy-text-muted">运营天数</p>
+          <p className="text-xl font-bold text-xy-text-primary mt-1">{state.total_days_active}</p>
+        </div>
+        <div className="bg-xy-gray-50 rounded-xl p-3 text-center border border-xy-border">
+          <p className="text-xs text-xy-text-muted">活跃链接</p>
+          <p className="text-xl font-bold text-emerald-600 mt-1">{state.active_listings} / {schedule.max_active_listings}</p>
+        </div>
+        <div className="bg-xy-gray-50 rounded-xl p-3 text-center border border-xy-border">
+          <p className="text-xs text-xy-text-muted">今日计划</p>
+          <p className="text-sm font-medium text-xy-brand-600 mt-1.5">{actionLabels[today_plan?.action] || '无'}</p>
+        </div>
+        <div className="bg-xy-gray-50 rounded-xl p-3 text-center border border-xy-border">
+          <p className="text-xs text-xy-text-muted">上次执行</p>
+          <p className="text-sm font-medium text-xy-text-primary mt-1.5">{state.last_run_date || '从未'}</p>
+        </div>
+      </div>
+
+      <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700">
+        <span className="font-medium">策略说明：</span>
+        D1-D{schedule.cold_start_days} 每天新建 {schedule.cold_start_daily_count} 条链接；
+        D{schedule.cold_start_days + 1}+ 每天替换 {schedule.steady_replace_count} 条流量最差的链接；
+        最大活跃链接 {schedule.max_active_listings} 条。
+        替换依据：{schedule.steady_replace_metric === 'views' ? '浏览量' : schedule.steady_replace_metric}。
+      </div>
+    </div>
+  );
+}
 
 export default function AutoPublish() {
   const navigate = useNavigate();
@@ -77,6 +147,8 @@ export default function AutoPublish() {
   return (
     <div className="xy-page max-w-4xl xy-enter">
       <h1 className="xy-title mb-6">AI 智能自动上架</h1>
+
+      <SchedulerPanel />
       
       <div className="flex items-center mb-8 bg-xy-surface p-4 rounded-xl shadow-sm border border-xy-border">
         <div className={`flex items-center ${step >= 1 ? 'text-xy-brand-500' : 'text-xy-text-muted'}`}>

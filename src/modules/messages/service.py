@@ -55,7 +55,11 @@ DEFAULT_VOLUME_REPLY_TEMPLATE = (
     "体积重大于实际重量时按体积计费！"
 )
 
-DEFAULT_NON_EMPTY_REPLY_FALLBACK = "询价格式：xx省 - xx省 - 重量（kg）\n长宽高（单位cm）"
+DEFAULT_NON_EMPTY_REPLY_FALLBACK = (
+    "您好！如需快递报价，请提供以下信息：\n"
+    "寄件城市 - 收件城市 - 重量（kg）\n"
+    "格式示例：广东省 - 浙江省 - 3kg"
+)
 DEFAULT_COURIER_LOCK_TEMPLATE = (
     "已为你锁定 {courier}（{price}，预计{eta_days}）。\n"
     "下单流程：\n"
@@ -126,6 +130,13 @@ class MessagesService:
         if isinstance(custom_keywords, dict):
             self.keyword_replies.update({str(k): str(v) for k, v in custom_keywords.items()})
 
+        active_category = ""
+        try:
+            from src.core.config import get_active_category
+            active_category = get_active_category()
+        except Exception:
+            pass
+
         self.reply_engine = ReplyStrategyEngine(
             default_reply=self.default_reply,
             virtual_default_reply=self.virtual_default_reply,
@@ -133,6 +144,7 @@ class MessagesService:
             keyword_replies=self.keyword_replies,
             intent_rules=self.config.get("intent_rules", []),
             virtual_product_keywords=self.config.get("virtual_product_keywords", []),
+            category=active_category,
         )
 
         self.quote_engine = AutoQuoteEngine(self.quote_config)
@@ -167,11 +179,7 @@ class MessagesService:
         )
         self.force_non_empty_reply = bool(self.config.get("force_non_empty_reply", True))
         self.non_empty_reply_fallback = (
-            str(
-                self.config.get(
-                    "non_empty_reply_fallback", self.quote_missing_template or DEFAULT_NON_EMPTY_REPLY_FALLBACK
-                )
-            ).strip()
+            str(self.config.get("non_empty_reply_fallback", "")).strip()
             or DEFAULT_NON_EMPTY_REPLY_FALLBACK
         )
         self.strict_format_reply_enabled = bool(self.config.get("strict_format_reply_enabled", True))
