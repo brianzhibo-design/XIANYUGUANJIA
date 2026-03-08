@@ -170,14 +170,16 @@ class TestTemplateRenderers:
     def test_all_custom_params(self):
         with _patch_style():
             for func in [_tpl_express, _tpl_recharge, _tpl_exchange, _tpl_account, _tpl_movie_ticket, _tpl_game]:
-                html = func({
-                    "title": "T",
-                    "desc": "D",
-                    "badge": "B",
-                    "features": ["F"],
-                    "price": 10,
-                    "footer": "FT",
-                })
+                html = func(
+                    {
+                        "title": "T",
+                        "desc": "D",
+                        "badge": "B",
+                        "features": ["F"],
+                        "price": 10,
+                        "footer": "FT",
+                    }
+                )
                 assert "T" in html
                 assert "D" in html
 
@@ -185,10 +187,11 @@ class TestTemplateRenderers:
 class TestModuleFunctions:
     def test_list_templates(self):
         result = list_templates()
-        assert len(result) == 6
+        assert len(result) == 7
         keys = {item["key"] for item in result}
         assert "express" in keys
         assert "game" in keys
+        assert "brand_grid" in keys
 
     def test_get_template_existing(self):
         tpl = get_template("express")
@@ -224,6 +227,7 @@ class TestModuleFunctions:
 class TestInitImports:
     def test_all_exports(self):
         from src.modules.listing.templates import __all__
+
         assert "TEMPLATES" in __all__
         assert "get_template" in __all__
         assert "list_templates" in __all__

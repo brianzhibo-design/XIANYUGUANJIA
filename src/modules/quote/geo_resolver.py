@@ -26,7 +26,11 @@ class GeoResolver:
             return
 
         payload = json.loads(self.mapping_file.read_text(encoding="utf-8"))
-        city_map = payload if isinstance(payload, dict) else {}
+        # Support both flat structure {"city": "province", ...} and nested {"city_to_province": {...}}
+        if isinstance(payload, dict):
+            city_map = payload.get("city_to_province", payload) if "city_to_province" in payload else payload
+        else:
+            city_map = {}
 
         normalized_city_map: dict[str, str] = {}
         province_aliases: dict[str, str] = {}
