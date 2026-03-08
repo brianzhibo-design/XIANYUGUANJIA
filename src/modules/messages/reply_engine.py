@@ -129,6 +129,7 @@ class ReplyStrategyEngine:
         if self.category:
             try:
                 from src.core.config import load_category_config
+
                 self.category_config = load_category_config(self.category)
             except Exception:
                 pass

@@ -499,6 +499,7 @@ def get_active_category() -> str:
         sys_cfg_path = os.path.join("server", "data", "system_config.json")
         if os.path.exists(sys_cfg_path):
             import json
+
             with open(sys_cfg_path, encoding="utf-8") as f:
                 sys_cfg = json.load(f)
             return sys_cfg.get("store", {}).get("category", "express")

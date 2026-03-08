@@ -69,6 +69,7 @@ class FollowUpEngine:
         """Create engine with policy/templates from system_config.json order_reminder section."""
         try:
             from src.dashboard.config_service import read_system_config
+
             cfg = read_system_config().get("order_reminder", {})
         except Exception:
             cfg = {}
@@ -395,8 +396,14 @@ class FollowUpEngine:
     # ── 催单（未支付订单提醒）────────────────────────────────
 
     DEFAULT_ORDER_REMINDER_TEMPLATES = [
-        {"id": "order_unpaid_1", "text": "您好，您的订单还没有完成支付哦~ 如有疑问可以随时问我，确认需要的话请尽快支付，我好给您安排发货。"},
-        {"id": "order_unpaid_2", "text": "提醒一下，您有一笔待支付订单，商品已为您预留，请在规定时间内完成支付，以免影响发货哦~"},
+        {
+            "id": "order_unpaid_1",
+            "text": "您好，您的订单还没有完成支付哦~ 如有疑问可以随时问我，确认需要的话请尽快支付，我好给您安排发货。",
+        },
+        {
+            "id": "order_unpaid_2",
+            "text": "提醒一下，您有一笔待支付订单，商品已为您预留，请在规定时间内完成支付，以免影响发货哦~",
+        },
         {"id": "order_final", "text": "最后提醒：您的订单即将超时关闭，如果还需要请尽快支付。若已不需要请忽略此消息。"},
     ]
 

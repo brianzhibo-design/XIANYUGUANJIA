@@ -152,15 +152,17 @@ class AutoPublishScheduler:
 
         self.state.active_listing_ids.extend(created_ids)
 
-        self.state.history.append({
-            "date": today,
-            "action": plan.get("action"),
-            "day_number": plan.get("day_number"),
-            "created": created_ids,
-            "removed": removed_ids,
-            "active_count": len(self.state.active_listing_ids),
-            "ts": time.time(),
-        })
+        self.state.history.append(
+            {
+                "date": today,
+                "action": plan.get("action"),
+                "day_number": plan.get("day_number"),
+                "created": created_ids,
+                "removed": removed_ids,
+                "active_count": len(self.state.active_listing_ids),
+                "ts": time.time(),
+            }
+        )
         if len(self.state.history) > 90:
             self.state.history = self.state.history[-90:]
 

@@ -136,10 +136,12 @@ async def generate_brand_images(
         path = mgr.get_asset_path(aid)
         if path is None:
             continue
-        brand_items.append({
-            "name": entry["name"],
-            "src": path.resolve().as_uri(),
-        })
+        brand_items.append(
+            {
+                "name": entry["name"],
+                "src": path.resolve().as_uri(),
+            }
+        )
 
     if not brand_items:
         logger.warning("No valid brand assets found for IDs: %s", brand_asset_ids)

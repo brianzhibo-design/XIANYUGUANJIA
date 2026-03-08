@@ -103,9 +103,7 @@ class BrandAssetManager:
         """
         ext = _normalize_extension(file_ext)
         if ext not in ALLOWED_EXTENSIONS:
-            raise ValueError(
-                f"Unsupported extension '{file_ext}', allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-            )
+            raise ValueError(f"Unsupported extension '{file_ext}', allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
         # 限制 name/category 为安全字符
         safe_name = re.sub(r"[^\w\u4e00-\u9fff\- ]", "", (name or "").strip()) or "unnamed"
         safe_category = re.sub(r"[^\w\-]", "", (category or "").strip()) or "default"
