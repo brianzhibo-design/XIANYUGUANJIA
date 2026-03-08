@@ -104,7 +104,9 @@ class MessagesService:
         self.send_confirm_delay_seconds = tuple(self.config.get("send_confirm_delay_seconds", [0.15, 0.35]))
 
         self.reply_prefix = self.config.get("reply_prefix", "")
-        self.default_reply = self.config.get("default_reply", "你好，请问需要寄什么快递？请发送 寄件城市-收件城市-重量（kg），我帮你查最优价格。")
+        self.default_reply = self.config.get(
+            "default_reply", "你好，请问需要寄什么快递？请发送 寄件城市-收件城市-重量（kg），我帮你查最优价格。"
+        )
         self.virtual_default_reply = self.config.get(
             "virtual_default_reply",
             "在的，虚拟商品拍下后系统会自动处理。如需改价请先联系我。",
@@ -996,17 +998,14 @@ class MessagesService:
                 "selected_courier": selected_courier,
             }
 
-        is_virtual = self.reply_engine._is_virtual_context(
-            self.reply_engine._normalize_text(message_text), item_title
-        )
+        is_virtual = self.reply_engine._is_virtual_context(self.reply_engine._normalize_text(message_text), item_title)
 
         request, missing, extracted_fields, memory_hit = self._build_quote_request_with_context(
             message_text,
             session_id=session_id,
         )
         if missing and (
-            is_quote_intent
-            or ((self.strict_format_reply_enabled or force_standard_format) and not is_virtual)
+            is_quote_intent or ((self.strict_format_reply_enabled or force_standard_format) and not is_virtual)
         ):
             fields = "、".join([self.quote_missing_prompts[field] for field in missing])
             prompt = self.quote_missing_template.format(fields=fields)

@@ -131,7 +131,10 @@ class MessagesConfig(BaseModel):
     ws: dict[str, Any] = Field(default_factory=dict, description="WebSocket 通道配置")
     max_replies_per_run: int = Field(default=10, ge=1, le=200, description="单次最多自动回复数量")
     reply_prefix: str = Field(default="", description="回复前缀")
-    default_reply: str = Field(default="你好，请问需要寄什么快递？请发送 寄件城市-收件城市-重量（kg），我帮你查最优价格。", description="默认回复文案")
+    default_reply: str = Field(
+        default="你好，请问需要寄什么快递？请发送 寄件城市-收件城市-重量（kg），我帮你查最优价格。",
+        description="默认回复文案",
+    )
     virtual_default_reply: str = Field(
         default="在的，虚拟商品拍下后系统会自动处理。如需改价请先联系我。",
         description="虚拟商品场景默认回复",

@@ -45,15 +45,23 @@ class ModuleConsole:
         timeout_seconds: int = 120,
     ) -> dict[str, Any]:
         cmd = [
-            sys.executable, "-m", "src.cli",
-            "module", "--action", action, "--target", target,
+            sys.executable,
+            "-m",
+            "src.cli",
+            "module",
+            "--action",
+            action,
+            "--target",
+            target,
             *(extra_args or []),
         ]
 
         try:
             proc = subprocess.run(
-                cmd, cwd=str(self.project_root),
-                capture_output=True, text=True,
+                cmd,
+                cwd=str(self.project_root),
+                capture_output=True,
+                text=True,
                 timeout=max(10, int(timeout_seconds)),
             )
         except Exception as exc:
@@ -83,7 +91,8 @@ class ModuleConsole:
 
     def status(self, window_minutes: int = 60, limit: int = 20) -> dict[str, Any]:
         return self._run_module_cli(
-            action="status", target="all",
+            action="status",
+            target="all",
             extra_args=["--window-minutes", str(window_minutes), "--limit", str(limit)],
             timeout_seconds=90,
         )
@@ -91,7 +100,8 @@ class ModuleConsole:
     def logs(self, target: str, tail_lines: int = 120) -> dict[str, Any]:
         safe_target = target if target in {"all", *MODULE_TARGETS} else "all"
         return self._run_module_cli(
-            action="logs", target=safe_target,
+            action="logs",
+            target=safe_target,
             extra_args=["--tail-lines", str(max(10, min(int(tail_lines), 500)))],
             timeout_seconds=90,
         )
@@ -113,11 +123,22 @@ class ModuleConsole:
 
         args: list[str] = []
         if act in ("start", "restart", "recover"):
-            args.extend([
-                "--mode", "daemon", "--background", "--interval", "5",
-                "--limit", "20", "--claim-limit", "10",
-                "--issue-type", "delay", "--init-default-tasks",
-            ])
+            args.extend(
+                [
+                    "--mode",
+                    "daemon",
+                    "--background",
+                    "--interval",
+                    "5",
+                    "--limit",
+                    "20",
+                    "--claim-limit",
+                    "10",
+                    "--issue-type",
+                    "delay",
+                    "--init-default-tasks",
+                ]
+            )
             if act in ("restart", "recover"):
                 args.extend(["--stop-timeout", "6"])
         else:

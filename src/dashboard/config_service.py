@@ -12,8 +12,16 @@ logger = logging.getLogger(__name__)
 _SYS_CONFIG_FILE = Path(__file__).resolve().parents[2] / "server" / "data" / "system_config.json"
 
 _ALLOWED_CONFIG_SECTIONS = {
-    "xianguanjia", "ai", "oss", "auto_reply", "auto_publish",
-    "order_reminder", "pricing", "delivery", "notifications", "store",
+    "xianguanjia",
+    "ai",
+    "oss",
+    "auto_reply",
+    "auto_publish",
+    "order_reminder",
+    "pricing",
+    "delivery",
+    "notifications",
+    "store",
 }
 
 _SENSITIVE_CONFIG_KEYS = ["app_secret", "api_key", "access_key_secret", "mch_secret", "webhook"]
@@ -40,21 +48,79 @@ CONFIG_SECTIONS: list[dict[str, Any]] = [
         "key": "xianguanjia",
         "name": "闲管家配置",
         "fields": [
-            {"key": "mode", "label": "接入模式", "type": "select", "options": ["self_developed", "business"], "default": "self_developed", "labels": {"self_developed": "自研应用", "business": "商务对接"}, "hint": "自研应用：个人或自有 ERP 直连；商务对接：第三方代商家接入"},
-            {"key": "app_key", "label": "AppKey", "type": "text", "required": True, "hint": "在闲管家开放平台创建应用后获取"},
-            {"key": "app_secret", "label": "AppSecret", "type": "password", "required": True, "hint": "应用密钥，请妥善保管不要泄露"},
-            {"key": "seller_id", "label": "商家 ID (Seller ID)", "type": "text", "required_when": {"mode": "business"}, "hint": "商务对接模式下的商家标识，自研模式无需填写"},
-            {"key": "base_url", "label": "API 网关", "type": "text", "default": "https://open.goofish.pro", "hint": "默认无需修改，仅在私有化部署时更改"},
+            {
+                "key": "mode",
+                "label": "接入模式",
+                "type": "select",
+                "options": ["self_developed", "business"],
+                "default": "self_developed",
+                "labels": {"self_developed": "自研应用", "business": "商务对接"},
+                "hint": "自研应用：个人或自有 ERP 直连；商务对接：第三方代商家接入",
+            },
+            {
+                "key": "app_key",
+                "label": "AppKey",
+                "type": "text",
+                "required": True,
+                "hint": "在闲管家开放平台创建应用后获取",
+            },
+            {
+                "key": "app_secret",
+                "label": "AppSecret",
+                "type": "password",
+                "required": True,
+                "hint": "应用密钥，请妥善保管不要泄露",
+            },
+            {
+                "key": "seller_id",
+                "label": "商家 ID (Seller ID)",
+                "type": "text",
+                "required_when": {"mode": "business"},
+                "hint": "商务对接模式下的商家标识，自研模式无需填写",
+            },
+            {
+                "key": "base_url",
+                "label": "API 网关",
+                "type": "text",
+                "default": "https://open.goofish.pro",
+                "hint": "默认无需修改，仅在私有化部署时更改",
+            },
         ],
     },
     {
         "key": "ai",
         "name": "AI 配置",
         "fields": [
-            {"key": "provider", "label": "提供商", "type": "select", "options": ["qwen", "deepseek", "openai"], "default": "qwen", "labels": {"qwen": "百炼千问 (Qwen)", "deepseek": "DeepSeek", "openai": "OpenAI"}},
+            {
+                "key": "provider",
+                "label": "提供商",
+                "type": "select",
+                "options": ["qwen", "deepseek", "openai"],
+                "default": "qwen",
+                "labels": {"qwen": "百炼千问 (Qwen)", "deepseek": "DeepSeek", "openai": "OpenAI"},
+            },
             {"key": "api_key", "label": "API Key", "type": "text", "required": True},
-            {"key": "model", "label": "模型", "type": "combobox", "default": "qwen-plus-latest", "options": ["qwen-plus-latest", "qwen-max-latest", "qwen-turbo-latest", "qwen-flash", "qwen3-max", "qwen3.5-plus", "qwq-plus-latest"]},
-            {"key": "base_url", "label": "API 地址", "type": "text", "placeholder": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
+            {
+                "key": "model",
+                "label": "模型",
+                "type": "combobox",
+                "default": "qwen-plus-latest",
+                "options": [
+                    "qwen-plus-latest",
+                    "qwen-max-latest",
+                    "qwen-turbo-latest",
+                    "qwen-flash",
+                    "qwen3-max",
+                    "qwen3.5-plus",
+                    "qwq-plus-latest",
+                ],
+            },
+            {
+                "key": "base_url",
+                "label": "API 地址",
+                "type": "text",
+                "placeholder": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            },
         ],
     },
     {
@@ -84,7 +150,13 @@ CONFIG_SECTIONS: list[dict[str, Any]] = [
         "name": "自动上架",
         "fields": [
             {"key": "enabled", "label": "启用", "type": "toggle", "default": False},
-            {"key": "default_category", "label": "默认品类", "type": "select", "options": ["express", "recharge", "exchange", "account", "movie_ticket", "game"], "default": "exchange"},
+            {
+                "key": "default_category",
+                "label": "默认品类",
+                "type": "select",
+                "options": ["express", "recharge", "exchange", "account", "movie_ticket", "game"],
+                "default": "exchange",
+            },
             {"key": "auto_compliance", "label": "自动合规检查", "type": "toggle", "default": True},
         ],
     },
@@ -122,9 +194,19 @@ CONFIG_SECTIONS: list[dict[str, Any]] = [
         "name": "告警通知",
         "fields": [
             {"key": "feishu_enabled", "label": "飞书通知", "type": "toggle", "default": False},
-            {"key": "feishu_webhook", "label": "飞书 Webhook URL", "type": "password", "placeholder": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx"},
+            {
+                "key": "feishu_webhook",
+                "label": "飞书 Webhook URL",
+                "type": "password",
+                "placeholder": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx",
+            },
             {"key": "wechat_enabled", "label": "企业微信通知", "type": "toggle", "default": False},
-            {"key": "wechat_webhook", "label": "企业微信 Webhook URL", "type": "password", "placeholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"},
+            {
+                "key": "wechat_webhook",
+                "label": "企业微信 Webhook URL",
+                "type": "password",
+                "placeholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx",
+            },
             {"key": "notify_cookie_expire", "label": "Cookie 过期告警", "type": "toggle", "default": True},
             {"key": "notify_cookie_refresh", "label": "Cookie 刷新成功通知", "type": "toggle", "default": True},
             {"key": "notify_sla_alert", "label": "SLA 异常告警", "type": "toggle", "default": True},
