@@ -3791,7 +3791,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
 
             # ---------- SPA static file serving ----------
-            if path.startswith("/api/"):
+            if path.startswith("/api/") or path == "/not-found":
                 self._send_json(_error_payload("Not Found", code="NOT_FOUND"), status=404)
                 return
 
