@@ -65,7 +65,7 @@ class FollowUpEngine:
         self._init_db()
 
     @classmethod
-    def from_system_config(cls) -> "FollowUpEngine":
+    def from_system_config(cls) -> FollowUpEngine:
         """Create engine with policy/templates from system_config.json order_reminder section."""
         try:
             from src.dashboard.config_service import read_system_config

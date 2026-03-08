@@ -49,7 +49,7 @@ class SchedulerState:
             json.dump(asdict(self), f, ensure_ascii=False, indent=2)
 
     @classmethod
-    def load(cls, path: Path | None = None) -> "SchedulerState":
+    def load(cls, path: Path | None = None) -> SchedulerState:
         p = path or STATE_FILE
         if not p.exists():
             return cls()
