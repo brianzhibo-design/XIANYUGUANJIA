@@ -440,16 +440,19 @@ class MimicOps:
 
     def _xianguanjia_service_config(self) -> dict[str, Any]:
         settings = self._get_xianguanjia_settings()
-        result: dict[str, Any] = {
-            "xianguanjia": {
-                "enabled": bool(settings["configured"]),
-                "app_key": settings["app_key"],
-                "app_secret": settings["app_secret"],
-                "merchant_id": settings["merchant_id"] or None,
-                "base_url": settings["base_url"],
-            }
-        }
         sys_cfg = _read_system_config()
+        xgj_sys = sys_cfg.get("xianguanjia", {})
+
+        merged_xgj = dict(xgj_sys) if isinstance(xgj_sys, dict) else {}
+        merged_xgj.update({
+            "enabled": bool(settings["configured"]),
+            "app_key": settings["app_key"],
+            "app_secret": settings["app_secret"],
+            "merchant_id": settings["merchant_id"] or None,
+            "base_url": settings["base_url"],
+        })
+
+        result: dict[str, Any] = {"xianguanjia": merged_xgj}
         oss_cfg = sys_cfg.get("oss")
         if isinstance(oss_cfg, dict) and oss_cfg:
             clean_oss = {k: v for k, v in oss_cfg.items() if v and not str(v).endswith("****")}
