@@ -19,25 +19,8 @@ import httpx
 from src.core.error_handler import BrowserError
 from src.core.logger import get_logger
 
-def _load_xgj_credentials() -> tuple[str, str]:
-    """Load xianguanjia credentials: env > system_config > empty."""
-    env_key = os.environ.get("XGJ_APP_KEY", "")
-    env_secret = os.environ.get("XGJ_APP_SECRET", "")
-    if env_key and env_secret:
-        return env_key, env_secret
-    try:
-        import json
-        from pathlib import Path
-        cfg_path = Path(__file__).resolve().parents[2] / "server" / "data" / "system_config.json"
-        if cfg_path.exists():
-            data = json.loads(cfg_path.read_text(encoding="utf-8"))
-            xgj = data.get("xianguanjia", {})
-            return str(xgj.get("app_key", "")), str(xgj.get("app_secret", ""))
-    except Exception:
-        pass
-    return "", ""
-
-_APP_KEY, _APP_SECRET = _load_xgj_credentials()
+_MTOP_APP_KEY = "34839810"
+_MTOP_APP_SECRET = "444e9908a51d1cb236a27862abc769c9"
 
 try:
     import websockets
@@ -58,7 +41,7 @@ def parse_cookie_header(cookie_text: str) -> dict[str, str]:
     return result
 
 
-def generate_sign(timestamp_ms: str, token: str, data: str, app_key: str = _APP_KEY) -> str:
+def generate_sign(timestamp_ms: str, token: str, data: str, app_key: str = _MTOP_APP_KEY) -> str:
     raw = f"{token}&{timestamp_ms}&{app_key}&{data}"
     return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
@@ -344,6 +327,8 @@ class GoofishWsTransport:
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=max(10, self.max_queue_size))
         self._queue_event: asyncio.Event = asyncio.Event()
         self._session_peer: dict[str, str] = {}
+        self._peer_to_session: dict[str, str] = {}
+        self._nick_to_session: dict[str, str] = {}
         self._seen_event: dict[str, float] = {}
 
         self._ws: Any | None = None
@@ -675,13 +660,13 @@ class GoofishWsTransport:
 
             t = str(int(time.time() * 1000))
             data_val = json.dumps(
-                {"appKey": _APP_SECRET, "deviceId": self.device_id},
+                {"appKey": _MTOP_APP_SECRET, "deviceId": self.device_id},
                 ensure_ascii=False,
                 separators=(",", ":"),
             )
             params = {
                 "jsv": "2.7.2",
-                "appKey": _APP_KEY,
+                "appKey": _MTOP_APP_KEY,
                 "t": t,
                 "sign": generate_sign(t, token_seed, data_val),
                 "v": "1.0",
@@ -757,7 +742,7 @@ class GoofishWsTransport:
             "lwp": "/reg",
             "headers": {
                 "cache-header": "app-key token ua wv",
-                "app-key": _APP_SECRET,
+                "app-key": _MTOP_APP_SECRET,
                 "token": token,
                 "ua": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -842,14 +827,25 @@ class GoofishWsTransport:
         self._cleanup_seen()
 
         self._session_peer[chat_id] = sender_id
+        if sender_id:
+            self._peer_to_session[sender_id] = chat_id
+        sender_name = str(event.get("sender_name", "") or "买家")
+        if sender_name and sender_name != "买家":
+            self._nick_to_session[sender_name] = chat_id
         _SESSION_PEER_MAX = 1000
         if len(self._session_peer) > _SESSION_PEER_MAX:
             oldest_keys = list(self._session_peer.keys())[: len(self._session_peer) - _SESSION_PEER_MAX]
             for k in oldest_keys:
-                self._session_peer.pop(k, None)
+                peer = self._session_peer.pop(k, None)
+                if peer:
+                    self._peer_to_session.pop(peer, None)
+        if len(self._nick_to_session) > _SESSION_PEER_MAX:
+            oldest = list(self._nick_to_session.keys())[: len(self._nick_to_session) - _SESSION_PEER_MAX]
+            for k in oldest:
+                self._nick_to_session.pop(k, None)
         payload = {
             "session_id": chat_id,
-            "peer_name": str(event.get("sender_name", "") or "买家"),
+            "peer_name": sender_name,
             "item_title": str(event.get("item_id", "") or ""),
             "last_message": text,
             "unread_count": 1,
@@ -872,20 +868,30 @@ class GoofishWsTransport:
             return
         sync_pkg = body.get("syncPushPackage", {})
         if not isinstance(sync_pkg, dict):
+            if body:
+                body_keys = list(body.keys())[:10]
+                if body_keys and body_keys != ["code"]:
+                    self.logger.debug(f"WS sync: no syncPushPackage, body keys={body_keys}")
             return
         data_arr = sync_pkg.get("data", [])
         if not isinstance(data_arr, list):
             return
 
-        for item in data_arr:
+        if data_arr:
+            self.logger.debug(f"WS sync push: {len(data_arr)} items")
+        for idx, item in enumerate(data_arr):
             if not isinstance(item, dict):
                 continue
             raw = item.get("data")
             if not raw:
                 continue
             decoded = decode_sync_payload(str(raw))
+            if decoded is None:
+                self.logger.debug(f"WS sync item[{idx}] decode failed, raw_len={len(str(raw))}")
+                continue
             event = extract_chat_event(decoded)
             if event:
+                self.logger.info(f"WS chat event: chat={event.get('chat_id','?')}, sender={event.get('sender_user_id','?')}, text={event.get('text','')[:50]}")
                 await self._push_event(event)
 
     async def _run(self) -> None:
@@ -931,6 +937,13 @@ class GoofishWsTransport:
                     if (now - self._last_heartbeat_ack) > (self.heartbeat_interval + self.heartbeat_timeout):
                         raise BrowserError("WebSocket heartbeat timeout")
 
+                    if self._token_ts > 0 and (now - self._token_ts) >= self.token_refresh_interval_seconds * 0.9:
+                        self.logger.info("Token approaching expiry, forcing WS reconnect for renewal")
+                        self._token = ""
+                        self._token_ts = 0.0
+                        self._connect_failures = 0
+                        raise BrowserError("Token refresh: reconnect required")
+
                     try:
                         msg_text = await asyncio.wait_for(self._ws.recv(), timeout=1.0)
                     except asyncio.TimeoutError:
@@ -953,10 +966,15 @@ class GoofishWsTransport:
                 self._last_disconnect_reason = reason
                 self.logger.warning(f"Goofish WebSocket disconnected, retrying: {reason}")
 
+                is_rgv587 = "RGV587" in reason
                 if auth_error:
                     if await self._try_active_cookie_refresh():
-                        self._connect_failures = 0
-                        self.logger.info("Active cookie refresh succeeded, retrying WS immediately")
+                        if is_rgv587:
+                            self.logger.warning(f"RGV587 rate limit detected, backing off {30 * min(self._connect_failures, 4)}s despite cookie refresh")
+                            await asyncio.sleep(30.0 * min(self._connect_failures, 4))
+                        else:
+                            self._connect_failures = 0
+                            self.logger.info("Active cookie refresh succeeded, retrying WS immediately")
                         continue
 
                     if self.auth_hold_until_cookie_update:
@@ -1093,3 +1111,26 @@ class GoofishWsTransport:
         except Exception as exc:
             self.logger.warning(f"WS send failed: {exc}")
             return False
+
+    def find_session_by_peer(self, user_id: str) -> str:
+        """Reverse lookup: sender_user_id -> chat_id."""
+        return self._peer_to_session.get(str(user_id or "").strip(), "")
+
+    def find_session_by_nick(self, nick: str) -> str:
+        """Reverse lookup: buyer nick -> chat_id."""
+        return self._nick_to_session.get(str(nick or "").strip(), "")
+
+
+_ws_transport_instance: GoofishWsTransport | None = None
+
+
+def set_ws_transport_instance(transport: GoofishWsTransport | None) -> None:
+    global _ws_transport_instance
+    _ws_transport_instance = transport
+
+
+def get_session_by_buyer_nick(nick: str) -> str:
+    """Module-level helper: find chat session_id by buyer nick."""
+    if not _ws_transport_instance or not nick:
+        return ""
+    return _ws_transport_instance.find_session_by_nick(nick)

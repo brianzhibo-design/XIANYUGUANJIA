@@ -3,13 +3,17 @@ import type { AxiosResponse } from 'axios';
 import type { ApiResponse } from './index';
 
 export interface DashboardSummary {
-  total_operations: number;
-  today_operations: number;
   active_products: number;
-  sold_products: number;
-  total_views: number;
-  total_wants: number;
+  pending_orders: number;
   total_sales: number;
+  total_orders: number;
+  source?: string;
+  // legacy fallback fields
+  total_operations?: number;
+  today_operations?: number;
+  sold_products?: number;
+  total_views?: number;
+  total_wants?: number;
 }
 
 export interface TrendPoint {
@@ -20,10 +24,15 @@ export interface TrendPoint {
 export interface TopProduct {
   product_id: string;
   title: string;
-  status: string;
-  views: number;
-  wants: number;
-  sales: number;
+  sold: number;
+  price: number;
+  stock: number;
+  pic_url?: string;
+  // legacy fallback
+  status?: string;
+  views?: number;
+  wants?: number;
+  sales?: number;
 }
 
 export const getSystemStatus = (): Promise<AxiosResponse> => api.get('/status');
@@ -31,10 +40,10 @@ export const getSystemStatus = (): Promise<AxiosResponse> => api.get('/status');
 export const getDashboardSummary = (): Promise<AxiosResponse<ApiResponse<DashboardSummary>>> =>
   api.get('/summary');
 
-export const getTrendData = (metric: string, days = 30): Promise<AxiosResponse<ApiResponse<TrendPoint[]>>> =>
+export const getTrendData = (metric: string, days = 30): Promise<AxiosResponse<ApiResponse<TrendPoint[]> & { trend?: TrendPoint[] }>> =>
   api.get(`/trend?metric=${metric}&days=${days}`);
 
-export const getTopProducts = (limit = 12): Promise<AxiosResponse<ApiResponse<TopProduct[]>>> =>
+export const getTopProducts = (limit = 12): Promise<AxiosResponse<ApiResponse<TopProduct[]> & { products?: TopProduct[] }>> =>
   api.get(`/top-products?limit=${limit}`);
 
 export const getRecentOperations = (limit = 20): Promise<AxiosResponse> =>

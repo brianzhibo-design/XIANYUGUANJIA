@@ -267,30 +267,37 @@ class CookieGrabber:
 
     @staticmethod
     def _decrypt_cookiecloud(encrypted: str, key: str) -> dict[str, Any]:
-        """Decrypt CookieCloud AES-CBC encrypted data."""
+        """Decrypt CookieCloud AES-CBC encrypted data.
+
+        Supports both legacy (CryptoJS passphrase mode with Salted__ header,
+        EVP_BytesToKey for key derivation) and aes-128-cbc-fixed (zero IV,
+        direct key) modes.
+        """
         try:
             import base64
-            from hashlib import md5
+            import json
+            from hashlib import md5 as _md5
 
             from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
             from cryptography.hazmat.primitives import padding as sym_padding
 
             raw = base64.b64decode(encrypted)
+
             if raw[:8] == b"Salted__":
                 salt = raw[8:16]
                 ct = raw[16:]
-            else:
-                salt = b""
-                ct = raw
+                passphrase = key.encode("utf-8")
 
-            key_bytes = key.encode("utf-8")
-            d = b""
-            while len(d) < 48:
-                d = md5(d + key_bytes + salt).digest() + d[len(d):]  # noqa: E501
-                d_full = d
-                d = d_full
-            derived_key = d_full[:32]
-            iv = d_full[32:48]
+                d = b""
+                last = b""
+                while len(d) < 48:
+                    last = _md5(last + passphrase + salt).digest()
+                    d += last
+                derived_key, iv = d[:32], d[32:48]
+            else:
+                ct = raw
+                derived_key = key.encode("utf-8")[:16]
+                iv = b"\x00" * 16
 
             cipher = Cipher(algorithms.AES(derived_key), modes.CBC(iv))
             decryptor = cipher.decryptor()
@@ -299,7 +306,6 @@ class CookieGrabber:
             unpadder = sym_padding.PKCS7(128).unpadder()
             plaintext = unpadder.update(padded) + unpadder.finalize()
 
-            import json
             return json.loads(plaintext.decode("utf-8"))
         except Exception as exc:
             logger.debug(f"CookieCloud 解密失败: {exc}")

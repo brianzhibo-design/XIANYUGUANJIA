@@ -11,7 +11,8 @@
 | Python | 3.10+ | Python 后端运行时 |
 | Node.js | 18+ | Node.js 后端和 React 前端 |
 | npm | 随 Node.js 安装 | 包管理器 |
-| 闲鱼 Cookie | - | 从浏览器获取的登录凭证 |
+| Chrome / Edge | 任意版本 | Cookie 自动获取需要本机浏览器 |
+| 闲鱼 Cookie | - | 从浏览器获取的登录凭证（可通过 Dashboard 自动获取） |
 | AI API Key | - | DeepSeek / 阿里百炼 / OpenAI 等，任选一个 |
 
 ---
@@ -31,6 +32,9 @@ cd xianyu-openclaw
 # Python 依赖
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+
+# 安装 Playwright Chromium 浏览器（Cookie 自动获取和消息服务需要，首次约 150MB）
+playwright install chromium
 
 # Node.js 依赖
 cd server && npm install && cd ..
@@ -71,7 +75,7 @@ AI_MODEL=deepseek-chat
 start.bat
 ```
 
-脚本会自动启动 Node.js 后端、React 前端和 Python 后端。如需 Lite 直连模式（WebSocket 消息监听 + AI 自动回复），可另开终端执行 `python -m src.lite`。
+一键启动脚本会自动完成所有依赖安装（包括 Playwright Chromium 浏览器下载），然后启动 Node.js 后端、React 前端和 Python 后端。如需 Lite 直连模式（WebSocket 消息监听 + AI 自动回复），可另开终端执行 `python -m src.lite`。
 
 ### 第 5 步：验证启动
 
@@ -153,11 +157,24 @@ lsof -i :8091
 # .env 中设置 FRONTEND_PORT、NODE_PORT、PYTHON_PORT
 ```
 
-### Cookie 失效
+### Cookie 自动获取失败 / 无法打开浏览器窗口
 
-**症状**：WebSocket 连接失败，或消息监听无响应。
+**症状**：Dashboard 点击"自动获取 Cookie"显示"无法启动浏览器"或"所有获取方式均失败"。
 
-**解决**：重新从浏览器获取 Cookie，更新到 `.env` 或通过 Dashboard 在线更新，然后重启 Python 后端。
+**解决**：
+1. 确认已安装 Playwright 浏览器：`playwright install chromium`
+2. 确认本机已安装 Chrome 或 Edge 浏览器
+3. 如使用一键启动脚本 `./start.sh` 或 `start.bat`，Playwright 会自动安装
+4. 如需静默自动刷新，需在本机 Chrome/Edge 中至少登录一次闲鱼
+
+### Cookie 失效 / WebSocket 断连
+
+**症状**：WebSocket 连接失败，或消息监听无响应，日志出现 `FAIL_SYS_USER_VALIDATE`。
+
+**解决**：
+1. 保持本机 Chrome/Edge 浏览器开启且闲鱼已登录，系统会自动从浏览器读取最新 Cookie
+2. 确认 `.env` 中设置了 `COOKIE_AUTO_REFRESH=true`
+3. 也可通过 Dashboard 在线更新 Cookie，或手动更新到 `.env` 后重启 Python 后端
 
 ### AI 服务报错
 

@@ -165,11 +165,26 @@ def check_cookie_expiration() -> StartupCheckResult:
     return StartupCheckResult("Cookie有效性", True, "Cookie格式正常", critical=False)
 
 
+def _find_playwright_chromium() -> bool:
+    """检测 Playwright Chromium 浏览器二进制是否已下载。"""
+    import platform as _plat
+
+    system = _plat.system()
+    if system == "Darwin":
+        cache_root = Path.home() / "Library" / "Caches" / "ms-playwright"
+    elif system == "Windows":
+        cache_root = Path(os.environ.get("LOCALAPPDATA", "")) / "ms-playwright"
+    else:
+        cache_root = Path.home() / ".cache" / "ms-playwright"
+
+    if not cache_root.is_dir():
+        return False
+    return any(d.name.startswith("chromium") for d in cache_root.iterdir() if d.is_dir())
+
+
 def check_lite_browser_dependency() -> StartupCheckResult:
     try:
         import playwright  # noqa: F401
-
-        return StartupCheckResult("Lite 浏览器驱动", True, "Playwright 已安装", critical=True)
     except Exception:
         return StartupCheckResult(
             "Lite 浏览器驱动",
@@ -177,6 +192,16 @@ def check_lite_browser_dependency() -> StartupCheckResult:
             "未安装 Playwright。请执行: pip install playwright && playwright install chromium",
             critical=True,
         )
+
+    if not _find_playwright_chromium():
+        return StartupCheckResult(
+            "Lite 浏览器驱动",
+            False,
+            "Playwright 已安装但 Chromium 浏览器未下载。请执行: playwright install chromium",
+            critical=True,
+        )
+
+    return StartupCheckResult("Lite 浏览器驱动", True, "Playwright + Chromium 已就绪", critical=True)
 
 
 def _is_production_env() -> bool:

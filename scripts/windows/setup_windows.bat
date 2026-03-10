@@ -19,6 +19,12 @@ echo [INFO] Installing dependencies...
 call .venv\Scripts\pip install -r requirements.txt
 if errorlevel 1 exit /b 1
 
+echo [INFO] Installing Playwright Chromium browser...
+call .venv\Scripts\playwright install chromium
+if errorlevel 1 (
+  echo [WARN] Playwright Chromium install failed, cookie auto-grab may not work.
+)
+
 if not exist .env (
   echo [INFO] Creating .env from .env.example...
   copy .env.example .env >nul

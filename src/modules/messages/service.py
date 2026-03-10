@@ -78,6 +78,30 @@ class MessagesService:
 
         app_config = get_config()
         self.config = config or app_config.get_section("messages", {})
+
+        sys_cfg_path = os.path.join("server", "data", "system_config.json")
+        if os.path.exists(sys_cfg_path):
+            try:
+                with open(sys_cfg_path, encoding="utf-8") as f:
+                    sys_cfg = json.load(f)
+                ar = sys_cfg.get("auto_reply", {})
+                if isinstance(ar, dict):
+                    if "enabled" in ar:
+                        self.config["enabled"] = ar["enabled"]
+                    for ui_key, yaml_key in [
+                        ("first_reply_delay", "first_reply_delay_seconds"),
+                        ("inter_reply_delay", "inter_reply_delay_seconds"),
+                    ]:
+                        raw = ar.get(ui_key)
+                        if isinstance(raw, str) and "-" in raw:
+                            try:
+                                parts = raw.split("-", 1)
+                                self.config[yaml_key] = [float(parts[0].strip()), float(parts[1].strip())]
+                            except (ValueError, IndexError):
+                                pass
+            except Exception:
+                pass
+
         self.quote_config = {
             **app_config.get_section("quote", {}),
             **self.config.get("quote", {}),
@@ -105,6 +129,15 @@ class MessagesService:
         self.first_reply_delay_seconds = tuple(self.config.get("first_reply_delay_seconds", [0.25, 0.9]))
         self.inter_reply_delay_seconds = tuple(self.config.get("inter_reply_delay_seconds", [0.4, 1.2]))
         self.send_confirm_delay_seconds = tuple(self.config.get("send_confirm_delay_seconds", [0.15, 0.35]))
+
+        self.simulate_human_typing = bool(self.config.get("simulate_human_typing", False))
+        _speed_raw = str(self.config.get("typing_speed_range", "0.05-0.15"))
+        try:
+            _lo, _hi = _speed_raw.split("-", 1)
+            self.typing_speed_range = (float(_lo), float(_hi))
+        except (ValueError, TypeError):
+            self.typing_speed_range = (0.05, 0.15)
+        self.typing_max_delay = float(self.config.get("typing_max_delay", 8))
 
         self.reply_prefix = self.config.get("reply_prefix", "")
         self.default_reply = self.config.get(
@@ -420,6 +453,9 @@ class MessagesService:
                 config=self.ws_config,
                 cookie_supplier=self._resolve_ws_cookie,
             )
+            from src.modules.messages.ws_live import set_ws_transport_instance
+
+            set_ws_transport_instance(self._ws_transport)
             await self._ws_transport.start()
             self.logger.info("MessagesService WebSocket transport enabled")
             return self._ws_transport
@@ -1214,6 +1250,24 @@ class MessagesService:
         except Exception:
             logger.debug("Failed to persist quote to ledger", exc_info=True)
 
+    _ORDER_TRIGGER_PATTERNS = re.compile(
+        r"拍了|已拍|已下单|下单了|付款|已买|改价|改个价|帮我改|拍好了|我拍了"
+    )
+
+    def _check_order_trigger(self, msg: str) -> None:
+        """If buyer message hints at placing an order, wake up the price poller."""
+        if not self._ORDER_TRIGGER_PATTERNS.search(msg):
+            return
+        try:
+            from src.modules.orders.auto_price_poller import get_price_poller
+
+            poller = get_price_poller()
+            if poller:
+                poller.trigger_now()
+                self.logger.debug("Order trigger: woke up price poller for msg=%s", msg[:30])
+        except Exception:
+            pass
+
     def generate_reply(self, message_text: str, item_title: str = "") -> str:
         """按策略引擎生成回复（兼容旧调用）。"""
         reply = self.reply_engine.generate_reply(message_text=message_text, item_title=item_title)
@@ -1373,6 +1427,7 @@ class MessagesService:
     ) -> dict[str, Any]:
         """处理单个会话（供批处理与 worker 复用）。"""
         if not self.config.get("enabled", True):
+            self.logger.debug("process_session skipped: auto_reply disabled")
             return {"skipped": True, "reason": "auto_reply_disabled", "session_id": str(session.get("session_id", ""))}
 
         session_start = perf_counter()
@@ -1415,7 +1470,17 @@ class MessagesService:
         elif dry_run:
             sent = True
         elif session_id:
+            if self.simulate_human_typing and reply_text:
+                base_delay = random.uniform(0, 1)
+                per_char = random.uniform(*self.typing_speed_range)
+                typing_delay = min(base_delay + len(reply_text) * per_char, self.typing_max_delay)
+                await asyncio.sleep(typing_delay)
             sent = await self.reply_to_session(session_id, reply_text, page_id=page_id)
+            if not sent:
+                self.logger.warning(f"reply_to_session returned False for session={session_id}")
+
+        if sent and msg:
+            self._check_order_trigger(msg)
 
         latency_seconds = perf_counter() - session_start
         within_target = latency_seconds <= self.reply_target_seconds

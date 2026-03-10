@@ -55,6 +55,16 @@ if not exist ".venv\.deps_installed" (
     echo. > .venv\.deps_installed
 )
 
+:: Playwright Chromium 浏览器
+if not exist ".venv\.playwright_installed" (
+    echo [*] 安装 Playwright Chromium 浏览器（首次约 150MB）...
+    .venv\Scripts\playwright install chromium
+    echo. > .venv\.playwright_installed
+    echo [OK] Playwright Chromium 安装完成
+) else (
+    echo [OK] Playwright Chromium 已就绪
+)
+
 if not exist "server\node_modules" (
     echo [*] 安装 Node.js 后端依赖...
     cd server && npm install --silent && cd ..

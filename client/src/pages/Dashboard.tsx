@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getDashboardSummary, getRecentOperations, getSystemStatus, getTrendData, getTopProducts } from '../api/dashboard'
-import { Store, ShoppingBag, MessageCircle, FileText, CheckCircle, AlertCircle, RefreshCw, Settings, Zap, Bot, BarChart3, Clock, Package, TrendingUp, Calendar, Send } from 'lucide-react'
+import { Store, ShoppingBag, MessageCircle, FileText, AlertCircle, RefreshCw, Settings, Zap, Bot, BarChart3, Clock, Package, TrendingUp, Calendar, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import SetupGuide from '../components/SetupGuide'
 import ApiStatusPanel from '../components/ApiStatusPanel'
@@ -48,12 +48,13 @@ const TABS = [
 const Dashboard = () => {
   const { category, meta } = useStoreCategory();
   const [activeTab, setActiveTab] = useState('overview');
-  const [stats, setStats] = useState({ products: 0, orders: 0, messages: 0, replies: 0 });
+  const [stats, setStats] = useState({ products: 0, orders: 0, sales: 0, totalOrders: 0 });
+  const [dataSource, setDataSource] = useState<string>('');
   const [recentOps, setRecentOps] = useState([]);
   const [sysStatus, setSysStatus] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const [metric, setMetric] = useState('views');
+  const [metric, setMetric] = useState('orders');
   const [days, setDays] = useState(30);
   const [trendData, setTrendData] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
@@ -76,11 +77,12 @@ const Dashboard = () => {
 
       if (summaryRes?.data) {
         const raw = summaryRes.data.data || summaryRes.data;
+        setDataSource(raw.source || 'local_db');
         setStats({
           products: raw.active_products ?? 0,
-          orders: raw.today_operations ?? 0,
-          messages: raw.total_wants ?? 0,
-          replies: raw.total_sales ?? 0
+          orders: raw.pending_orders ?? raw.today_operations ?? 0,
+          sales: raw.total_sales ?? 0,
+          totalOrders: raw.total_orders ?? raw.total_operations ?? 0,
         });
       }
       if (opsRes?.data) {
@@ -197,9 +199,9 @@ const Dashboard = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
             {[
               { label: '在售商品', value: stats.products, icon: ShoppingBag, color: 'bg-xy-brand-50', iconColor: 'text-xy-brand-500' },
-              { label: '今日操作', value: stats.orders, icon: FileText, color: 'bg-blue-50', iconColor: 'text-blue-500' },
-              { label: '总想要数', value: stats.messages, icon: MessageCircle, color: 'bg-red-50', iconColor: 'text-red-500' },
-              { label: '总成交数', value: stats.replies, icon: CheckCircle, color: 'bg-green-50', iconColor: 'text-green-500' },
+              { label: '待付款订单', value: stats.orders, icon: Clock, color: 'bg-orange-50', iconColor: 'text-orange-500' },
+              { label: '总销量', value: stats.sales, icon: TrendingUp, color: 'bg-blue-50', iconColor: 'text-blue-500' },
+              { label: '总订单数', value: stats.totalOrders, icon: FileText, color: 'bg-green-50', iconColor: 'text-green-500' },
             ].map(card => (
               <div key={card.label} className="xy-card p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -212,6 +214,11 @@ const Dashboard = () => {
               </div>
             ))}
           </div>
+          {dataSource && (
+            <p className="text-xs text-xy-text-muted mb-4 -mt-4">
+              数据来源：{dataSource === 'xianguanjia_api' ? '闲管家 API（实时）' : '本地数据库（离线）'}
+            </p>
+          )}
 
           <div className="grid md:grid-cols-3 gap-8">
             <div className="md:col-span-2 xy-card overflow-hidden">
@@ -297,7 +304,7 @@ const Dashboard = () => {
               <div className="flex justify-between items-center mb-6">
                 <h3 className="font-bold text-xy-text-primary">核心指标趋势</h3>
                 <div className="flex bg-xy-gray-100 p-1 rounded-lg">
-                  {[{ id: 'views', label: '浏览量' }, { id: 'wants', label: '想要数' }, { id: 'sales', label: '成交量' }].map(m => (
+                  {[{ id: 'orders', label: '订单量' }, { id: 'completed', label: '成交量' }, { id: 'sales', label: '累计销量' }].map(m => (
                     <button key={m.id} onClick={() => setMetric(m.id)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${metric === m.id ? 'bg-white shadow-sm text-xy-text-primary' : 'text-xy-text-secondary hover:text-xy-text-primary'}`}>
                       {m.label}
                     </button>
@@ -318,7 +325,7 @@ const Dashboard = () => {
                       <XAxis dataKey="date" tickFormatter={v => v.slice(5)} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                       <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                       <Tooltip labelFormatter={v => `日期: ${v}`} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }} />
-                      <Bar dataKey="value" fill="#f97316" radius={[4, 4, 0, 0]} name={metric === 'views' ? '浏览量' : metric === 'wants' ? '想要数' : '成交量'} />
+                      <Bar dataKey="value" fill="#f97316" radius={[4, 4, 0, 0]} name={metric === 'orders' ? '订单量' : metric === 'completed' ? '成交量' : '累计销量'} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -350,7 +357,9 @@ const Dashboard = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-xy-text-primary truncate">{p.title}</p>
-                        <p className="text-xs text-xy-text-secondary mt-0.5">想要: {p.wants || 0} | 成交: {p.sales || 0} | 浏览: {p.views || 0}</p>
+                        <p className="text-xs text-xy-text-secondary mt-0.5">
+                          已售: {p.sold ?? p.sales ?? 0} | 库存: {p.stock ?? 0} | 价格: ¥{((p.price ?? 0) / 100).toFixed(2)}
+                        </p>
                       </div>
                     </div>
                   ))

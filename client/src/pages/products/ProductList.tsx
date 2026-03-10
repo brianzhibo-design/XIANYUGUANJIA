@@ -46,7 +46,7 @@ export default function ProductList() {
     setLoading(true);
     try {
       const res = await getProducts(page, 20);
-      if (res.data?.ok) setProducts(res.data.data?.list || []);
+      if (res.data?.ok) setProducts(res.data.data?.data?.list || []);
       else toast.error(res.data?.error || '无法获取商品列表');
     } catch { toast.error('加载失败'); }
     finally { setLoading(false); }

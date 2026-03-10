@@ -76,6 +76,24 @@ if [ ! -d "client/node_modules" ]; then
   (cd client && npm install --silent)
 fi
 
+# 5.5 确保 Playwright Chromium 浏览器已下载（Cookie 自动获取 + 消息服务需要）
+if [ ! -f ".venv/.playwright_installed" ] || ! python3 -c "
+from playwright.sync_api import sync_playwright
+p=sync_playwright().start()
+try:
+    b=p.chromium.launch(headless=True); b.close()
+except Exception:
+    p.stop(); exit(1)
+p.stop()
+" 2>/dev/null; then
+  info "安装 Playwright Chromium 浏览器（首次约 150MB）..."
+  playwright install chromium
+  touch .venv/.playwright_installed
+  info "Playwright Chromium 安装完成"
+else
+  info "Playwright Chromium 已就绪"
+fi
+
 info "所有依赖就绪"
 
 # 6. 启动服务

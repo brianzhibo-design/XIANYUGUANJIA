@@ -68,6 +68,16 @@ if errorlevel 1 (
 )
 echo [OK] Dependencies installed
 
+:: Install Playwright Chromium browser
+echo.
+echo [*] Installing Playwright Chromium browser...
+.venv\Scripts\playwright install chromium
+if errorlevel 1 (
+    echo [WARN] Playwright Chromium install failed, cookie auto-grab may not work.
+) else (
+    echo [OK] Playwright Chromium installed
+)
+
 :: Create directories
 echo.
 echo [*] Creating directories...

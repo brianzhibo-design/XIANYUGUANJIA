@@ -9,6 +9,31 @@ import {
 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
+const ORDER_STATUS_MAP: Record<number, { label: string; color: string }> = {
+  11: { label: '待付款', color: 'bg-orange-100 text-orange-700' },
+  12: { label: '待发货', color: 'bg-blue-100 text-blue-700' },
+  21: { label: '已发货', color: 'bg-cyan-100 text-cyan-700' },
+  22: { label: '已完成', color: 'bg-green-100 text-green-700' },
+  23: { label: '已退款', color: 'bg-red-100 text-red-700' },
+  24: { label: '已关闭', color: 'bg-xy-gray-100 text-xy-text-secondary' },
+};
+
+const TABS = [
+  { id: 'ALL', label: '全部订单', status: undefined },
+  { id: 'WAIT_PAY', label: '待付款', status: 11 },
+  { id: 'WAIT_SHIP', label: '待发货', status: 12 },
+  { id: 'SHIPPED', label: '已发货', status: 21 },
+  { id: 'DONE', label: '已完成', status: 22 },
+];
+
+function formatTimestamp(ts: number | string | undefined): string {
+  if (!ts) return '';
+  const num = Number(ts);
+  if (isNaN(num) || num <= 0) return '';
+  const d = new Date(num * 1000);
+  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
 export default function Orders() {
   const { category } = useStoreCategory();
   const [orders, setOrders] = useState([]);
@@ -29,12 +54,12 @@ export default function Orders() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const statusMap = { 'ALL': undefined, 'WAIT_BUYER_PAY': 1, 'WAIT_SELLER_SEND': 2 };
-      const payload = { page_no: 1, page_size: 50 };
-      if (statusMap[tab]) payload.order_status = statusMap[tab];
+      const activeTab = TABS.find(t => t.id === tab);
+      const payload: Record<string, any> = { page_no: 1, page_size: 50 };
+      if (activeTab?.status) payload.order_status = activeTab.status;
 
       const res = await getOrders(payload);
-      if (res.data?.ok) setOrders(res.data.data?.list || res.data.data?.data?.list || []);
+      if (res.data?.ok) setOrders(res.data.data?.data?.list || res.data.data?.list || []);
       else toast.error(res.data?.error || '无法获取订单');
     } catch { toast.error('加载订单失败'); }
     finally { setLoading(false); }
@@ -43,59 +68,64 @@ export default function Orders() {
   const filteredOrders = useMemo(() => {
     if (!searchQuery.trim()) return orders;
     const q = searchQuery.toLowerCase();
-    return orders.filter(o =>
-      (o.order_id && String(o.order_id).toLowerCase().includes(q)) ||
-      (o.buyer_name && o.buyer_name.toLowerCase().includes(q)) ||
-      (o.title && o.title.toLowerCase().includes(q))
-    );
+    return orders.filter(o => {
+      const no = o.order_no || o.order_id || '';
+      const nick = o.buyer_nick || o.buyer_name || '';
+      const t = o.goods?.title || o.title || '';
+      return (
+        (no && String(no).toLowerCase().includes(q)) ||
+        (nick && nick.toLowerCase().includes(q)) ||
+        (t && t.toLowerCase().includes(q))
+      );
+    });
   }, [orders, searchQuery]);
 
-  const handleAdjustPrice = async (orderId: string) => {
+  const handleAdjustPrice = async (orderNo: string) => {
     if (!priceEditValue || isNaN(Number(priceEditValue))) { toast.error('请输入有效价格'); return; }
     const priceInCents = Math.round(Number(priceEditValue) * 100);
-    setActionLoading(prev => ({ ...prev, [orderId]: 'price' }));
+    setActionLoading(prev => ({ ...prev, [orderNo]: 'price' }));
     try {
-      const res = await proxyXgjApi('/api/open/order/modify/price', { order_id: orderId, total_fee: priceInCents });
+      const res = await proxyXgjApi('/api/open/order/modify/price', { order_no: orderNo, order_price: priceInCents, express_fee: 0 });
       if (res.data?.ok) { toast.success('改价成功'); setPriceEditOrder(null); setPriceEditValue(''); fetchOrders(); }
-      else toast.error(res.data?.error || '改价失败');
+      else toast.error(res.data?.data?.msg || res.data?.error || '改价失败');
     } catch { toast.error('改价请求失败'); }
-    finally { setActionLoading(prev => ({ ...prev, [orderId]: null })); }
+    finally { setActionLoading(prev => ({ ...prev, [orderNo]: null })); }
   };
 
-  const handleShip = async (orderId: string) => {
-    setActionLoading(prev => ({ ...prev, [orderId]: 'ship' }));
+  const handleShip = async (orderNo: string) => {
+    setActionLoading(prev => ({ ...prev, [orderNo]: 'ship' }));
     try {
-      const res = await proxyXgjApi('/api/open/order/ship', { order_id: orderId });
+      const res = await proxyXgjApi('/api/open/order/ship', { order_no: orderNo });
       if (res.data?.ok) { toast.success('发货成功'); fetchOrders(); }
-      else toast.error(res.data?.error || '发货失败');
+      else toast.error(res.data?.data?.msg || res.data?.error || '发货失败');
     } catch { toast.error('发货请求失败'); }
-    finally { setActionLoading(prev => ({ ...prev, [orderId]: null })); }
+    finally { setActionLoading(prev => ({ ...prev, [orderNo]: null })); }
   };
 
-  const handleRetry = async (orderId: string) => {
-    setActionLoading(prev => ({ ...prev, [orderId]: 'retry' }));
+  const handleRetry = async (orderNo: string) => {
+    setActionLoading(prev => ({ ...prev, [orderNo]: 'retry' }));
     try {
-      const res = await api.post('/orders/retry', { order_id: orderId });
+      const res = await api.post('/orders/retry', { order_no: orderNo });
       if (res.data?.ok || res.data?.success) { toast.success('重试发货已触发'); fetchOrders(); }
       else toast.error(res.data?.error || '重试失败');
     } catch { toast.error('重试请求失败'); }
-    finally { setActionLoading(prev => ({ ...prev, [orderId]: null })); }
+    finally { setActionLoading(prev => ({ ...prev, [orderNo]: null })); }
   };
 
   const [remindStatus, setRemindStatus] = useState<Record<string, string>>({});
 
-  const handleRemind = async (orderId: string) => {
-    setActionLoading(prev => ({ ...prev, [orderId]: 'remind' }));
+  const handleRemind = async (orderNo: string) => {
+    setActionLoading(prev => ({ ...prev, [orderNo]: 'remind' }));
     try {
-      const res = await api.post('/orders/remind', { order_id: orderId });
+      const res = await api.post('/orders/remind', { order_no: orderNo });
       const d = res.data;
       if (d?.ok && d?.eligible) {
         if (d.message_sent) {
           toast.success('催单消息已发送');
-          setRemindStatus(prev => ({ ...prev, [orderId]: 'sent' }));
+          setRemindStatus(prev => ({ ...prev, [orderNo]: 'sent' }));
         } else {
           toast('催单已记录，下次该买家发消息时将自动发送', { icon: '📋' });
-          setRemindStatus(prev => ({ ...prev, [orderId]: 'pending' }));
+          setRemindStatus(prev => ({ ...prev, [orderNo]: 'pending' }));
         }
       } else if (d?.ok && !d?.eligible) {
         const reason = d.reason || '';
@@ -105,28 +135,29 @@ export default function Orders() {
           : reason.includes('dnd') ? '该买家在免打扰名单中'
           : `暂不可催单：${reason}`;
         toast(msg, { icon: '⏳' });
-        setRemindStatus(prev => ({ ...prev, [orderId]: 'cooldown' }));
+        setRemindStatus(prev => ({ ...prev, [orderNo]: 'cooldown' }));
       } else {
         toast.error(d?.error || '催单失败');
       }
     } catch {
       toast.error('催单请求失败');
     } finally {
-      setActionLoading(prev => ({ ...prev, [orderId]: null }));
+      setActionLoading(prev => ({ ...prev, [orderNo]: null }));
     }
   };
 
-  const toggleDetail = async (orderId: string) => {
-    if (expandedOrder === orderId) {
+  const toggleDetail = async (orderNo: string) => {
+    if (expandedOrder === orderNo) {
       setExpandedOrder(null);
       setOrderDetail(null);
       return;
     }
-    setExpandedOrder(orderId);
+    setExpandedOrder(orderNo);
     setDetailLoading(true);
     try {
-      const res = await proxyXgjApi('/api/open/order/detail', { order_id: orderId });
-      setOrderDetail(res.data?.ok ? (res.data.data || res.data) : null);
+      const res = await proxyXgjApi('/api/open/order/detail', { order_no: orderNo });
+      const detail = res.data?.ok ? (res.data.data?.data || res.data.data || null) : null;
+      setOrderDetail(detail);
     } catch { setOrderDetail(null); }
     finally { setDetailLoading(false); }
   };
@@ -136,6 +167,8 @@ export default function Orders() {
     if (!num || isNaN(num)) return '¥0.00';
     return `¥${(num / 100).toFixed(2)}`;
   };
+
+  const getStatusInfo = (status: number) => ORDER_STATUS_MAP[status] || { label: `状态${status}`, color: 'bg-xy-gray-100 text-xy-text-secondary' };
 
   const isVirtual = category === 'exchange' || category === 'virtual';
 
@@ -154,11 +187,7 @@ export default function Orders() {
       <div className="xy-card overflow-hidden">
         <div className="border-b border-xy-border px-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex gap-6 overflow-x-auto whitespace-nowrap">
-            {[
-              { id: 'ALL', label: '全部订单' },
-              { id: 'WAIT_BUYER_PAY', label: '待付款' },
-              { id: 'WAIT_SELLER_SEND', label: '待发货' }
-            ].map(t => (
+            {TABS.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
                 aria-selected={tab === t.id}
                 role="tab"
@@ -203,69 +232,72 @@ export default function Orders() {
         ) : (
           <>
           <div className="divide-y divide-xy-border">
-            {filteredOrders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map(order => (
-              <div key={order.order_id}>
+            {filteredOrders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((order, idx) => {
+              const statusInfo = getStatusInfo(order.order_status);
+              const orderNo = order.order_no || order.order_id || `unknown-${idx}`;
+              const picUrl = order.goods?.images?.[0] || order.pic_url || '';
+              const title = order.goods?.title || order.title || '未知商品';
+
+              return (
+              <div key={orderNo}>
                 <div className="p-5 hover:bg-xy-gray-50 transition-colors">
                   <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium">订单号: {order.order_id}</span>
-                      <span className="text-xs text-xy-text-muted">{order.create_time}</span>
+                      <span className="text-sm font-medium">订单号: {orderNo}</span>
+                      <span className="text-xs text-xy-text-muted">{formatTimestamp(order.order_time)}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
-                        order.status === 1 ? 'bg-orange-100 text-orange-700' :
-                        order.status === 2 ? 'bg-blue-100 text-blue-700' : 'bg-xy-gray-100 text-xy-text-secondary'
-                      }`}>{order.status === 1 ? '待付款' : order.status === 2 ? '待发货' : '其他'}</span>
-                      <button onClick={() => toggleDetail(order.order_id)} className="p-1 hover:bg-xy-gray-100 rounded text-xy-text-muted" title="查看详情">
-                        {expandedOrder === order.order_id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${statusInfo.color}`}>{statusInfo.label}</span>
+                      <button onClick={() => toggleDetail(orderNo)} className="p-1 hover:bg-xy-gray-100 rounded text-xy-text-muted" title="查看详情">
+                        {expandedOrder === orderNo ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
 
                   <div className="flex gap-4">
                     <div className="w-20 h-20 bg-xy-gray-100 rounded-lg overflow-hidden border border-xy-border flex-shrink-0">
-                      {order.pic_url ? (
-                        <img src={order.pic_url} alt={order.title || ''} className="w-full h-full object-cover" />
+                      {picUrl ? (
+                        <img src={picUrl} alt={title} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-xy-gray-300"><Receipt className="w-8 h-8" /></div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-base font-medium text-xy-text-primary truncate mb-1">{order.title || '未知商品'}</h3>
-                      <p className="text-sm text-xy-text-secondary mb-2">买家: {order.buyer_name ?? '未知'}</p>
-                      <div className="text-lg font-bold text-xy-brand-500">{formatPrice(order.total_fee)}</div>
+                      <h3 className="text-base font-medium text-xy-text-primary truncate mb-1">{title}</h3>
+                      <p className="text-sm text-xy-text-secondary mb-2">买家: {order.buyer_nick || order.buyer_name || '未知'}</p>
+                      <div className="text-lg font-bold text-xy-brand-500">{formatPrice(order.total_amount ?? order.total_fee)}</div>
                     </div>
 
                     <div className="flex flex-col gap-2 justify-end">
-                      {order.status === 1 && (
+                      {order.order_status === 11 && (
                         <>
                           <button
-                            onClick={() => handleRemind(order.order_id)}
-                            disabled={actionLoading[order.order_id] === 'remind'}
+                            onClick={() => handleRemind(orderNo)}
+                            disabled={actionLoading[orderNo] === 'remind'}
                             className={`xy-btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
-                              remindStatus[order.order_id] === 'sent' ? 'text-green-600 border-green-200' :
-                              remindStatus[order.order_id] === 'cooldown' ? 'text-orange-500 border-orange-200' :
+                              remindStatus[orderNo] === 'sent' ? 'text-green-600 border-green-200' :
+                              remindStatus[orderNo] === 'cooldown' ? 'text-orange-500 border-orange-200' :
                               'hover:text-blue-600 hover:border-blue-200'
                             }`}
                           >
                             <BellRing className="w-3.5 h-3.5" />
-                            {actionLoading[order.order_id] === 'remind' ? '催单中...' :
-                             remindStatus[order.order_id] === 'sent' ? '已催' :
-                             remindStatus[order.order_id] === 'cooldown' ? '冷却中' : '催单'}
+                            {actionLoading[orderNo] === 'remind' ? '催单中...' :
+                             remindStatus[orderNo] === 'sent' ? '已催' :
+                             remindStatus[orderNo] === 'cooldown' ? '冷却中' : '催单'}
                           </button>
-                          {priceEditOrder === order.order_id ? (
+                          {priceEditOrder === orderNo ? (
                             <div className="flex items-center gap-1.5">
                               <input
                                 type="number" step="0.01" min="0" placeholder="元"
                                 className="xy-input px-2 py-1 text-xs w-20"
                                 value={priceEditValue}
                                 onChange={e => setPriceEditValue(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') handleAdjustPrice(order.order_id); if (e.key === 'Escape') { setPriceEditOrder(null); setPriceEditValue(''); } }}
+                                onKeyDown={e => { if (e.key === 'Enter') handleAdjustPrice(orderNo); if (e.key === 'Escape') { setPriceEditOrder(null); setPriceEditValue(''); } }}
                                 autoFocus
                               />
-                              <button onClick={() => handleAdjustPrice(order.order_id)} disabled={actionLoading[order.order_id] === 'price'}
+                              <button onClick={() => handleAdjustPrice(orderNo)} disabled={actionLoading[orderNo] === 'price'}
                                 className="px-2 py-1 text-xs font-medium rounded bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                                {actionLoading[order.order_id] === 'price' ? '处理中...' : '确认'}
+                                {actionLoading[orderNo] === 'price' ? '处理中...' : '确认'}
                               </button>
                               <button onClick={() => { setPriceEditOrder(null); setPriceEditValue(''); }}
                                 className="p-1 text-xy-text-muted hover:text-red-500">
@@ -273,23 +305,23 @@ export default function Orders() {
                               </button>
                             </div>
                           ) : (
-                            <button onClick={() => { setPriceEditOrder(order.order_id); setPriceEditValue(''); }}
+                            <button onClick={() => { setPriceEditOrder(orderNo); setPriceEditValue(''); }}
                               className="xy-btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 hover:text-orange-600 hover:border-orange-200">
                               <Tag className="w-3.5 h-3.5" /> 改价
                             </button>
                           )}
                         </>
                       )}
-                      {order.status === 2 && (
+                      {order.order_status === 12 && (
                         <>
-                          <button onClick={() => handleShip(order.order_id)} disabled={actionLoading[order.order_id] === 'ship'}
+                          <button onClick={() => handleShip(orderNo)} disabled={actionLoading[orderNo] === 'ship'}
                             className="xy-btn-primary text-xs px-4 py-1.5 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                            <Truck className="w-3.5 h-3.5" /> {actionLoading[order.order_id] === 'ship' ? '发货中...' : '发货'}
+                            <Truck className="w-3.5 h-3.5" /> {actionLoading[orderNo] === 'ship' ? '发货中...' : '发货'}
                           </button>
                           {isVirtual && (
-                            <button onClick={() => handleRetry(order.order_id)} disabled={actionLoading[order.order_id] === 'retry'}
+                            <button onClick={() => handleRetry(orderNo)} disabled={actionLoading[orderNo] === 'retry'}
                               className="xy-btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 text-purple-600 hover:bg-purple-50 hover:border-purple-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-xy-border transition-colors">
-                              <RotateCcw className="w-3.5 h-3.5" /> {actionLoading[order.order_id] === 'retry' ? '重试中...' : '重试发货'}
+                              <RotateCcw className="w-3.5 h-3.5" /> {actionLoading[orderNo] === 'retry' ? '重试中...' : '重试发货'}
                             </button>
                           )}
                         </>
@@ -298,7 +330,7 @@ export default function Orders() {
                   </div>
                 </div>
 
-                {expandedOrder === order.order_id && (
+                {expandedOrder === orderNo && (
                   <div className="px-5 pb-5 animate-in fade-in slide-in-from-top-2">
                     <div className="bg-xy-gray-50 rounded-xl border border-xy-border p-4">
                       {detailLoading ? (
@@ -306,11 +338,15 @@ export default function Orders() {
                       ) : orderDetail ? (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           {orderDetail.buyer_nick && <div><p className="text-xy-text-muted text-xs">买家昵称</p><p className="font-medium">{orderDetail.buyer_nick}</p></div>}
-                          {orderDetail.buyer_phone && <div><p className="text-xy-text-muted text-xs">联系电话</p><p className="font-medium">{orderDetail.buyer_phone}</p></div>}
-                          {orderDetail.receiver_address && <div className="col-span-2"><p className="text-xy-text-muted text-xs">收货地址</p><p className="font-medium">{orderDetail.receiver_address}</p></div>}
-                          {orderDetail.logistics_no && <div><p className="text-xy-text-muted text-xs">物流单号</p><p className="font-medium">{orderDetail.logistics_no}</p></div>}
-                          {orderDetail.pay_time && <div><p className="text-xy-text-muted text-xs">付款时间</p><p className="font-medium">{orderDetail.pay_time}</p></div>}
-                          {orderDetail.remark && <div className="col-span-2"><p className="text-xy-text-muted text-xs">买家备注</p><p className="font-medium">{orderDetail.remark}</p></div>}
+                          {orderDetail.receiver_mobile && <div><p className="text-xy-text-muted text-xs">联系电话</p><p className="font-medium">{orderDetail.receiver_mobile}</p></div>}
+                          {(orderDetail.prov_name || orderDetail.city_name || orderDetail.address) && (
+                            <div className="col-span-2"><p className="text-xy-text-muted text-xs">收货地址</p><p className="font-medium">{[orderDetail.prov_name, orderDetail.city_name, orderDetail.area_name, orderDetail.town_name, orderDetail.address].filter(Boolean).join(' ')}</p></div>
+                          )}
+                          {orderDetail.waybill_no && <div><p className="text-xy-text-muted text-xs">物流单号</p><p className="font-medium">{orderDetail.waybill_no}</p></div>}
+                          {orderDetail.pay_time && <div><p className="text-xy-text-muted text-xs">付款时间</p><p className="font-medium">{formatTimestamp(orderDetail.pay_time)}</p></div>}
+                          {orderDetail.seller_remark && <div className="col-span-2"><p className="text-xy-text-muted text-xs">卖家备注</p><p className="font-medium">{orderDetail.seller_remark}</p></div>}
+                          {orderDetail.total_amount != null && <div><p className="text-xy-text-muted text-xs">订单金额</p><p className="font-medium">{formatPrice(orderDetail.total_amount)}</p></div>}
+                          {orderDetail.pay_amount != null && <div><p className="text-xy-text-muted text-xs">实付金额</p><p className="font-medium">{formatPrice(orderDetail.pay_amount)}</p></div>}
                         </div>
                       ) : (
                         <p className="text-center text-xy-text-muted py-4">暂无详细信息（需配置闲管家）</p>
@@ -319,7 +355,8 @@ export default function Orders() {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
           <Pagination current={currentPage} total={filteredOrders.length} pageSize={PAGE_SIZE} onChange={setCurrentPage} />
           </>

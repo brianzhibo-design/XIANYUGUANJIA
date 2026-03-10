@@ -209,7 +209,7 @@ class Config:
                 "upload_timeout": 60,
             },
             "messages": {
-                "enabled": False,
+                "enabled": True,
                 "transport": "ws",
                 "ws": {
                     "base_url": "wss://wss-goofish.dingtalk.com/",

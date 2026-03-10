@@ -108,7 +108,7 @@ browser:
 
 # 消息自动回复配置
 messages:
-  enabled: false
+  enabled: true
   transport: "ws" # dom | ws | auto
   ws:
     base_url: "wss://wss-goofish.dingtalk.com/"

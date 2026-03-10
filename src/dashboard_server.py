@@ -29,7 +29,7 @@ import logging
 import yaml
 
 from src.core.config import get_config
-from src.dashboard.repository import DashboardRepository
+from src.dashboard.repository import DashboardRepository, LiveDashboardDataSource
 from src.dashboard.module_console import ModuleConsole, MODULE_TARGETS
 from src.dashboard.config_service import (
     read_system_config as _read_system_config,
@@ -108,6 +108,8 @@ _AUTO_REPLY_TO_YAML_KEYS = {
     "non_empty_reply_fallback": "non_empty_reply_fallback",
     "quote_failed_template": "quote_failed_template",
     "quote_reply_max_couriers": "quote_reply_max_couriers",
+    "first_reply_delay": "first_reply_delay_seconds",
+    "inter_reply_delay": "inter_reply_delay_seconds",
 }
 
 
@@ -127,9 +129,17 @@ def _sync_system_config_to_yaml(sys_config: dict[str, Any]) -> None:
     ar = sys_config.get("auto_reply")
     if isinstance(ar, dict):
         msgs = cfg.setdefault("messages", {})
+        _RANGE_KEYS = {"first_reply_delay", "inter_reply_delay"}
         for src_key, dst_key in _AUTO_REPLY_TO_YAML_KEYS.items():
             if src_key in ar:
-                msgs[dst_key] = ar[src_key]
+                val = ar[src_key]
+                if src_key in _RANGE_KEYS and isinstance(val, str) and "-" in val:
+                    try:
+                        parts = val.split("-", 1)
+                        val = [float(parts[0].strip()), float(parts[1].strip())]
+                    except (ValueError, IndexError):
+                        pass
+                msgs[dst_key] = val
                 changed = True
         kw_text = ar.get("keyword_replies_text")
         if isinstance(kw_text, str) and kw_text.strip():
@@ -698,6 +708,62 @@ class MimicOps:
 
         except Exception:
             logger.error("Auto-price-modify: unexpected error for order=%s", order_no, exc_info=True)
+
+    def _resolve_session_id_for_order(self, order_no: str) -> str:
+        """Try to find the chat session_id for a given order.
+
+        Priority: local orders DB > QuoteLedger (via buyer_nick) > ws_live reverse map.
+        """
+        # 1. 查本地订单库
+        try:
+            from src.modules.orders.service import OrderFulfillmentService
+
+            ofs = OrderFulfillmentService(
+                config=self._xianguanjia_service_config(),
+            )
+            order = ofs.get_order(order_no)
+            if order and str(order.get("session_id", "")).strip():
+                return str(order["session_id"]).strip()
+        except Exception:
+            pass
+
+        # 2. 通过闲管家 API 获取 buyer_nick，再查 QuoteLedger
+        buyer_nick = ""
+        try:
+            from src.integrations.xianguanjia.open_platform_client import OpenPlatformClient
+
+            xgj_cfg = self._xianguanjia_service_config().get("xianguanjia", {})
+            client_fields = {"base_url", "app_key", "app_secret", "timeout", "mode", "seller_id"}
+            client_kwargs = {k: v for k, v in xgj_cfg.items() if k in client_fields and v}
+            if client_kwargs.get("app_key") and client_kwargs.get("app_secret"):
+                client = OpenPlatformClient(**client_kwargs)
+                detail_resp = client.get_order_detail({"order_no": order_no})
+                if detail_resp.ok and isinstance(detail_resp.data, dict):
+                    buyer_nick = str(detail_resp.data.get("buyer_nick", "")).strip()
+        except Exception:
+            pass
+
+        if buyer_nick:
+            try:
+                from src.modules.quote.ledger import get_quote_ledger
+
+                quote = get_quote_ledger().find_by_buyer(buyer_nick)
+                if quote and str(quote.get("session_id", "")).strip():
+                    return str(quote["session_id"]).strip()
+            except Exception:
+                pass
+
+        # 3. ws_live 反向映射
+        try:
+            from src.modules.messages.ws_live import get_session_by_buyer_nick
+
+            sid = get_session_by_buyer_nick(buyer_nick) if buyer_nick else ""
+            if sid:
+                return sid
+        except Exception:
+            pass
+
+        return ""
 
     def handle_product_callback(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Handle product callback notification (async publish result)."""
@@ -1384,7 +1450,6 @@ class MimicOps:
         if s == "waiting_cookie_update":
             if t == "FAIL_SYS_USER_VALIDATE":
                 return "请在闲鱼网页重新登录后导出最新 Cookie，再执行“售前一键恢复”。"
-            return "请更新 Cookie 后重试恢复。"
             if t == "RGV587":
                 return (
                     "触发平台风控（RGV587），系统无法自动恢复。请按以下步骤操作：\n"
@@ -3684,7 +3749,63 @@ class DashboardHandler(BaseHTTPRequestHandler):
             files.append((str(filename), payload))
         return files
 
+    def _make_xgj_client(self):
+        """Create an OpenPlatformClient if credentials are configured, else return None."""
+        try:
+            from src.integrations.xianguanjia.open_platform_client import OpenPlatformClient
+
+            xgj_cfg = self.mimic_ops._xianguanjia_service_config().get("xianguanjia", {})
+            app_key = str(xgj_cfg.get("app_key", "")).strip()
+            app_secret = str(xgj_cfg.get("app_secret", "")).strip()
+            if not (app_key and app_secret):
+                return None
+            client_fields = {"base_url", "app_key", "app_secret", "timeout", "mode", "seller_id"}
+            kwargs = {k: v for k, v in xgj_cfg.items() if k in client_fields and v}
+            return OpenPlatformClient(**kwargs)
+        except Exception:
+            return None
+
+    def _get_live_dashboard(self) -> LiveDashboardDataSource:
+        return LiveDashboardDataSource(self._make_xgj_client)
+
     def _legacy_dashboard_payload(self, path: str, query: dict[str, list[str]]) -> dict[str, Any]:
+        live = self._get_live_dashboard()
+        try:
+            if path == "/api/summary":
+                result = live.get_summary()
+                if result.get("source") == "xianguanjia_api":
+                    return result
+        except Exception:
+            logger.debug("LiveDashboard summary failed, falling back to local DB", exc_info=True)
+
+        try:
+            if path == "/api/top-products":
+                limit = _safe_int((query.get("limit") or ["12"])[0], default=12, min_value=1, max_value=200)
+                result = live.get_top_products(limit=limit)
+                if result:
+                    return {"products": result, "source": "xianguanjia_api"}
+        except Exception:
+            logger.debug("LiveDashboard top-products failed, falling back", exc_info=True)
+
+        try:
+            if path == "/api/recent-operations":
+                limit = _safe_int((query.get("limit") or ["20"])[0], default=20, min_value=1, max_value=200)
+                result = live.get_recent_operations(limit=limit)
+                if result:
+                    return {"operations": result, "source": "xianguanjia_api"}
+        except Exception:
+            logger.debug("LiveDashboard recent-operations failed, falling back", exc_info=True)
+
+        try:
+            if path == "/api/trend":
+                metric = (query.get("metric") or ["orders"])[0]
+                days = _safe_int((query.get("days") or ["30"])[0], default=30, min_value=1, max_value=120)
+                result = live.get_trend(metric=metric, days=days)
+                if result:
+                    return {"trend": result, "source": "xianguanjia_api"}
+        except Exception:
+            logger.debug("LiveDashboard trend failed, falling back", exc_info=True)
+
         if path == "/api/summary":
             return self.repo.get_summary()
         if path == "/api/trend":
@@ -4495,6 +4616,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     current[section] = {**(current.get(section) or {}), **clean}
                 _write_system_config(current)
                 _sync_system_config_to_yaml(current)
+                get_config.cache_clear()
                 self._send_json({"ok": True, "message": "Configuration updated", "config": current})
                 return
 
@@ -4544,10 +4666,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
         try:
             if path == "/api/orders/remind":
                 body = self._read_json_body()
-                order_id = str(body.get("order_id", "")).strip()
+                order_id = str(body.get("order_no") or body.get("order_id") or "").strip()
                 session_id = str(body.get("session_id", "")).strip()
                 if not order_id:
-                    self._send_json(_error_payload("Missing order_id"), status=400)
+                    self._send_json(_error_payload("Missing order_no"), status=400)
                     return
 
                 from src.modules.followup.service import FollowUpEngine
@@ -4557,6 +4679,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if not getattr(engine, "_reminder_enabled", True):
                     self._send_json({"ok": False, "error": "催单功能未启用", "reason": "disabled"})
                     return
+
+                if not session_id:
+                    session_id = self._resolve_session_id_for_order(order_id)
 
                 use_session = session_id or order_id
                 result = engine.process_unpaid_order(
@@ -4588,7 +4713,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                             result["send_error"] = str(send_err)
                 elif result.get("eligible") and not session_id:
                     result["message_sent"] = False
-                    result["send_note"] = "no_session_id_provided"
+                    result["send_note"] = "no_session_id_resolved"
 
                 self._send_json({"ok": True, **result})
                 return
@@ -5213,12 +5338,28 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
         refresher.start()
         DashboardHandler._cookie_auto_refresher = refresher
 
+    # 自动改价/催单轮询
+    price_poller = None
+    sys_cfg = _read_system_config()
+    apm_cfg = sys_cfg.get("auto_price_modify", {})
+    remind_cfg = sys_cfg.get("order_reminder", {})
+    if apm_cfg.get("enabled") or remind_cfg.get("auto_remind_enabled"):
+        from src.modules.orders.auto_price_poller import AutoPricePoller, set_price_poller
+
+        poll_interval = int(apm_cfg.get("poll_interval_seconds", 45))
+        price_poller = AutoPricePoller(get_config_fn=_read_system_config, interval=poll_interval)
+        price_poller.start()
+        set_price_poller(price_poller)
+        DashboardHandler._price_poller = price_poller
+
     server = ThreadingHTTPServer((host, port), DashboardHandler)
 
     def _shutdown(signum, frame):
         logger.info("收到信号 %s，正在关闭...", signum)
         if refresher:
             refresher.stop()
+        if price_poller:
+            price_poller.stop()
         server.shutdown()
 
     signal.signal(signal.SIGTERM, _shutdown)

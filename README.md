@@ -147,10 +147,28 @@ graph LR
 
 - Python 3.10+
 - Node.js 18+
+- Chrome 或 Edge 浏览器（Cookie 自动获取需要）
 - 闲鱼账号 Cookie
 - AI 服务 API Key
 
-### 安装步骤
+### 方式一：一键启动（推荐）
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/G3niusYukki/xianyu-openclaw.git
+cd xianyu-openclaw
+
+# 2. 一键启动（自动安装所有依赖）
+# macOS / Linux
+./start.sh
+
+# Windows
+start.bat
+```
+
+一键启动脚本会自动完成：Python 虚拟环境创建、pip 依赖安装、Playwright Chromium 浏览器下载（首次约 150MB）、Node.js 依赖安装、启动所有服务。
+
+### 方式二：手动安装
 
 ```bash
 # 1. 克隆项目
@@ -158,18 +176,21 @@ git clone https://github.com/G3niusYukki/xianyu-openclaw.git
 cd xianyu-openclaw
 
 # 2. 安装 Python 依赖
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 3. 安装 Node.js 依赖
+# 3. 安装 Playwright Chromium 浏览器（Cookie 自动获取和消息服务需要）
+playwright install chromium
+
+# 4. 安装 Node.js 依赖
 cd server && npm install && cd ..
 cd client && npm install && cd ..
 
-# 4. 配置环境变量
+# 5. 配置环境变量
 cp .env.example .env
 # 编辑 .env，填入 Cookie 和 AI Key
 
-# 5. 启动服务（需要3个终端窗口）
+# 6. 启动服务（需要3个终端窗口）
 
 # 终端1 - Python 后端（必需，处理核心API）
 python -m src.dashboard_server --port 8091
@@ -186,9 +207,9 @@ npm run dev:client
 - **Python API**: http://localhost:8091
 - **Node API**: http://localhost:3001
 
-> ⚠️ **注意**：前端代理配置指向 Python 后端 8091 端口，必须先启动 Python 服务，否则前端页面无法正常工作。
+> **注意**：前端代理配置指向 Python 后端 8091 端口，必须先启动 Python 服务，否则前端页面无法正常工作。
 
-### Docker 一键部署
+### 方式三：Docker 一键部署
 
 ```bash
 cp .env.example .env
@@ -358,6 +379,37 @@ cd client && npm run build
 
 ---
 
+## ❓ 常见问题
+
+### Cookie 自动获取失败 / 无法打开浏览器窗口
+
+**症状**：Dashboard 点击"自动获取 Cookie"显示"无法启动浏览器"或"所有获取方式均失败"。
+
+**解决**：
+1. 确认已安装 Playwright 浏览器：`playwright install chromium`
+2. 确认本机已安装 Chrome 或 Edge 浏览器
+3. 如需静默自动刷新（Level 1），需在本机 Chrome/Edge 中至少登录一次闲鱼
+
+### Cookie 频繁失效 / WebSocket 断连
+
+**症状**：消息监听中断，日志出现 `FAIL_SYS_USER_VALIDATE`。
+
+**解决**：
+1. 保持本机 Chrome/Edge 浏览器开启且闲鱼已登录，系统会自动从浏览器读取最新 Cookie
+2. 确认 `COOKIE_AUTO_REFRESH=true` 已在 `.env` 中设置
+3. 如无法保持浏览器登录，可在 Dashboard 手动粘贴 Cookie
+
+### Windows 上 Playwright 安装失败
+
+**症状**：`playwright install chromium` 报错或超时。
+
+**解决**：
+1. 确认网络可以访问 `cdn.playwright.dev`
+2. 如网络受限，可设置代理：`set HTTPS_PROXY=http://proxy:port` 后重试
+3. 使用一键启动脚本 `start.bat` 会自动处理安装
+
+---
+
 ## 📝 更新日志
 
 ### v2.0.0 (2026-03-07)
@@ -438,12 +490,20 @@ By connecting directly to Xianyu's message channel via WebSocket and combining A
 ```bash
 git clone https://github.com/G3niusYukki/xianyu-openclaw.git
 cd xianyu-openclaw
-python3 -m venv .venv && source .venv/bin/activate
+
+# One-click start (recommended, auto-installs everything)
+# macOS / Linux
+./start.sh
+# Windows
+start.bat
+
+# Or manual install:
+python3 -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+playwright install chromium    # Required for cookie auto-grab
 cd server && npm install && cd ../client && npm install && cd ..
 cp .env.example .env
 # Edit .env with your Cookie and AI Key
-npm run dev
 ```
 
 Access:
