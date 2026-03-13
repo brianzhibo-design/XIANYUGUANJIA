@@ -183,7 +183,7 @@ class MessagesService:
 
         self.quote_engine = AutoQuoteEngine(self.quote_config)
         default_quote_keywords = ["报价", "多少钱", "价格", "运费", "邮费", "快递费", "寄到", "发到", "送到", "怎么寄"]
-        default_standard_format_triggers = ["你好", "您好", "在吗", "在不", "hi", "hello", "哈喽", "有人吗"]
+        default_standard_format_triggers = ["在吗", "在不", "hi", "hello", "哈喽", "有人吗"]
         raw_quote_keywords = self.config.get("quote_intent_keywords")
         if isinstance(raw_quote_keywords, list):
             cleaned_quote_keywords = [
@@ -620,6 +620,8 @@ class MessagesService:
             return True
         if self._SHIPPING_SIGNAL_RE.search(text):
             return True
+        if self._detect_courier_choice(text):
+            return True
         return False
 
     @staticmethod
@@ -703,6 +705,7 @@ class MessagesService:
             ),
             r"([\u4e00-\u9fa5]{2,20}?)\s*(?:寄到|发到|送到|到)\s*([\u4e00-\u9fa5]{2,20})",
             r"([\u4e00-\u9fa5]{2,4})\s*(?:发(?![了的个件给过货到着])|寄(?![了的个件给过到着]))\s*([\u4e00-\u9fa5]{2,4})",
+            r"([\u4e00-\u9fa5]{2,4})\s*([\u4e00-\u9fa5]{2,4})\s*\d+(?:\.\d+)?\s*(?:kg|公斤|斤|g|克)",
         ]
         for pattern in patterns:
             m = re.search(pattern, text)
@@ -777,6 +780,8 @@ class MessagesService:
             or context.get("last_quote_rows")
             or context.get("courier_choice")
         )
+
+    _QUOTE_CONFIRM_WORDS = frozenset({"寄", "发", "好", "行", "可以", "嗯", "ok", "好的", "走"})
 
     _NON_LOCATION_TERMS = frozenset({
         "韵达", "圆通", "中通", "申通", "顺丰", "极兔", "德邦",
@@ -908,6 +913,8 @@ class MessagesService:
         if any(k in text for k in ["下单", "拍下", "改价", "付款"]):
             if not any(exclude in text for exclude in ["代下单", "帮我下单", "你帮下"]):
                 return True
+        if text in self._QUOTE_CONFIRM_WORDS:
+            return True
         return False
 
     def _detect_courier_choice(self, message_text: str) -> str | None:
@@ -1116,7 +1123,7 @@ class MessagesService:
             }
 
         # 复购：courier 已锁定后收到新报价请求，引导去小橙序（复购无首单优惠）
-        if has_checkout_context and is_quote_intent and courier_choice is None:
+        if has_checkout_context and has_quote_rows and is_quote_intent and courier_choice is None:
             return self._sanitize_reply(
                 "亲，可以直接在小橙序重新下单~ 首次使用的手机号享首单优惠，老用户也能享官方5折价格哦~ 打开小橙序→填写寄件收件信息→选快递→用余额支付即可~"
             ), {"is_quote": False, "phase": "repeat_purchase"}
@@ -1567,7 +1574,7 @@ class MessagesService:
             if not sent:
                 self.logger.warning(f"reply_to_session returned False for session={session_id}")
 
-        if sent and msg:
+        if msg:
             self._check_order_trigger(msg)
 
         latency_seconds = perf_counter() - session_start

@@ -166,7 +166,7 @@ DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
         "name": "system_notification_ignore",
         "keywords": [
             "蚂蚁森林", "能量可领", "去兑换", "去发货", "去处理",
-            "请双方沟通", "请确认价格", "修改价格", "我已拍下",
+            "请双方沟通", "请确认价格", "修改价格",
             "等待你付款", "请包装好商品", "按我在闲鱼上提供的地址发货",
         ],
         "reply": "",
@@ -174,6 +174,14 @@ DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
         "categories": [],
         "phase": "system",
         "skip_reply": True,
+    },
+    {
+        "name": "order_just_placed",
+        "keywords": ["我已拍下"],
+        "reply": "收到您的订单~ 正在为您改价中，请稍等片刻再付款哦~",
+        "priority": 49,
+        "categories": [],
+        "phase": "checkout",
     },
     {
         "name": "express_discount_complaint",
@@ -281,8 +289,16 @@ DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
     # ============================================================
     {
         "name": "express_availability",
-        "keywords": ["在吗", "还在", "有货吗", "有吗"],
+        "keywords": ["在吗", "还在", "有货吗", "有吗", "你好", "您好"],
         "reply": "在的亲~ 您是从哪里寄到哪里呢？告诉我城市和重量帮您查最优价~",
+        "priority": 50,
+        "categories": ["express"],
+        "phase": "presale",
+    },
+    {
+        "name": "express_xiaochengxu_explain",
+        "keywords": ["什么小程序", "小橙序是什么", "什么是小橙序", "啥小程序", "哪个小程序"],
+        "reply": "小橙序就是微信里搜索「商达人快递上门取件」的小橙序哦~ 付款后系统自动发兑换码给您，用兑换码在小橙序兑换余额，然后填地址选快递下单就行~",
         "priority": 50,
         "categories": ["express"],
         "phase": "presale",
