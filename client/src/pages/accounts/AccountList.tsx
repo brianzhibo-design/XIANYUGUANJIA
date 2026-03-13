@@ -39,7 +39,7 @@ const RECOVERY_STAGE_LABELS: Record<string, string> = {
   token_error: 'Token 异常',
 };
 
-function getRecoveryGuide(riskLevel: string, recoveryStage: string) {
+function getRecoveryGuide(riskLevel: string, recoveryStage: string, cookieCloudConfigured: boolean = false, sliderAutoSolve: boolean = false) {
   if (riskLevel === 'normal') return null;
   if (riskLevel === 'warning') {
     return {
@@ -64,14 +64,41 @@ function getRecoveryGuide(riskLevel: string, recoveryStage: string) {
         ],
       };
     }
+    if (sliderAutoSolve) {
+      return {
+        severity: 'warning',
+        title: '自动滑块恢复中',
+        steps: [
+          '系统正在自动尝试滑块验证，请稍候...',
+          '如自动验证失败，会弹出浏览器窗口，请手动完成滑块拖动',
+          ...(cookieCloudConfigured
+            ? ['CookieCloud 即时同步已启用，验证后秒级自动恢复']
+            : ['验证后请手动复制 Cookie 粘贴保存']),
+        ],
+      };
+    }
+    if (cookieCloudConfigured) {
+      return {
+        severity: 'error',
+        title: '完成滑块验证即可恢复',
+        steps: [
+          '在浏览器打开 goofish.com/im（闲鱼消息页）',
+          '完成页面上的滑块验证',
+          '在 CookieCloud 扩展中点「手动同步」立即生效',
+          '系统将秒级自动恢复（CookieCloud 即时同步已启用）',
+          '提示：在「系统设置 → 集成服务 → 风控滑块自动验证」中开启可实现全自动恢复',
+        ],
+      };
+    }
     return {
       severity: 'error',
       title: '需要手动干预',
       steps: [
-        '重新获取闲鱼 Cookie（使用下方的自动获取或手动复制）',
-        '粘贴新 Cookie 并保存，系统会自动尝试恢复',
-        '如果多次更换 Cookie 仍无法恢复，可能需要在闲鱼 App 完成安全验证',
-        '验证后等待 5-10 分钟再重新获取 Cookie',
+        '在浏览器打开 goofish.com/im 完成滑块验证',
+        '手动复制 Cookie（F12 → Network → 复制 Cookie）并粘贴保存',
+        '系统会自动尝试恢复连接',
+        '提示：配置 CookieCloud 可实现滑块验证后秒级自动恢复，无需手动复制',
+        '提示：在「系统设置 → 集成服务 → 风控滑块自动验证」中开启可实现全自动恢复',
       ],
     };
   }
@@ -340,7 +367,9 @@ export default function AccountList() {
   const riskLevel = riskStatus?.risk_control?.level || 'unknown';
   const riskCfg = RISK_LEVEL_CONFIG[riskLevel] || RISK_LEVEL_CONFIG.unknown;
   const recoveryStage = riskStatus?.recovery_stage || 'monitoring';
-  const recoveryGuide = getRecoveryGuide(riskLevel, recoveryStage);
+  const cookieCloudConfigured = riskStatus?.cookie_cloud_configured || false;
+  const sliderAutoSolve = riskStatus?.slider_auto_solve_enabled || false;
+  const recoveryGuide = getRecoveryGuide(riskLevel, recoveryStage, cookieCloudConfigured, sliderAutoSolve);
   const RiskIcon = riskCfg.icon;
 
   if (loading) {
@@ -585,9 +614,15 @@ export default function AccountList() {
                 保存并生效
               </button>
               {!grabbing ? (
-                <button onClick={handleAutoGrab} className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors">
-                  <Download className="w-4 h-4" /> 自动获取
-                </button>
+                <div className="relative group">
+                  <button onClick={handleAutoGrab} className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors">
+                    <Download className="w-4 h-4" /> 自动获取
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-800 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                    读取浏览器磁盘数据库，滑块验证后可能有延迟
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+                  </div>
+                </div>
               ) : (
                 <button onClick={handleCancelAutoGrab} className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition-colors">
                   <XCircle className="w-4 h-4" /> 取消获取
@@ -733,17 +768,20 @@ export default function AccountList() {
                 <Info className="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600" />
                 <div>
                   <p className="font-medium mb-2">Cookie 获取指南</p>
-                  <p className="text-blue-700 mb-2 font-medium">方式一：手动获取</p>
-                  <ol className="list-decimal list-inside space-y-1 text-blue-700">
+
+                  <p className="text-blue-700 mb-1 font-medium">方式一：CookieCloud 自动同步 <span className="text-xs font-normal bg-green-100 text-green-700 px-1.5 py-0.5 rounded">最推荐</span></p>
+                  <p className="text-blue-700 mb-2">实时读取浏览器内存，无延迟。在「系统设置 → 集成服务 → CookieCloud」中配置后全自动同步，风控恢复后无需手动操作。</p>
+
+                  <p className="text-blue-700 mb-1 font-medium">方式二：手动获取 <span className="text-xs font-normal bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">紧急恢复</span></p>
+                  <ol className="list-decimal list-inside space-y-1 text-blue-700 mb-2">
                     <li>使用 Chrome 浏览器打开 <a href="https://www.goofish.com" target="_blank" rel="noreferrer" className="underline">闲鱼网页版</a> 并登录</li>
                     <li>按 F12 打开开发者工具，切换到「Network / 网络」标签</li>
                     <li>刷新页面，选择任意请求，在 Headers 中找到 Cookie 字段</li>
                     <li>右键「Copy value」，粘贴到上方输入框</li>
                   </ol>
-                  <p className="mt-3 text-blue-700 font-medium">方式二：浏览器插件（推荐）</p>
-                  <p className="text-blue-700">点击上方「Cookie 插件」按钮，按引导操作即可。</p>
-                  <p className="mt-3 text-blue-700 font-medium">方式三：自动获取</p>
-                  <p className="text-blue-700">点击「自动获取」，系统支持三种降级策略：浏览器数据库直读、复用 Chrome 登录态、全新窗口扫码登录。</p>
+
+                  <p className="text-blue-700 mb-1 font-medium">方式三：自动获取 <span className="text-xs font-normal bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">首次配置</span></p>
+                  <p className="text-blue-700">读取浏览器<strong>磁盘数据库</strong>，适合首次配置。<span className="text-amber-700">风控恢复（滑块验证后）可能因磁盘写入延迟读到旧 Cookie，此场景建议使用方式一或方式二。</span></p>
                 </div>
               </div>
             </div>

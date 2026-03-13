@@ -74,15 +74,19 @@ def test_dashboard_risk_control_status_variants(temp_dir) -> None:
     log_path = ops._module_runtime_log("presales")
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    lines = [f"2026-01-01 00:00:0{i} websocket http 400" for i in range(6)]
+    from datetime import datetime as _dt, timedelta as _td
+    _now = _dt.now()
+    _ts = lambda m: (_now - _td(minutes=m)).strftime("%Y-%m-%d %H:%M:%S")
+
+    lines = [f"{_ts(10 - i)} websocket http 400" for i in range(6)]
     log_path.write_text("\n".join(lines), encoding="utf-8")
     warn = ops._risk_control_status_from_logs("presales", tail_lines=300)
     assert warn["level"] == "warning"
 
     log_path.write_text(
         "\n".join([
-            "2026-01-01 00:00:01 token api failed",
-            "2026-01-01 00:00:02 connected to goofish websocket transport",
+            f"{_ts(10)} token api failed",
+            f"{_ts(5)} connected to goofish websocket transport",
         ]),
         encoding="utf-8",
     )

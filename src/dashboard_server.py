@@ -170,6 +170,17 @@ def _sync_system_config_to_yaml(sys_config: dict[str, Any]) -> None:
         cfg.setdefault("store", {})["category"] = store["category"]
         changed = True
 
+    slider = sys_config.get("slider_auto_solve")
+    if isinstance(slider, dict):
+        ws_cfg = cfg.setdefault("messages", {}).setdefault("ws", {})
+        ws_cfg["slider_auto_solve"] = {
+            "enabled": bool(slider.get("enabled", False)),
+            "max_attempts": int(slider.get("max_attempts", 2)),
+            "cooldown_seconds": int(slider.get("cooldown_seconds", 300)),
+            "headless": bool(slider.get("headless", False)),
+        }
+        changed = True
+
     if changed:
         try:
             tmp = yaml_path.with_suffix(".tmp")
@@ -4884,7 +4895,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
             # ---------- Config CRUD (migrated from Node.js) ----------
             if path == "/api/config":
-                self._send_json({"ok": True, "config": _read_system_config()})
+                cfg = _read_system_config()
+                if "slider_auto_solve" not in cfg:
+                    yaml_slider = get_config().get_section("messages", {}).get("ws", {}).get("slider_auto_solve", {})
+                    if isinstance(yaml_slider, dict) and yaml_slider:
+                        cfg["slider_auto_solve"] = yaml_slider
+                self._send_json({"ok": True, "config": cfg})
                 return
 
             if path == "/api/config/sections":

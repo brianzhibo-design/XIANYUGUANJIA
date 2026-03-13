@@ -451,7 +451,7 @@ class OperationsService:
                 items = []
 
             total = len(items)
-            active = sum(1 for i in items if isinstance(i, dict) and i.get("status") in (1, "1", "on_sale"))
+            active = sum(1 for i in items if isinstance(i, dict) and i.get("product_status") in (22, "22"))
             return {
                 "total": total,
                 "active": active,

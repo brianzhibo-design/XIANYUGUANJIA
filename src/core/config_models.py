@@ -210,6 +210,16 @@ class QuoteConfig(BaseModel):
     validity_minutes: int = Field(default=30, ge=1, le=1440, description="报价有效期（分钟）")
     analytics_log_enabled: bool = Field(default=True, description="是否写入报价审计日志")
     providers: dict[str, Any] = Field(default_factory=dict, description="报价 provider 配置")
+    pricing_profile: str = Field(default="normal", description="定价档位: normal|member")
+    cost_table_dir: str = Field(default="data/quote_costs", description="成本表目录")
+    cost_table_patterns: list[str] = Field(default_factory=lambda: ["*.xlsx", "*.csv"], description="成本表文件模式")
+    cost_api_url: str = Field(default="", description="成本 API URL")
+    cost_api_key_env: str = Field(default="QUOTE_COST_API_KEY", description="成本 API Key 环境变量名")
+    remote_api_url: str = Field(default="", description="远程报价 API URL")
+    remote_api_key_env: str = Field(default="QUOTE_API_KEY", description="远程报价 API Key 环境变量名")
+    api_fallback_to_table_parallel: bool = Field(default=True, description="API 失败时并行回退到成本表")
+    api_prefer_max_wait_seconds: float = Field(default=1.2, ge=0.05, description="API 优先等待上限")
+    markup_rules: dict[str, Any] = Field(default_factory=dict, description="加价规则")
 
 
 class AppConfig(BaseModel):

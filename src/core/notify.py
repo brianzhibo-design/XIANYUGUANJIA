@@ -18,6 +18,7 @@ logger = get_logger()
 _EVENT_TOGGLE_MAP: dict[str, str] = {
     "cookie_expire": "notify_cookie_expire",
     "cookie_refresh": "notify_cookie_refresh",
+    "risk_control": "notify_risk_control",
     "sla_alert": "notify_sla_alert",
     "order_fail": "notify_order_fail",
     "after_sales": "notify_after_sales",

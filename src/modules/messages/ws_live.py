@@ -10,6 +10,7 @@ import os
 import random
 import re
 import struct
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -338,7 +339,14 @@ class GoofishWsTransport:
         self._last_heartbeat_sent = 0.0
         self._last_heartbeat_ack = 0.0
         self._connect_failures = 0
+        self._rgv587_consecutive = 0
         self._last_disconnect_reason = ""
+        self._cookie_changed = threading.Event()
+        self._last_cookie_check: float = 0.0
+
+    def notify_cookie_changed(self) -> None:
+        """Thread-safe signal: external cookie update detected."""
+        self._cookie_changed.set()
 
     def _ensure_async_primitives(self) -> None:
         pass
@@ -424,6 +432,8 @@ class GoofishWsTransport:
         deadline = time.time() + max(1.0, float(timeout_seconds))
         interval = max(1.0, float(self.cookie_watch_interval_seconds))
         while time.time() < deadline and not self._stop_event.is_set():
+            if self._cookie_changed.is_set():
+                self._cookie_changed.clear()
             if self._maybe_reload_cookie(reason="watch"):
                 return True
             await asyncio.sleep(min(interval, max(0.5, deadline - time.time())))
@@ -431,11 +441,56 @@ class GoofishWsTransport:
 
     async def _wait_for_cookie_update_forever(self) -> bool:
         interval = max(1.0, float(self.cookie_watch_interval_seconds))
+        cc_poll_interval = 30.0
+        cc_last_poll = 0.0
+        cc_not_configured = False
         while not self._stop_event.is_set():
+            if self._cookie_changed.is_set():
+                self._cookie_changed.clear()
             if self._maybe_reload_cookie(reason="watch"):
                 return True
+            now = time.time()
+            if not cc_not_configured and (now - cc_last_poll) >= cc_poll_interval:
+                cc_last_poll = now
+                refreshed = await self._try_cookiecloud_poll()
+                if refreshed is True:
+                    return True
+                if refreshed is None:
+                    cc_not_configured = True
             await asyncio.sleep(interval)
         return False
+
+    async def _try_cookiecloud_poll(self) -> bool | None:
+        """Poll CookieCloud for fresh cookies. Returns True=applied, False=no change, None=not configured."""
+        try:
+            from src.core.cookie_grabber import CookieGrabber
+            loop = asyncio.get_running_loop()
+            grabber = CookieGrabber()
+
+            host = os.environ.get("COOKIE_CLOUD_HOST", "").strip()
+            uuid_val = os.environ.get("COOKIE_CLOUD_UUID", "").strip()
+            pwd = os.environ.get("COOKIE_CLOUD_PASSWORD", "").strip()
+            if not uuid_val or not pwd:
+                return None
+
+            cookie = await grabber._grab_from_cookiecloud()
+            if not cookie:
+                return False
+
+            new_fp = hashlib.sha1(cookie.encode("utf-8")).hexdigest()
+            if new_fp == self._cookie_fp:
+                return False
+
+            changed = self._apply_cookie_text(cookie, reason="cookiecloud_poll")
+            if changed:
+                os.environ["XIANYU_COOKIE_1"] = cookie
+                self._session_peer.clear()
+                self._seen_event.clear()
+                self.logger.info("CookieCloud poll: new cookie applied")
+            return changed
+        except Exception as exc:
+            self.logger.debug(f"CookieCloud poll failed: {exc}")
+            return False
 
     async def _try_active_cookie_refresh(self) -> bool:
         """主动调用 rookiepy 从浏览器 DB 读取最新 Cookie（含 _m_h5_tk）。
@@ -495,8 +550,104 @@ class GoofishWsTransport:
         finally:
             _loop.close()
 
-    def _base_headers(self) -> dict[str, str]:
-        return {
+    def _send_risk_control_notification(self) -> None:
+        """Send alert via Feishu/WeCom when RGV587 triggers infinite wait."""
+        try:
+            from src.core.notify import send_system_notification
+
+            slider_cfg = self.config.get("slider_auto_solve", {})
+            slider_on = bool(slider_cfg.get("enabled")) if isinstance(slider_cfg, dict) else False
+            cc_uuid = os.environ.get("COOKIE_CLOUD_UUID", "").strip()
+            cc_pwd = os.environ.get("COOKIE_CLOUD_PASSWORD", "").strip()
+            if not cc_uuid or not cc_pwd:
+                try:
+                    from src.dashboard.config_service import read_system_config
+                    cc_cfg = read_system_config().get("cookie_cloud", {})
+                    if isinstance(cc_cfg, dict):
+                        cc_uuid = cc_uuid or str(cc_cfg.get("cookie_cloud_uuid", "")).strip()
+                        cc_pwd = cc_pwd or str(cc_cfg.get("cookie_cloud_password", "")).strip()
+                except Exception:
+                    pass
+            cc_on = bool(cc_uuid and cc_pwd)
+
+            lines = [
+                "【闲鱼自动化】⚠️ 风控滑块触发 (RGV587)",
+                f"连续触发次数: {self._rgv587_consecutive}",
+            ]
+            if slider_on:
+                lines.append("系统将自动尝试滑块验证，请稍候...")
+                lines.append("如自动验证失败，会弹出浏览器窗口，请手动完成滑块拖动")
+            else:
+                lines.append("请在浏览器打开 https://www.goofish.com/im 完成滑块验证")
+            if cc_on:
+                lines.append("验证后在 CookieCloud 扩展点「手动同步」，系统将秒级自动恢复")
+            else:
+                lines.append("验证后请手动复制 Cookie 粘贴到系统中")
+                lines.append("提示：配置 CookieCloud 可免手动复制，实现秒级自动恢复")
+
+            send_system_notification("\n".join(lines), event="risk_control")
+        except Exception:
+            pass
+
+    async def _try_slider_recovery(self) -> bool:
+        """Phase 2+3: open browser for slider verification, optionally auto-solve."""
+        try:
+            from src.core.slider_solver import try_slider_recovery
+        except ImportError:
+            self.logger.debug("slider_solver not available, skipping auto slider recovery")
+            return False
+        try:
+            result = await try_slider_recovery(
+                cookie_text=self.cookie_text,
+                config=self.config,
+                logger=self.logger,
+            )
+            if result and result.get("cookie"):
+                cookie_str = result["cookie"]
+                _required = {"sgcookie", "unb", "cookie2"}
+                cookie_keys = {p.split("=")[0].strip() for p in cookie_str.split(";") if "=" in p}
+                is_complete = bool(_required & cookie_keys)
+
+                if is_complete:
+                    changed = self._apply_cookie_text(cookie_str, reason="slider_recovery")
+                    if changed:
+                        os.environ["XIANYU_COOKIE_1"] = cookie_str
+                        self._session_peer.clear()
+                        self._seen_event.clear()
+                        try:
+                            from src.core.notify import send_system_notification
+                            send_system_notification(
+                                "【闲鱼自动化】✅ 风控滑块验证已通过\nCookie 已自动恢复，WS 即将重连",
+                                event="risk_control",
+                            )
+                        except Exception:
+                            pass
+                    return changed
+
+                self.logger.info("Slider solved but cookie incomplete, waiting for CookieCloud sync...")
+                try:
+                    from src.core.notify import send_system_notification
+                    send_system_notification(
+                        "【闲鱼自动化】✅ 滑块验证已通过\n"
+                        "但自动提取的 Cookie 不完整，请在 CookieCloud 扩展中点「手动同步」完成恢复",
+                        event="risk_control",
+                    )
+                except Exception:
+                    pass
+                for _ in range(20):
+                    refreshed = await self._try_cookiecloud_poll()
+                    if refreshed is True:
+                        self.logger.info("CookieCloud provided complete cookie after slider solve")
+                        return True
+                    await asyncio.sleep(15)
+                return False
+            return False
+        except Exception as exc:
+            self.logger.info(f"Slider recovery failed: {exc}")
+            return False
+
+    def _base_headers(self, *, include_cookie: bool = False) -> dict[str, str]:
+        h: dict[str, str] = {
             "accept": "application/json",
             "accept-language": "zh-CN,zh;q=0.9",
             "cache-control": "no-cache",
@@ -514,8 +665,25 @@ class GoofishWsTransport:
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/133.0.0.0 Safari/537.36"
             ),
-            "cookie": self.cookie_text,
         }
+        if include_cookie:
+            h["Cookie"] = self.cookie_text
+        return h
+
+    def _dedup_cookies(self) -> None:
+        """去除 self.cookies 中的重复项并重建 cookie_text。
+        
+        对齐 XianyuAutoAgent 的 clear_duplicate_cookies() 逻辑。
+        """
+        deduped: dict[str, str] = {}
+        for k, v in self.cookies.items():
+            k = str(k).strip()
+            v = str(v).strip()
+            if k and v:
+                deduped[k] = v
+        if deduped != self.cookies:
+            self.cookies = deduped
+            self.cookie_text = "; ".join(f"{k}={v}" for k, v in deduped.items())
 
     def _absorb_set_cookies(self, client: httpx.AsyncClient, reason: str = "") -> bool:
         """Merge Set-Cookie values from an httpx client into self.cookies."""
@@ -532,6 +700,7 @@ class GoofishWsTransport:
         if changed:
             merged_text = "; ".join(f"{k}={v}" for k, v in merged.items() if str(k).strip() and str(v).strip())
             self._apply_cookie_text(merged_text, reason=reason)
+            self._dedup_cookies()
             os.environ["XIANYU_COOKIE_1"] = self.cookie_text
             self.logger.debug(f"Absorbed Set-Cookie from {reason}")
         return changed
@@ -551,12 +720,17 @@ class GoofishWsTransport:
         if changed:
             merged_text = "; ".join(f"{k}={v}" for k, v in merged.items() if str(k).strip() and str(v).strip())
             self._apply_cookie_text(merged_text, reason=reason)
+            self._dedup_cookies()
             os.environ["XIANYU_COOKIE_1"] = self.cookie_text
             self.logger.debug(f"Absorbed Set-Cookie from response ({reason})")
         return changed
 
     async def _preflight_has_login(self) -> bool:
-        """调用 hasLogin 预热会话，并吸收服务端补发的关键 cookie。"""
+        """调用 hasLogin 预热会话，并吸收服务端补发的关键 cookie。
+
+        对齐 XianyuAutoAgent: 只通过 cookies 参数传 cookie，不手动设 cookie header，
+        并在完成后执行去重。
+        """
         params = {"appName": "xianyu", "fromSite": "77"}
         data = {
             "hid": self.cookies.get("unb", ""),
@@ -579,9 +753,10 @@ class GoofishWsTransport:
             "deviceId": self.cookies.get("cna", "") or self.device_id,
         }
 
+        headers = self._base_headers()
         async with httpx.AsyncClient(
             timeout=12.0,
-            headers=self._base_headers(),
+            headers=headers,
             cookies=self.cookies,
             follow_redirects=True,
         ) as client:
@@ -607,6 +782,7 @@ class GoofishWsTransport:
             if merged != self.cookies:
                 merged_text = "; ".join(f"{k}={v}" for k, v in merged.items() if str(k).strip() and str(v).strip())
                 self._apply_cookie_text(merged_text, reason="has_login_refresh")
+                self._dedup_cookies()
                 os.environ["XIANYU_COOKIE_1"] = self.cookie_text
             return True
 
@@ -902,7 +1078,7 @@ class GoofishWsTransport:
         while not self._stop_event.is_set():
             try:
                 self._maybe_reload_cookie(reason="connect")
-                headers = self._base_headers()
+                headers = self._base_headers(include_cookie=True)
                 try:
                     self._ws = await websockets.connect(
                         self.base_url,
@@ -927,6 +1103,7 @@ class GoofishWsTransport:
                 await self._send_reg()
                 self._ready.set()
                 self._connect_failures = 0
+                self._rgv587_consecutive = 0
                 self.logger.info("Connected to Goofish WebSocket transport")
 
                 while not self._stop_event.is_set():
@@ -943,6 +1120,25 @@ class GoofishWsTransport:
                         self._token_ts = 0.0
                         self._connect_failures = 0
                         raise BrowserError("Token refresh: reconnect required")
+
+                    if self._cookie_changed.is_set():
+                        self._cookie_changed.clear()
+                        if self._maybe_reload_cookie(reason="notified"):
+                            self.logger.info("Cookie update notified, forcing reconnect")
+                            self._ready.clear()
+                            self._token = ""
+                            self._token_ts = 0.0
+                            self._connect_failures = 0
+                            break
+                    if (now - self._last_cookie_check) >= 60.0:
+                        self._last_cookie_check = now
+                        if self._maybe_reload_cookie(reason="periodic"):
+                            self.logger.info("Periodic cookie check detected update, forcing reconnect")
+                            self._ready.clear()
+                            self._token = ""
+                            self._token_ts = 0.0
+                            self._connect_failures = 0
+                            break
 
                     try:
                         msg_text = await asyncio.wait_for(self._ws.recv(), timeout=1.0)
@@ -968,17 +1164,41 @@ class GoofishWsTransport:
 
                 is_rgv587 = "RGV587" in reason
                 if auth_error:
-                    if await self._try_active_cookie_refresh():
-                        if is_rgv587:
-                            self.logger.warning(f"RGV587 rate limit detected, backing off {30 * min(self._connect_failures, 4)}s despite cookie refresh")
-                            await asyncio.sleep(30.0 * min(self._connect_failures, 4))
-                        else:
+                    if is_rgv587:
+                        self._rgv587_consecutive += 1
+                        _RGV587_BACKOFF_MAX = 2
+                        if self._rgv587_consecutive <= _RGV587_BACKOFF_MAX:
+                            backoff = 60.0 * self._rgv587_consecutive
+                            self.logger.warning(
+                                f"RGV587 风控检测 ({self._rgv587_consecutive}/{_RGV587_BACKOFF_MAX})，"
+                                f"退避 {backoff:.0f}s 后重试..."
+                            )
+                            if await self._try_active_cookie_refresh():
+                                self.logger.info("Active cookie refresh succeeded during RGV587 backoff")
+                            await asyncio.sleep(backoff)
+                            continue
+                        self.logger.warning(
+                            "RGV587 风控持续触发，请在浏览器打开闲鱼消息页(https://www.goofish.com/im)完成滑块验证后更新 Cookie。"
+                            " 暂停自动重连，等待 Cookie 更新..."
+                        )
+                        self._send_risk_control_notification()
+                        recovered = await self._try_slider_recovery()
+                        if recovered:
                             self._connect_failures = 0
-                            self.logger.info("Active cookie refresh succeeded, retrying WS immediately")
+                            self._rgv587_consecutive = 0
+                            self.logger.info("滑块验证恢复成功，立即重试 WS 连接")
+                            continue
+                        if await self._wait_for_cookie_update_forever():
+                            self._connect_failures = 0
+                            self._rgv587_consecutive = 0
+                            self.logger.info("检测到 Cookie 更新，立即重试 WS 连接")
+                            continue
+                    elif await self._try_active_cookie_refresh():
+                        self._connect_failures = 0
+                        self.logger.info("Active cookie refresh succeeded, retrying WS immediately")
                         continue
-
-                    if self.auth_hold_until_cookie_update:
-                        self.logger.warning("Auth/risk failure detected, suspend reconnect until cookie is updated")
+                    elif self.auth_hold_until_cookie_update:
+                        self.logger.warning("Auth failure detected, suspend reconnect until cookie is updated")
                         if await self._wait_for_cookie_update_forever():
                             self._connect_failures = 0
                             self.logger.info("Detected cookie update, retrying WS connection immediately")
@@ -1068,6 +1288,9 @@ class GoofishWsTransport:
         return out
 
     async def send_text(self, session_id: str, text: str) -> bool:
+        if not (text or "").strip():
+            return False
+
         self._ensure_async_primitives()
         await self.start()
         if not self._ready.is_set() and not await self._wait_event_with_timeout(self._ready, 10.0):
@@ -1134,3 +1357,9 @@ def get_session_by_buyer_nick(nick: str) -> str:
     if not _ws_transport_instance or not nick:
         return ""
     return _ws_transport_instance.find_session_by_nick(nick)
+
+
+def notify_ws_cookie_changed() -> None:
+    """Thread-safe: notify WS transport that cookie has been updated externally."""
+    if _ws_transport_instance is not None:
+        _ws_transport_instance.notify_cookie_changed()

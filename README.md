@@ -36,6 +36,41 @@
 
 ---
 
+## 🎉 v3.0 重大更新
+
+### 核心新功能
+
+| 功能 | 描述 | 版本 |
+|------|------|------|
+| 🛡️ **风控滑块自动验证** | RGV587 触发后自动检测 NC/拼图滑块并模拟拖拽，Playwright + OpenCV | v3.0 |
+| 🔄 **CookieCloud 集成** | 浏览器扩展即时同步 Cookie，风控恢复秒级生效，免手动复制 | v3.0 |
+| 🎯 **自动回复引擎增强** | 30+ 意图规则、售后自动转人工、复购引导、系统通知过滤 | v3.0 |
+| 💰 **多店铺首单优惠修正** | 报价模板"首单价格"改"参考价格"，跨店场景正确引导 | v3.0 |
+| 🖼️ **商品图片模板重构** | 7 个新视觉模板 + 统一渲染引擎，支持自定义字体/配色 | v3.0 |
+| 🖥️ **macOS LaunchAgent** | 一键安装后台守护服务，开机自启动 | v3.0 |
+| 📝 **前端 TypeScript 迁移** | 全部页面组件迁移至 TypeScript，类型安全 | v3.0 |
+
+### 风控自动恢复架构
+
+```mermaid
+graph TD
+    A[RGV587 风控触发] --> B{连续触发次数}
+    B -->|1-2次| C[退避重试 + 读浏览器 Cookie]
+    C --> D[自动重连]
+    B -->|3次以上| E[发送告警通知]
+    E --> F{滑块自动验证开启?}
+    F -->|是| G[Playwright 自动过滑块]
+    F -->|否| H[等待人工完成滑块]
+    G -->|成功| I{Cookie 完整?}
+    G -->|失败| H
+    I -->|是| D
+    I -->|否| J[等待 CookieCloud 同步]
+    H --> J
+    J -->|同步成功| D
+```
+
+---
+
 ## 🎉 v2.0 重大更新
 
 ### 核心新功能
@@ -266,13 +301,40 @@ NODE_PORT=3001
 PYTHON_PORT=8091
 ```
 
+### CookieCloud 配置（可选，推荐）
+
+CookieCloud 是浏览器扩展，可将 Cookie 实时同步到服务端，风控恢复时秒级生效：
+
+```bash
+# 环境变量方式
+COOKIE_CLOUD_UUID=your-uuid        # CookieCloud 用户 ID
+COOKIE_CLOUD_PASSWORD=your-password  # CookieCloud 加密密码
+```
+
+也可在前端「系统设置 → 集成服务 → CookieCloud 配置」中填写。
+
+### 风控滑块自动验证配置（可选）
+
+在前端「系统设置 → 集成服务 → 风控滑块自动验证」中开启：
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `enabled` | 是否启用自动过滑块 | `false` |
+| `max_attempts` | 单次风控最大尝试次数 | `3` |
+| `cooldown_seconds` | 两次尝试间冷却时间 | `60` |
+| `headless` | 是否无头模式运行浏览器 | `false` |
+
+> **风险提示**：自动过滑块存在账号封控风险，建议配合 CookieCloud 使用，优先通过手动验证恢复。
+
 ### 系统配置页面
 
-v2.0 新增可视化配置：
+可视化配置（v2.0 起）：
 - **AI 设置** - 6家提供商引导卡片，一键切换
 - **Cookie 设置** - 粘贴验证、实时评级、获取指南
 - **告警通知** - Webhook 配置、事件开关、测试发送
 - **闲管家 API** - AppKey / Secret 管理
+- **CookieCloud** - 同步配置、手动同步按钮（v3.0）
+- **风控滑块自动验证** - 开关/参数/风险提示（v3.0）
 
 ---
 
@@ -292,7 +354,9 @@ Dashboard 集成 5 大服务状态：
 | 场景 | 级别 | 通知渠道 |
 |------|------|----------|
 | Cookie 过期 | P0 | 飞书 + 企业微信 |
+| RGV587 风控滑块触发 | P0 | 飞书 + 企业微信 |
 | Cookie 自动刷新成功 | P1 | 飞书 |
+| 滑块自动验证成功/失败 | P1 | 飞书 |
 | 售后介入 | P1 | 飞书 |
 | 发货失败 | P1 | 飞书 |
 | 人工接管 | P2 | 飞书 |
@@ -310,13 +374,19 @@ xianyu-openclaw/
 │   ├── core/                     # 核心模块
 │   │   ├── cookie_health.py      # Cookie 健康检查
 │   │   ├── cookie_grabber.py     # Cookie 自动刷新
+│   │   ├── slider_solver.py      # 风控滑块自动验证（NC/拼图）
 │   │   ├── notify.py             # 通知模块
 │   │   └── playwright_client.py  # 浏览器自动化
+│   ├── dashboard/                # Dashboard 服务层
+│   │   ├── config_service.py     # 配置管理服务
+│   │   ├── repository.py         # 数据仓库
+│   │   └── router.py             # 路由注册
 │   └── modules/                  # 业务模块
 │       ├── messages/             # 消息（去重、议价、回复）
 │       │   ├── service.py        # 消息服务
-│       │   ├── reply_engine.py   # 回复引擎
-│       │   └── bargain_tracker.py # 议价追踪
+│       │   ├── reply_engine.py   # 意图规则引擎（30+ 规则）
+│       │   ├── workflow.py       # 会话状态机
+│       │   └── ws_live.py        # WebSocket 消息监听
 │       ├── listing/              # 商品（上架、模板、OSS）
 │       │   ├── service.py        # 商品服务
 │       │   ├── auto_publish.py   # 自动发布
@@ -328,30 +398,36 @@ xianyu-openclaw/
 │       ├── quote/                # 报价引擎
 │       │   ├── engine.py         # 报价核心
 │       │   └── providers.py      # 报价数据源
+│       ├── analytics/            # 数据分析
 │       └── accounts/             # 账号管理
 ├── server/                       # Node.js 后端
 │   └── src/
 │       ├── routes/
 │       │   ├── xianguanjia.js    # 闲管家代理
 │       │   └── config.js         # 配置管理
-├── client/                       # React 前端
+├── client/                       # React 前端（TypeScript）
 │   └── src/
 │       ├── pages/                # 页面
-│       │   ├── config/           # 系统配置
+│       │   ├── config/           # 系统配置（含CookieCloud/滑块）
 │       │   ├── accounts/         # 店铺管理
-│       │   └── dashboard/        # 数据看板
+│       │   ├── products/         # 商品管理
+│       │   └── analytics/        # 数据分析
 │       └── components/           # 组件
-│           ├── ApiStatusPanel.jsx    # 状态面板
-│           └── SetupGuide.jsx        # 引导组件
-├── tests/                        # 测试（覆盖率 95%）
+│           ├── ApiStatusPanel.tsx # 状态面板
+│           └── SetupGuide.tsx    # 引导组件
+├── tests/                        # 测试
 ├── config/                       # 配置模板
+│   ├── config.example.yaml       # 主配置示例
+│   ├── categories/               # 品类配置
+│   └── templates/                # 回复模板
 ├── docs/                         # 文档
-│   ├── PROJECT_PLAN.md           # 项目规划
-│   ├── reviews/                  # 代码审查
-│   └── xianguanjia-api.md        # 闲管家 API 文档
 ├── database/                     # 数据库迁移
 ├── docker-compose.yml            # Docker 编排
-└── scripts/                      # 脚本工具
+├── scripts/                      # 脚本工具
+│   ├── install-launchd.sh        # macOS LaunchAgent 安装
+│   └── uninstall-launchd.sh      # macOS LaunchAgent 卸载
+├── start.sh                      # 一键启动（macOS/Linux）
+└── start.bat                     # 一键启动（Windows）
 ```
 
 ---
@@ -399,6 +475,28 @@ cd client && npm run build
 2. 确认 `COOKIE_AUTO_REFRESH=true` 已在 `.env` 中设置
 3. 如无法保持浏览器登录，可在 Dashboard 手动粘贴 Cookie
 
+### RGV587 风控滑块触发怎么办
+
+**症状**：日志出现 `RGV587`，WebSocket 断连，告警通知"闲鱼触发风控验证"。
+
+**解决**：
+1. **推荐方案** — 安装 [CookieCloud](https://github.com/nichenqin/CookieCloud) 浏览器扩展：
+   - Chrome/Edge 安装 CookieCloud 扩展
+   - 在扩展中设置 UUID 和密码
+   - 在前端「系统设置 → 集成服务 → CookieCloud 配置」中填入相同的 UUID 和密码
+   - 在浏览器中手动通过闲鱼滑块验证后，CookieCloud 自动同步最新 Cookie
+2. **自动方案** — 在前端「系统设置 → 集成服务 → 风控滑块自动验证」中开启自动过滑块（有封号风险，谨慎使用）
+3. **手动方案** — 在 Dashboard「账户管理」页面粘贴新 Cookie
+
+### CookieCloud 配置步骤
+
+1. 安装 [CookieCloud](https://github.com/nichenqin/CookieCloud) 浏览器扩展
+2. 扩展设置中：
+   - 选择"自托管"或使用公共服务
+   - 记录 UUID 和加密密码
+3. 在前端「系统设置 → 集成服务 → CookieCloud 配置」中填入 UUID 和密码，保存
+4. 当 Cookie 失效时，在浏览器登录闲鱼后点击 CookieCloud 扩展的"同步"，系统自动获取最新 Cookie
+
 ### Windows 上 Playwright 安装失败
 
 **症状**：`playwright install chromium` 报错或超时。
@@ -411,6 +509,28 @@ cd client && npm run build
 ---
 
 ## 📝 更新日志
+
+### v3.0.0 (2026-03-08)
+
+**新增功能**
+- 🛡️ 风控滑块自动验证 — NC/拼图滑块自动解决（Playwright + OpenCV，三级浏览器策略）
+- 🔄 CookieCloud 集成 — 浏览器扩展即时同步 Cookie，风控恢复秒级生效
+- 🎯 自动回复意图引擎增强 — 30+ 规则，售后自动转人工，复购引导，系统通知过滤
+- 💰 多店铺首单优惠修正 — 报价模板统一使用"参考价格"，避免跨店误导
+- 🖼️ 商品图片模板重构 — 7 个新视觉模板 + 统一渲染引擎
+- 🖥️ macOS LaunchAgent — 一键安装后台守护服务
+- 📝 前端 TypeScript 迁移 — 全部页面和组件迁移至 TypeScript
+
+**架构优化**
+- 前端 UI 滑块配置区，含风险提示和参数调节
+- 告警通知文案根据 CookieCloud / 滑块配置状态动态生成
+- 会话状态机（WorkflowState）防止已下单后重复催单
+- 意图规则引擎支持 `skip_reply`（系统通知静默跳过）
+
+**部署改进**
+- `requirements.txt` — `opencv-python` 改为 `opencv-python-headless`（Docker 兼容）
+- `config.example.yaml` — 新增 `slider_auto_solve` 配置段
+- `scripts/install-launchd.sh` — macOS 后台服务一键安装
 
 ### v2.0.0 (2026-03-07)
 

@@ -526,15 +526,24 @@ def test_dashboard_home_contains_risk_control_rows() -> None:
     assert "售前一键恢复" in DASHBOARD_HTML
 
 
+def _recent_ts(minutes_ago: int = 5) -> str:
+    """Generate a log timestamp within the risk signal window."""
+    from datetime import datetime, timedelta
+    dt = datetime.now() - timedelta(minutes=minutes_ago)
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def test_risk_control_status_detects_blocked_signal(temp_dir) -> None:
     ops = MimicOps(project_root=temp_dir, module_console=ModuleConsole(project_root=temp_dir))
     runtime_dir = temp_dir / "data" / "module_runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
+    ts1 = _recent_ts(10)
+    ts2 = _recent_ts(5)
     (runtime_dir / "presales.log").write_text(
         "\n".join(
             [
-                "\x1b[32m2026-02-28 15:15:01\x1b[0m | WARNING | WebSocket disconnected retrying",
-                "\x1b[32m2026-02-28 15:15:05\x1b[0m | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']",
+                f"\x1b[32m{ts1}\x1b[0m | WARNING | WebSocket disconnected retrying",
+                f"\x1b[32m{ts2}\x1b[0m | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']",
             ]
         ),
         encoding="utf-8",
@@ -545,14 +554,31 @@ def test_risk_control_status_detects_blocked_signal(temp_dir) -> None:
     assert risk["label"] == "疑似封控"
     assert risk["score"] >= 75
     assert "FAIL_SYS_USER_VALIDATE" in risk["last_event"]
-    assert risk["last_event_at"] == "2026-02-28 15:15:05"
+    assert risk["last_event_at"] == ts2
+
+
+def test_risk_control_status_detects_blocked_stale(temp_dir) -> None:
+    """Old block signals beyond the window should be marked stale."""
+    ops = MimicOps(project_root=temp_dir, module_console=ModuleConsole(project_root=temp_dir))
+    runtime_dir = temp_dir / "data" / "module_runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    old_ts = _recent_ts(300)
+    (runtime_dir / "presales.log").write_text(
+        f"{old_ts} | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']",
+        encoding="utf-8",
+    )
+
+    risk = ops._risk_control_status_from_logs(target="presales", tail_lines=100)
+    assert risk["level"] == "stale"
+    assert "已过期" in risk["label"]
+    assert risk["score"] == 0
 
 
 def test_risk_control_status_detects_warning_signal(temp_dir) -> None:
     ops = MimicOps(project_root=temp_dir, module_console=ModuleConsole(project_root=temp_dir))
     runtime_dir = temp_dir / "data" / "module_runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    lines = [f"2026-02-28 15:14:{10 + i:02d} | WARNING | Goofish WebSocket disconnected: HTTP 400" for i in range(6)]
+    lines = [f"{_recent_ts(10 - i)} | WARNING | Goofish WebSocket disconnected: HTTP 400" for i in range(6)]
     (runtime_dir / "presales.log").write_text("\n".join(lines), encoding="utf-8")
 
     risk = ops._risk_control_status_from_logs(target="presales", tail_lines=120)
@@ -566,11 +592,13 @@ def test_risk_control_status_recovers_when_connected_after_failures(temp_dir) ->
     ops = MimicOps(project_root=temp_dir, module_console=ModuleConsole(project_root=temp_dir))
     runtime_dir = temp_dir / "data" / "module_runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
+    ts1 = _recent_ts(10)
+    ts2 = _recent_ts(5)
     (runtime_dir / "presales.log").write_text(
         "\n".join(
             [
-                "2026-02-28 15:15:05 | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']",
-                "2026-02-28 15:15:10 | INFO | Connected to Goofish WebSocket transport",
+                f"{ts1} | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']",
+                f"{ts2} | INFO | Connected to Goofish WebSocket transport",
             ]
         ),
         encoding="utf-8",
@@ -580,7 +608,7 @@ def test_risk_control_status_recovers_when_connected_after_failures(temp_dir) ->
     assert risk["level"] == "normal"
     assert risk["label"] == "已恢复连接"
     assert "最近已恢复连接" in risk["signals"]
-    assert risk["last_connected_at"] == "2026-02-28 15:15:10"
+    assert risk["last_connected_at"] == ts2
 
 
 def test_service_status_marks_degraded_on_auth_failure(temp_dir) -> None:
@@ -605,8 +633,9 @@ def test_service_status_marks_degraded_on_auth_failure(temp_dir) -> None:
     )
     runtime_dir = temp_dir / "data" / "module_runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
+    ts = _recent_ts(5)
     (runtime_dir / "presales.log").write_text(
-        "2026-02-28 15:15:05 | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']\n",
+        f"{ts} | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']\n",
         encoding="utf-8",
     )
 
@@ -642,13 +671,15 @@ def test_service_status_clears_token_error_after_connected_event(temp_dir) -> No
         "XIANYU_COOKIE_1=unb=4057246664; _tb_token_=abc; cookie2=def; sgcookie=ghi; _m_h5_tk=tk_1; _m_h5_tk_enc=enc_1\n",
         encoding="utf-8",
     )
+    ts1 = _recent_ts(10)
+    ts2 = _recent_ts(5)
     runtime_dir = temp_dir / "data" / "module_runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
     (runtime_dir / "presales.log").write_text(
         "\n".join(
             [
-                "2026-02-28 15:15:05 | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']",
-                "2026-02-28 15:15:10 | INFO | Connected to Goofish WebSocket transport",
+                f"{ts1} | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']",
+                f"{ts2} | INFO | Connected to Goofish WebSocket transport",
             ]
         )
         + "\n",
@@ -694,8 +725,9 @@ def test_service_status_auto_recover_on_cookie_change_after_validate_error(temp_
     )
     runtime_dir = temp_dir / "data" / "module_runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
+    ts = _recent_ts(5)
     (runtime_dir / "presales.log").write_text(
-        "2026-02-28 15:15:05 | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']\n",
+        f"{ts} | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']\n",
         encoding="utf-8",
     )
 
@@ -842,8 +874,9 @@ def test_service_auto_fix_returns_cookie_update_required_when_validate_failed(te
     )
     runtime_dir = temp_dir / "data" / "module_runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
+    ts = _recent_ts(5)
     (runtime_dir / "presales.log").write_text(
-        "2026-02-28 15:15:05 | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']\n",
+        f"{ts} | WARNING | Token API failed: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR']\n",
         encoding="utf-8",
     )
 

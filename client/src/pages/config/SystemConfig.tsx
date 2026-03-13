@@ -188,6 +188,7 @@ const TAB_COMPAT: Record<string, string> = {
   xianguanjia: 'integrations',
   ai: 'integrations',
   oss: 'integrations',
+  cookie_cloud: 'integrations',
   auto_publish: 'products',
   order_reminder: 'orders',
   pricing: 'orders',
@@ -355,36 +356,37 @@ interface BuiltinRule { intent: string; keywords: string; reply: string; scope?:
 
 const BUILTIN_RULES: BuiltinRule[] = [
   // 通用
-  { phase: 'universal', intent: '平台安全', keywords: '靠谱吗、安全、担保、骗子、走平台', reply: '建议全程走闲鱼平台流程交易，按平台规则下单和确认，双方都更有保障。' },
-  { phase: 'universal', intent: '讲价', keywords: '最低、便宜、优惠、少点、能便宜', reply: '这个价格已经是最低了哈，量大可以再商量。' },
+  { phase: 'universal', intent: '平台安全', keywords: '靠谱吗、安全、担保、骗子、走平台', reply: '放心哦，全程走闲鱼平台交易，按平台规则下单确认，双方都有保障~' },
+  { phase: 'universal', intent: '讲价', keywords: '最低、便宜、优惠、少点、能便宜', reply: '亲，这个价格已经很实惠了呢~ 量大的话可以再商量哦~' },
   // 快递售前 - 需人工
-  { phase: 'presale_human', intent: '超偏远地区', keywords: '新疆、西藏', reply: '新疆/西藏属于超偏远地区，需核算体积重', scope: '仅快递', needsHuman: true },
-  { phase: 'presale_human', intent: '体积计费', keywords: '体积大、长宽高、棉被、懒人沙发', reply: '体积较大的物品会按体积重计费（长x宽x高/8000）', scope: '仅快递', needsHuman: true },
-  { phase: 'presale_human', intent: '大件/搬家', keywords: '搬家、毕业寄、大件', reply: '大件/搬家可以走德邦', scope: '仅快递', needsHuman: true },
+  { phase: 'presale_human', intent: '超偏远地区', keywords: '新疆、西藏', reply: '亲，新疆/西藏属于偏远地区续重会贵一些~ 方便告诉我包裹的长宽高吗？我帮您精确核算~', scope: '仅快递', needsHuman: true },
+  { phase: 'presale_human', intent: '体积计费', keywords: '体积大、长宽高、棉被、懒人沙发', reply: '体积较大的物品会按体积重计费（长x宽x高/8000），方便告诉我具体长宽高吗？我帮您算~', scope: '仅快递', needsHuman: true },
+  { phase: 'presale_human', intent: '大件/搬家', keywords: '搬家、毕业寄、大件', reply: '大件/搬家可以走德邦哦~ 我帮您确认一下具体方案~', scope: '仅快递', needsHuman: true },
   // 快递售前 - 自动回复
-  { phase: 'presale', intent: '咨询在不在', keywords: '在吗、还在、有货吗', reply: '在的亲，你是哪里到哪里的呢？报一下寄件城市-收件城市-重量(kg)帮你查最优价', scope: '仅快递' },
-  { phase: 'presale', intent: '购买流程', keywords: '怎么买、怎么拍、怎么下单', reply: '拍下不付款，我改价，付款后自动给您兑换码', scope: '仅快递' },
-  { phase: 'presale', intent: '兑换码使用', keywords: '怎么用、怎么使用、兑换码', reply: '兑换码是兑换余额的，点下单使用余额支付即可', scope: '仅快递' },
-  { phase: 'presale', intent: '代下单', keywords: '代下单、帮我下单', reply: '我们不做代下单了，拍完给你兑换码，在小城旭下单即可', scope: '仅快递' },
-  { phase: 'presale', intent: '路线咨询', keywords: '哪里到哪里、寄到哪、从哪寄', reply: '你是哪里到哪里的呢', scope: '仅快递' },
-  { phase: 'presale', intent: '上门取件', keywords: '上门取件、取件时间', reply: '下单后联系快递员沟通好上门取件时间哈', scope: '仅快递' },
-  { phase: 'presale', intent: '包装费', keywords: '包装费、耗材费', reply: '包装费需要问下快递员，这个是他这边收费的哈', scope: '仅快递' },
-  { phase: 'presale', intent: '品牌缺货', keywords: '有顺丰吗、有京东吗', reply: '顺丰京东没有了哈', scope: '仅快递' },
-  { phase: 'presale', intent: '仅限首单', keywords: '第二次、再买、续费', reply: '这边仅限首单哈，后续直接在小城旭里下单就行', scope: '仅快递' },
-  { phase: 'presale', intent: '老用户优惠', keywords: '老用户、老客户、更优惠', reply: '小城旭的价格已经是官方5折了，首重续重都有折扣哦', scope: '仅快递' },
-  { phase: 'presale', intent: '有效期', keywords: '过期、有效期', reply: '不会过期的，未兑换就一直有效', scope: '仅快递' },
-  { phase: 'presale', intent: '禁寄物品', keywords: '能发吗、可以寄吗', reply: '刀具/易燃品/易碎品/电池/生鲜/数码产品不支持哈', scope: '仅快递' },
-  { phase: 'presale', intent: '保价', keywords: '保价、保价费', reply: '圆通可以保价1元。韵达不支持保价，取消保价韵达就出来了', scope: '仅快递' },
-  { phase: 'presale', intent: '网点问题', keywords: '不接单、运力不足、被取消', reply: '您那边网点暂时不接单了，换别的快递下单试试', scope: '仅快递' },
-  { phase: 'presale', intent: '快递单号', keywords: '上传单号、填单号', reply: '可以的，选自行寄回填写快递单号就行', scope: '仅快递' },
-  { phase: 'presale', intent: '实名认证', keywords: '实名、身份证', reply: '去圆通/韵达小城旭认证一下就好，是互通的', scope: '仅快递' },
-  // 快递售后 - 引导小城旭客服
-  { phase: 'aftersale', intent: '退款', keywords: '退款、不想要了、退钱', reply: '收到，请在小城旭首页点击「联系客服」处理退款', scope: '仅快递', needsHuman: true },
-  { phase: 'aftersale', intent: '退款申请', keywords: '申请退款、走退款', reply: '退款理由请选"已收到货-与卖家协商一致"', scope: '仅快递', needsHuman: true },
-  { phase: 'aftersale', intent: '投诉/丢件', keywords: '丢件、破损、投诉', reply: '请把快递单号发我，同时在小城旭点击「联系客服」', scope: '仅快递', needsHuman: true },
-  { phase: 'aftersale', intent: '余额不够', keywords: '余额不够、抵扣不了', reply: '是不是选错快递公司了？截图给我看下', scope: '仅快递', needsHuman: true },
-  { phase: 'aftersale', intent: '揽收慢', keywords: '没来取、不来取、揽收慢', reply: '急件可以换快递公司下单，揽收问题请在小城旭联系客服', scope: '仅快递', needsHuman: true },
-  { phase: 'aftersale', intent: '差评风险', keywords: '差评、体验差', reply: '很抱歉，请在小城旭联系客服优先处理', scope: '仅快递', needsHuman: true },
+  { phase: 'presale', intent: '咨询在不在', keywords: '在吗、还在、有货吗', reply: '在的亲~ 您是从哪里寄到哪里呢？告诉我城市和重量帮您查最优价~', scope: '仅快递' },
+  { phase: 'presale', intent: '购买流程', keywords: '怎么买、怎么拍、怎么下单', reply: '先拍下不付款，我帮您改价，付款后系统自动发兑换码给您~', scope: '仅快递' },
+  { phase: 'presale', intent: '兑换码使用', keywords: '怎么用、怎么使用、兑换码', reply: '兑换码是兑换余额用的~ 下单时选择使用余额支付就好啦~', scope: '仅快递' },
+  { phase: 'presale', intent: '代下单', keywords: '代下单、帮我下单', reply: '亲，我们不做代下单了~ 拍下付款后系统会发兑换码给您，用兑换码到小橙序下单就好~', scope: '仅快递' },
+  { phase: 'presale', intent: '路线咨询', keywords: '哪里到哪里、寄到哪、从哪寄', reply: '亲，您是从哪里寄到哪里呢？告诉我城市和重量帮您查价~', scope: '仅快递' },
+  { phase: 'presale', intent: '上门取件', keywords: '上门取件、取件时间', reply: '下单后联系快递员沟通好上门取件时间就行啦~ 也可以搜索「商达人」小橙序预约上门取件哦~', scope: '仅快递' },
+  { phase: 'presale', intent: '商达人取件', keywords: '商达人、商达人取件', reply: '在小橙序搜索「商达人」点击进入 → 右下角「我的」→「兑换优惠」兑换余额 → 返回首页填写寄件和收件地址、选快递公司 → 用余额支付下单即可~', scope: '仅快递' },
+  { phase: 'presale', intent: '包装费', keywords: '包装费、耗材费', reply: '包装费需要跟快递员确认，这个是快递员那边的收费哦~', scope: '仅快递' },
+  { phase: 'presale', intent: '品牌缺货', keywords: '有顺丰吗、有京东吗', reply: '不好意思，暂时没有顺丰和京东的渠道呢~', scope: '仅快递' },
+  { phase: 'presale', intent: '仅限首单', keywords: '第二次、再买、续费', reply: '亲，这个链接仅限首单哦~ 后续在小橙序直接下单就行，价格已经是官方5折了~', scope: '仅快递' },
+  { phase: 'presale', intent: '老用户优惠', keywords: '老用户、老客户、更优惠', reply: '小橙序的价格已经是官方5折了，首重续重都有折扣哦~', scope: '仅快递' },
+  { phase: 'presale', intent: '有效期', keywords: '过期、有效期', reply: '不会过期的~ 未兑换就一直有效，兑换成余额后也一直在账户里哦~', scope: '仅快递' },
+  { phase: 'presale', intent: '禁寄物品', keywords: '能发吗、可以寄吗', reply: '刀具、易燃品、电池、生鲜、数码产品暂时不支持寄送呢~ 具体可以问我帮您确认~', scope: '仅快递' },
+  { phase: 'presale', intent: '保价', keywords: '保价、保价费', reply: '圆通可以保价，保价费1元~ 韵达不支持保价，选保价后韵达不显示，取消保价韵达就出来了哦~', scope: '仅快递' },
+  { phase: 'presale', intent: '网点问题', keywords: '不接单、运力不足、被取消', reply: '亲，您那边的快递网点暂时不接单了~ 换别的快递重新下单试试哦~', scope: '仅快递' },
+  { phase: 'presale', intent: '快递单号', keywords: '上传单号、填单号', reply: '可以的~ 不管是抖音还是闲鱼、淘宝、拼多多都可以，选自行寄回填写快递单号就行~', scope: '仅快递' },
+  { phase: 'presale', intent: '实名认证', keywords: '实名、身份证', reply: '去圆通/韵达官方小橙序，点我的，有个实名认证，认证一下就好了，是互通的~', scope: '仅快递' },
+  // 快递售后 - 引导小橙序客服
+  { phase: 'aftersale', intent: '退款', keywords: '退款、不想要了、退钱', reply: '好的亲，我会尽快帮您处理退款，请稍等一下哦~', scope: '仅快递', needsHuman: true },
+  { phase: 'aftersale', intent: '退款申请', keywords: '申请退款、走退款', reply: '收到您的退款申请，我会尽快帮您处理~ 如有问题随时联系我哦~', scope: '仅快递', needsHuman: true },
+  { phase: 'aftersale', intent: '投诉/丢件', keywords: '丢件、破损、投诉', reply: '非常抱歉给您带来不便~ 请把快递单号发我，我会尽快帮您处理！', scope: '仅快递', needsHuman: true },
+  { phase: 'aftersale', intent: '余额不够', keywords: '余额不够、抵扣不了', reply: '亲，是不是选错快递公司了呢？截图给我看一下~ 如需帮助可以在小橙序点击「联系客服」哦~', scope: '仅快递', needsHuman: true },
+  { phase: 'aftersale', intent: '揽收慢', keywords: '没来取、不来取、揽收慢', reply: '如果急件可以先换快递公司下单~ 揽收问题可以在小橙序点击「联系客服」反馈哦~', scope: '仅快递', needsHuman: true },
+  { phase: 'aftersale', intent: '差评风险', keywords: '差评、体验差', reply: '非常抱歉给您不好的体验~ 请在小橙序首页点击「联系客服」，客服会第一时间帮您处理的~', scope: '仅快递', needsHuman: true },
 ];
 
 const PHASE_LABELS: Record<RulePhase, { label: string; color: string }> = {
@@ -406,7 +408,7 @@ function BuiltinRulesTable() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-xy-text-secondary">
-        以下规则始终生效。标记「仅快递」的规则仅在快递品类下触发。售后规则引导客户到小城旭联系客服。如需覆盖，在上方「关键词快捷回复」中添加相同关键词（优先级最高）。
+        以下规则始终生效。标记「仅快递」的规则仅在快递品类下触发。售后规则引导客户到小橙序联系客服。如需覆盖，在上方「关键词快捷回复」中添加相同关键词（优先级最高）。
       </p>
       {grouped.map(group => (
         <div key={group.phase} className="space-y-1">
@@ -440,7 +442,7 @@ function BuiltinRulesTable() {
         <p>2. 快递售前/售后专用规则（优先级 45-50）</p>
         <p>3. 通用内置规则（优先级 100）</p>
         <p>4. 虚拟商品回复 / 通用报价引导模板（兜底）</p>
-        <p className="text-orange-600 mt-1">注：售后规则回复中会引导客户到小城旭联系客服，仅做日志记录不触发闲鱼转人工</p>
+        <p className="text-orange-600 mt-1">注：售后规则回复中会引导客户到小橙序联系客服，仅做日志记录不触发闲鱼转人工</p>
       </GuideCard>
     </div>
   );
@@ -866,6 +868,7 @@ export default function SystemConfig() {
       case 'xianguanjia': return !!data.app_key && !String(data.app_key).includes('****');
       case 'ai': return !!data.api_key && !String(data.api_key).includes('****');
       case 'oss': return !!data.access_key_id && !String(data.access_key_id).includes('****');
+      case 'cookie_cloud': return !!data.cookie_cloud_host;
       default: return Object.keys(data).length > 0;
     }
   };
@@ -1441,6 +1444,114 @@ export default function SystemConfig() {
                 summary={<span className={`px-1.5 py-0.5 rounded text-[11px] ${isConfigured('oss') ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{isConfigured('oss') ? '已配置' : '可选'}</span>}
               >
                 {renderSectionFields('oss')}
+              </CollapsibleSection>
+
+              {/* CookieCloud */}
+              <CollapsibleSection
+                title="CookieCloud 配置"
+                defaultOpen={isConfigured('cookie_cloud')}
+                icon={<RefreshCw className="w-4 h-4 text-purple-500" />}
+                summary={<span className={`px-1.5 py-0.5 rounded text-[11px] ${isConfigured('cookie_cloud') ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{isConfigured('cookie_cloud') ? '已配置' : '可选'}</span>}
+              >
+                {renderSectionFields('cookie_cloud')}
+                <div className="mt-4 bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-200 p-5 rounded-lg text-sm">
+                  <h4 className="font-bold text-purple-900 mb-3 flex items-center gap-2">
+                    <Info className="w-4 h-4" /> CookieCloud 配置指南（内置服务端，无需额外部署）
+                  </h4>
+                  <ol className="list-decimal list-inside space-y-2 text-purple-800">
+                    <li>
+                      <strong>安装浏览器扩展</strong> — 在 Chrome/Edge 中安装
+                      <a href="https://chromewebstore.google.com/detail/cookiecloud/ffjiejobkoibkjlhjnlgmcnnigeelbdl" target="_blank" rel="noreferrer" className="underline ml-1">
+                        CookieCloud 扩展 <ExternalLink className="w-3 h-3 inline" />
+                      </a>
+                    </li>
+                    <li>
+                      <strong>配置扩展</strong> — 打开扩展设置：
+                      <ul className="ml-6 mt-1 space-y-1 list-disc list-inside text-purple-700">
+                        <li>服务器地址填 <code className="bg-white/60 px-1.5 py-0.5 rounded text-xs font-mono">http://localhost:8091/cookie-cloud</code></li>
+                        <li>点击「生成」获取 <strong>UUID</strong> 和 <strong>密码</strong></li>
+                        <li>同步域名添加 <code className="bg-white/60 px-1 rounded text-xs">.goofish.com</code> <code className="bg-white/60 px-1 rounded text-xs">.taobao.com</code> <code className="bg-white/60 px-1 rounded text-xs">.tmall.com</code></li>
+                        <li>同步间隔建议 <strong>10 分钟</strong></li>
+                      </ul>
+                    </li>
+                    <li><strong>填入上方配置</strong> — 服务地址留空（自动使用内置服务），将扩展中的 UUID 和密码填入，点击「保存设置」</li>
+                  </ol>
+                  <div className="mt-3 pt-3 border-t border-purple-200/60 space-y-2">
+                    <p className="text-xs text-purple-600">
+                      <strong>工作原理</strong>：浏览器保持闲鱼登录 → 扩展自动同步 Cookie 到内置服务端 → 系统即时解密并应用（秒级生效），实现全自动免维护。
+                      优先级：CookieCloud &gt; 浏览器数据库(rookiepy) &gt; 手动更新。
+                    </p>
+                    <p className="text-xs text-purple-700 bg-purple-100/60 rounded px-2 py-1.5">
+                      <strong>风控恢复提示</strong>：触发 RGV587 风控后，在浏览器完成滑块验证，然后在 CookieCloud 扩展中点击「手动同步」，系统将秒级自动恢复，无需手动复制 Cookie。
+                    </p>
+                    <a href="https://github.com/easychen/CookieCloud" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 mt-1 text-purple-600 hover:text-purple-800 font-medium underline text-xs">
+                      CookieCloud 项目文档 <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              </CollapsibleSection>
+
+              {/* 风控滑块自动验证 */}
+              <CollapsibleSection
+                title="风控滑块自动验证"
+                defaultOpen={!!config.slider_auto_solve?.enabled}
+                icon={<Shield className="w-4 h-4 text-amber-500" />}
+                summary={<span className={`px-1.5 py-0.5 rounded text-[11px] ${config.slider_auto_solve?.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{config.slider_auto_solve?.enabled ? '已开启' : '已关闭'}</span>}
+              >
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 p-4 rounded-lg">
+                    <p className="text-sm text-amber-900 font-medium flex items-center gap-2">
+                      <Shield className="w-4 h-4" /> 风险提示
+                    </p>
+                    <p className="text-xs text-amber-800 mt-1">
+                      自动过滑块使用 Playwright 模拟浏览器操作，存在一定的账号封控风险。建议在了解风险后再开启。
+                      开启后，RGV587 风控触发时系统会自动尝试滑块验证；失败后会弹出浏览器窗口供手动操作。
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-xy-gray-50 rounded-xl border border-xy-border">
+                    <div>
+                      <p className="font-medium text-xy-text-primary">启用自动滑块验证</p>
+                      <p className="text-xs text-xy-text-secondary mt-0.5">RGV587 触发后自动尝试过滑块</p>
+                    </div>
+                    <ToggleSwitch checked={!!config.slider_auto_solve?.enabled} onChange={() => handleChange('slider_auto_solve', 'enabled', !config.slider_auto_solve?.enabled)} />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="xy-label">最大尝试次数</label>
+                      <input
+                        type="number"
+                        className="xy-input px-3 py-2 w-full"
+                        value={config.slider_auto_solve?.max_attempts ?? 2}
+                        min={1}
+                        max={5}
+                        onChange={e => handleChange('slider_auto_solve', 'max_attempts', Number(e.target.value))}
+                      />
+                      <p className="text-[11px] text-gray-400 mt-1">每轮 RGV587 最多自动尝试次数（建议 1-3）</p>
+                    </div>
+                    <div>
+                      <label className="xy-label">冷却间隔（秒）</label>
+                      <input
+                        type="number"
+                        className="xy-input px-3 py-2 w-full"
+                        value={config.slider_auto_solve?.cooldown_seconds ?? 300}
+                        min={60}
+                        max={3600}
+                        onChange={e => handleChange('slider_auto_solve', 'cooldown_seconds', Number(e.target.value))}
+                      />
+                      <p className="text-[11px] text-gray-400 mt-1">两次尝试之间的等待时间</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-xy-gray-50 rounded-xl border border-xy-border">
+                    <div>
+                      <p className="font-medium text-xy-text-primary text-sm">无头模式</p>
+                      <p className="text-xs text-xy-text-secondary mt-0.5">后台静默运行浏览器（关闭后可看到浏览器窗口，方便手动接管）</p>
+                    </div>
+                    <ToggleSwitch checked={!!config.slider_auto_solve?.headless} onChange={() => handleChange('slider_auto_solve', 'headless', !config.slider_auto_solve?.headless)} />
+                  </div>
+                </div>
               </CollapsibleSection>
             </div>
           )}

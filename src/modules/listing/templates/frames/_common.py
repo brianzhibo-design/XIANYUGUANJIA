@@ -64,7 +64,7 @@ def brand_grid_html(
     radius = "50%" if shape == "circle" else ("16px" if shape == "rounded_square" else "4px")
 
     items_html = ""
-    for item in brand_items[:12]:
+    for item in brand_items[:8]:
         src = e(item.get("src", ""))
         name = e(item.get("name", ""))
         name_font = max(14, size // 8)

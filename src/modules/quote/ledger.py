@@ -61,6 +61,10 @@ class QuoteLedger:
                 CREATE INDEX IF NOT EXISTS idx_qr_peer_item
                 ON quote_records (peer_name, item_id, created_at DESC)
             """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_qr_sender_user_id
+                ON quote_records (sender_user_id, created_at DESC)
+            """)
 
     def record_quote(
         self,
@@ -97,10 +101,13 @@ class QuoteLedger:
         *,
         item_id: str = "",
         max_age_seconds: int = 7200,
+        sender_user_id: str = "",
     ) -> dict[str, Any] | None:
         """Find the most recent quote matching buyer nick (+ optional item_id).
 
-        Uses composite (peer_name, item_id) matching when item_id is provided.
+        Tries in order: (peer_name + item_id) -> (peer_name) -> (sender_user_id).
+        The sender_user_id fallback handles cases where peer_name (IM nickname)
+        differs from buyer_nick (order nickname).
         """
         cutoff = time.time() - max_age_seconds
         with self._connect() as conn:
@@ -120,7 +127,20 @@ class QuoteLedger:
                    ORDER BY created_at DESC LIMIT 1""",
                 (buyer_nick, cutoff),
             ).fetchone()
-            return self._row_to_dict(row) if row else None
+            if row:
+                return self._row_to_dict(row)
+
+            if sender_user_id:
+                row = conn.execute(
+                    """SELECT * FROM quote_records
+                       WHERE sender_user_id = ? AND created_at > ?
+                       ORDER BY created_at DESC LIMIT 1""",
+                    (sender_user_id, cutoff),
+                ).fetchone()
+                if row:
+                    return self._row_to_dict(row)
+
+            return None
 
     def find_by_session(
         self,

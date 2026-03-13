@@ -196,11 +196,15 @@ class CookieGrabber:
                 cfg_path = Path("server/data/system_config.json")
                 if cfg_path.exists():
                     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-                    host = host or str(cfg.get("cookie_cloud_host", "")).strip()
-                    uuid = uuid or str(cfg.get("cookie_cloud_uuid", "")).strip()
-                    password = password or str(cfg.get("cookie_cloud_password", "")).strip()
+                    cc = cfg.get("cookie_cloud", {}) if isinstance(cfg.get("cookie_cloud"), dict) else {}
+                    host = host or str(cc.get("cookie_cloud_host") or cfg.get("cookie_cloud_host", "")).strip()
+                    uuid = uuid or str(cc.get("cookie_cloud_uuid") or cfg.get("cookie_cloud_uuid", "")).strip()
+                    password = password or str(cc.get("cookie_cloud_password") or cfg.get("cookie_cloud_password", "")).strip()
             except Exception:
                 pass
+
+        if not host and uuid and password:
+            host = "http://localhost:8091/cookie-cloud"
 
         if not host or not uuid or not password:
             return None
@@ -985,18 +989,32 @@ class CookieAutoRefresher:
 
         logger.info(f"Cookie 自动检查: 不健康 ({msg})，尝试静默刷新...")
 
-        # 2) 尝试 Level 1 静默获取 + 会话字段补全
+        # 2) 尝试 Level 0 (CookieCloud) -> Level 1 (rookiepy) 静默获取
         loop = asyncio.new_event_loop()
+        new_cookie: str | None = None
         try:
             grabber = CookieGrabber()
-            new_cookie = loop.run_until_complete(grabber._grab_from_browser_db())
-            if new_cookie and not CookieGrabber._has_session_fields(new_cookie):
-                logger.info("自动刷新: Cookie 缺少会话字段，尝试 Level 1+ 补全...")
-                enriched = loop.run_until_complete(grabber._enrich_with_session_cookies(new_cookie))
-                if enriched:
-                    new_cookie = enriched
-                else:
-                    logger.info("自动刷新: 会话字段补全失败")
+            # Level 0: CookieCloud（如已配置）
+            try:
+                cc_cookie = loop.run_until_complete(grabber._grab_from_cookiecloud())
+                if cc_cookie:
+                    new_cookie = cc_cookie
+                    self._last_refresh_source = "cookiecloud"
+                    logger.info("自动刷新: CookieCloud 获取成功")
+            except Exception as cc_exc:
+                logger.debug(f"自动刷新: CookieCloud 失败: {cc_exc}")
+            # Level 1: rookiepy 降级
+            if not new_cookie:
+                new_cookie = loop.run_until_complete(grabber._grab_from_browser_db())
+                if new_cookie:
+                    self._last_refresh_source = "browser_db"
+                if new_cookie and not CookieGrabber._has_session_fields(new_cookie):
+                    logger.info("自动刷新: Cookie 缺少会话字段，尝试 Level 1+ 补全...")
+                    enriched = loop.run_until_complete(grabber._enrich_with_session_cookies(new_cookie))
+                    if enriched:
+                        new_cookie = enriched
+                    else:
+                        logger.info("自动刷新: 会话字段补全失败")
         finally:
             loop.close()
 
@@ -1027,18 +1045,18 @@ class CookieAutoRefresher:
         self._total_refreshes += 1
         self._last_refresh_at = time.time()
         self._last_refresh_ok = True
-        self._last_refresh_source = "browser_db"
         self._last_check_ok = True
         self._last_check_msg = "静默刷新成功"
 
         os.environ["XIANYU_COOKIE_1"] = new_cookie
         self._save_to_env(new_cookie)
 
-        logger.info(f"Cookie 静默刷新成功 (length={len(new_cookie)})")
+        source_label = "CookieCloud" if self._last_refresh_source == "cookiecloud" else "浏览器数据库"
+        logger.info(f"Cookie 静默刷新成功 (来源={source_label}, length={len(new_cookie)})")
 
         self._send_notification(
             "Cookie 自动刷新成功",
-            "【闲鱼自动化】✅ Cookie 已自动刷新\n来源: 浏览器数据库\n状态: 验证通过\n系统已恢复正常运行",
+            f"【闲鱼自动化】✅ Cookie 已自动刷新\n来源: {source_label}\n状态: 验证通过\n系统已恢复正常运行",
             event="cookie_refresh",
         )
 

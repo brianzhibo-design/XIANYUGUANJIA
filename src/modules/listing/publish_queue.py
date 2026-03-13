@@ -302,21 +302,12 @@ class PublishQueue:
                 "tagline": variant.get("tagline", ""),
             }
 
-            from .image_generator import generate_composition_images
-            local_images, used_layers = await generate_composition_images(
-                category=category,
-                params=frame_params,
+            frame_id = random.choice(frames) if frames else "grid_paper"
+            from .image_generator import generate_frame_images
+            local_images = await generate_frame_images(
+                frame_id=frame_id, category=category, params=frame_params,
             )
-
-            if not local_images:
-                frame_id = random.choice(frames) if frames else "grid_paper"
-                from .image_generator import generate_frame_images
-                local_images = await generate_frame_images(
-                    frame_id=frame_id, category=category, params=frame_params,
-                )
-                used_layers = {}
-            else:
-                frame_id = ""
+            used_layers = {}
 
             replace_id = None
             if action == "steady_replace" and plan.get("replace_ids"):
@@ -372,23 +363,21 @@ class PublishQueue:
 
         updates: dict[str, Any] = {"status": "draft"}
 
-        if item.composition:
-            from .image_generator import generate_composition_images
-            local_images, used_layers = await generate_composition_images(
-                category=item.category,
-                params=frame_params,
-                layers=item.composition,
-            )
-            updates["generated_images"] = local_images
-            updates["composition"] = used_layers
+        if not item.frame_id:
+            frames = self._get_available_frame_ids()
+            item_frame = random.choice(frames) if frames else "grid_paper"
+            updates["frame_id"] = item_frame
         else:
-            from .image_generator import generate_frame_images
-            local_images = await generate_frame_images(
-                frame_id=item.frame_id or "grid_paper",
-                category=item.category,
-                params=frame_params,
-            )
-            updates["generated_images"] = local_images
+            item_frame = item.frame_id
+
+        from .image_generator import generate_frame_images
+        local_images = await generate_frame_images(
+            frame_id=item_frame,
+            category=item.category,
+            params=frame_params,
+        )
+        updates["generated_images"] = local_images
+        updates["composition"] = {}
 
         return self.update_item(item_id, updates)
 
@@ -478,7 +467,7 @@ class PublishQueue:
             from .templates.frames import list_frames
             return [f["id"] for f in list_frames()]
         except Exception:
-            return ["grid_paper", "id_badge", "clipboard"]
+            return ["grid_paper", "clipboard", "torn_paper"]
 
     def _load_brand_items_for_generation(
         self, mgr: Any, asset_ids: list[str]

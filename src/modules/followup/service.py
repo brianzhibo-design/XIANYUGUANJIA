@@ -8,7 +8,7 @@ import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -145,8 +145,10 @@ class FollowUpEngine:
                 """
             )
 
+    _TZ_SHANGHAI = timezone(timedelta(hours=8))
+
     def _is_silent_hours(self) -> bool:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(self._TZ_SHANGHAI)
         hour = now.hour
         start = self.policy.silent_hours_start
         end = self.policy.silent_hours_end
@@ -200,18 +202,19 @@ class FollowUpEngine:
         account_id: str | None = None,
         last_read_at: int | None = None,
         last_reply_at: int | None = None,
+        force: bool = False,
     ) -> tuple[bool, str]:
         if self._is_on_dnd_list(session_id):
             return False, "do_not_disturb"
 
-        if self._is_silent_hours():
+        if not force and self._is_silent_hours():
             return False, "silent_hours"
 
         daily_count, last_touch_ts = self._get_touch_stats(session_id)
-        if daily_count >= self.policy.max_touches_per_day:
+        if not force and daily_count >= self.policy.max_touches_per_day:
             return False, f"daily_limit:{daily_count}/{self.policy.max_touches_per_day}"
 
-        if last_touch_ts > 0:
+        if not force and last_touch_ts > 0:
             elapsed_hours = (time.time() - last_touch_ts) / 3600
             if elapsed_hours < self.policy.min_interval_hours:
                 remaining = self.policy.min_interval_hours - elapsed_hours
@@ -398,13 +401,16 @@ class FollowUpEngine:
     DEFAULT_ORDER_REMINDER_TEMPLATES = [
         {
             "id": "order_unpaid_1",
-            "text": "您好，您的订单还没有完成支付哦~ 如有疑问可以随时问我，确认需要的话请尽快支付，我好给您安排发货。",
+            "text": "亲，订单还没付款呢~ 有什么疑问随时问我，确认需要的话尽快付款哦，我好帮您安排~",
         },
         {
             "id": "order_unpaid_2",
-            "text": "提醒一下，您有一笔待支付订单，商品已为您预留，请在规定时间内完成支付，以免影响发货哦~",
+            "text": "温馨提醒，您有一笔待付款订单，价格已为您锁定~ 尽快付款就能安排发货啦~",
         },
-        {"id": "order_final", "text": "最后提醒：您的订单即将超时关闭，如果还需要请尽快支付。若已不需要请忽略此消息。"},
+        {
+            "id": "order_final",
+            "text": "亲，订单快要超时关闭了~ 如果还需要记得尽快付款哦~ 不需要的话忽略就好~",
+        },
     ]
 
     @property
@@ -417,14 +423,17 @@ class FollowUpEngine:
         order_id: str,
         account_id: str | None = None,
         dry_run: bool = False,
+        force: bool = False,
     ) -> dict[str, Any]:
         """催单逻辑：对未支付订单发送提醒。
 
         复用已读未回的合规框架（DND、静默时段、频率限制）。
+        force=True 时跳过静默时段和冷却限制（手动催单场景）。
         """
         eligible, reason = self.check_eligibility(
             session_id=session_id,
             account_id=account_id,
+            force=force,
         )
         if not eligible:
             return {

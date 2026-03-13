@@ -24,6 +24,7 @@ _ALLOWED_CONFIG_SECTIONS = {
     "store",
     "auto_price_modify",
     "cookie_cloud",
+    "slider_auto_solve",
 }
 
 _SENSITIVE_CONFIG_KEYS = ["app_secret", "api_key", "access_key_secret", "mch_secret", "webhook"]
@@ -782,6 +783,7 @@ CONFIG_SECTIONS: list[dict[str, Any]] = [
             {"key": "notify_after_sales", "label": "售后介入告警", "type": "toggle", "default": True},
             {"key": "notify_ship_fail", "label": "发货失败告警", "type": "toggle", "default": True},
             {"key": "notify_manual_takeover", "label": "人工接管告警", "type": "toggle", "default": True},
+            {"key": "notify_risk_control", "label": "风控滑块告警 (RGV587)", "type": "toggle", "default": True},
         ],
     },
     {
@@ -793,24 +795,24 @@ CONFIG_SECTIONS: list[dict[str, Any]] = [
                 "label": "CookieCloud 服务地址",
                 "type": "text",
                 "default": "",
-                "placeholder": "http://your-server:8088",
-                "hint": "部署 CookieCloud 后填写服务地址。Docker 部署: docker run -p=8088:8088 easychen/cookiecloud:latest",
+                "placeholder": "http://localhost:8091/cookie-cloud",
+                "hint": "本系统已内置 CookieCloud 服务端，使用默认地址即可。留空时自动使用内置服务。",
             },
             {
                 "key": "cookie_cloud_uuid",
                 "label": "CookieCloud UUID",
                 "type": "text",
                 "default": "",
-                "placeholder": "在 CookieCloud 插件中生成",
-                "hint": "Chrome 安装 CookieCloud 插件后，在插件设置页面生成 KEY（即 UUID）",
+                "placeholder": "在浏览器 CookieCloud 扩展中生成",
+                "hint": "打开扩展设置，点击「生成」按钮获取 UUID",
             },
             {
                 "key": "cookie_cloud_password",
                 "label": "CookieCloud 密码",
                 "type": "password",
                 "default": "",
-                "placeholder": "在 CookieCloud 插件中设置",
-                "hint": "插件中对应的加密密码，用于端对端加密解密",
+                "placeholder": "在浏览器 CookieCloud 扩展中生成",
+                "hint": "扩展中对应的加密密码，用于端对端加密",
             },
         ],
     },

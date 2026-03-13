@@ -1,4 +1,4 @@
-"""线圈笔记本风格 — 浅蓝背景，白色笔记本纸，左侧线圈装饰，右上角回形针，横线纸纹理，蓝色虚线 Logo 区。"""
+"""螺旋笔记本风格 — 浅蓝背景，白色笔记本，左侧线圈，右上回形针，横线纹理。"""
 
 from __future__ import annotations
 from typing import Any
@@ -6,9 +6,9 @@ from ._common import e, brand_grid_html, wrap_page
 
 FRAME_META = {
     "id": "spiral_notebook",
-    "name": "线圈笔记本",
+    "name": "螺旋笔记本",
     "desc": "左侧螺旋线圈，横线纸纹理，回形针装饰",
-    "tags": ["学生", "文艺", "清新"],
+    "tags": ["记账", "文艺", "清新"],
 }
 
 
@@ -18,97 +18,87 @@ def render(params: dict[str, Any], theme: dict[str, str]) -> str:
     labels = e(params.get("labels") or theme.get("labels", ""))
     tagline = e(params.get("tagline") or theme.get("tagline", ""))
     brand_items = params.get("brand_items", [])
-    primary = theme.get("primary", "#0284c7")
-    primary_light = theme.get("primary_light", "#38bdf8")
+    primary = theme.get("primary", "#4b75c4")
 
     grid = brand_grid_html(
-        brand_items, shape="circle", size=130, gap=14,
-        show_name=False, border_color="#bfdbfe",
+        brand_items, shape="circle", size=140, gap=20, max_cols=4,
     )
 
     spirals = ""
-    for i in range(8):
-        y = 80 + i * 115
+    for i in range(16):
+        top = 40 + i * 60
         spirals += (
-            f'<div style="position:absolute;left:20px;top:{y}px;'
-            'width:30px;height:30px;border:3px solid #b0b0b0;border-radius:50%;'
-            'background:linear-gradient(135deg,#e0e0e0,#f8f8f8);z-index:5;"></div>\n'
+            f'<div style="position:absolute;left:-20px;top:{top}px;'
+            'width:40px;height:12px;background-color:#a0aec0;border-radius:6px;'
+            'box-shadow:inset 0 3px 6px rgba(0,0,0,0.3);z-index:5;">'
+            '<div style="position:absolute;right:-10px;top:-4px;width:20px;height:20px;'
+            'background-color:#dce5f5;border-radius:50%;'
+            'border-left:1px solid #b0c4de;"></div></div>\n'
         )
 
+    tagline_parts = tagline.split(" ")
+    tagline_display = " | ".join(tagline_parts) if len(tagline_parts) > 1 else tagline
+
     body = f'''
-<div style="width:1080px;height:1080px;background:{primary_light}30;
-    display:flex;align-items:center;justify-content:center;padding:24px;">
+<div style="width:1080px;height:1080px;background-color:#dce5f5;
+    display:flex;padding:40px;position:relative;">
 
-    <!-- ===== 笔记本主体 ===== -->
-    <div style="width:94%;height:94%;background:#ffffff;position:relative;
-        border-radius:4px 18px 18px 4px;
-        box-shadow:5px 5px 24px rgba(0,0,0,0.1);
-        background-image:repeating-linear-gradient(
-            transparent, transparent 35px,
-            {primary}12 35px, {primary}12 36px
-        );
-        background-position:0 42px;
-        display:flex;flex-direction:column;
-        padding:44px 55px 36px 70px;">
+    <!-- 笔记本主体 -->
+    <div style="flex:1;background-color:#ffffff;border-radius:16px;
+        border:2px solid #b0c4de;position:relative;margin-left:30px;
+        padding:60px 40px;display:flex;flex-direction:column;align-items:center;
+        background-image:
+            linear-gradient(rgba(176,196,222,0.4) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(176,196,222,0.4) 2px, transparent 2px);
+        background-size:40px 40px;">
 
-        <!-- 螺旋线圈（左侧 8 个） -->
+        <!-- 左侧线圈 -->
         {spirals}
 
-        <!-- 右上角回形针 -->
-        <div style="position:absolute;top:-8px;right:55px;z-index:10;">
-            <svg width="44" height="78" viewBox="0 0 44 78">
-                <path d="M22,0 L22,12 Q22,20 14,20 L14,60 Q14,72 22,72
-                    Q30,72 30,60 L30,28 Q30,20 22,20 L22,12"
-                    fill="none" stroke="#bbb" stroke-width="3.5"/>
-            </svg>
+        <!-- 右上回形针 -->
+        <div style="position:absolute;top:20px;right:30px;width:30px;height:80px;
+            border:6px solid #ccc;border-radius:15px;transform:rotate(20deg);
+            border-bottom-width:0;box-shadow:4px 4px 5px rgba(0,0,0,0.1);">
+            <div style="position:absolute;top:10px;left:4px;width:10px;height:50px;
+                border:6px solid #ccc;border-radius:5px;border-top-width:0;"></div>
         </div>
 
-        <!-- ===== 标题区 (上方 ~37%) ===== -->
-        <div style="flex:0 0 auto;display:flex;flex-direction:column;
-            padding-bottom:14px;">
+        <!-- 主标题 -->
+        <div style="font-family:'DisplayBold',system-ui,sans-serif;font-size:110px;
+            font-weight:900;color:{primary};letter-spacing:2px;
+            -webkit-text-stroke:8px #ffffff;
+            text-shadow:4px 4px 10px rgba(0,0,0,0.1);
+            margin-bottom:20px;z-index:1;">
+            {headline}
+        </div>
 
-            <!-- 主标题：浅蓝色超大粗体 -->
-            <div style="margin-bottom:10px;">
-                <span style="font-family:'DisplayBold',sans-serif;
-                    font-size:76px;font-weight:900;color:{primary};
-                    letter-spacing:4px;">
-                    {headline}
-                </span>
-            </div>
-
-            <!-- 标签 -->
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
-                <span style="font-size:20px;color:{primary};">✓</span>
-                <span style="font-size:24px;font-weight:700;color:{primary};
-                    letter-spacing:1px;">
-                    {labels}
-                </span>
-            </div>
-
-            <!-- 副标题：蓝色粗体 -->
-            <div>
-                <span style="font-family:'DisplayBold',sans-serif;
-                    font-size:38px;font-weight:800;color:{primary_light};
-                    letter-spacing:3px;">
-                    {sub_headline}
-                </span>
+        <!-- 标签 + 粉色高亮 -->
+        <div style="position:relative;margin-bottom:50px;z-index:1;">
+            <div style="position:absolute;top:40%;left:-5%;right:-5%;bottom:10%;
+                background-color:#ffe4e6;z-index:-1;"></div>
+            <div style="font-family:'DisplayBold',system-ui,sans-serif;font-size:50px;
+                font-weight:900;color:{primary};letter-spacing:4px;">
+                ✓ {labels}
             </div>
         </div>
 
-        <!-- ===== Logo 网格区 (中间 ~48%) ===== -->
-        <div style="flex:1;border:2px dashed {primary}35;border-radius:14px;
-            padding:18px;display:flex;align-items:center;justify-content:center;">
+        <!-- Logo 区域 -->
+        <div style="width:95%;border:4px solid #6ea8f0;background-color:transparent;
+            padding:50px 20px 30px;position:relative;display:flex;justify-content:center;
+            margin-bottom:auto;margin-top:20px;">
+            <div style="position:absolute;top:-35px;background-color:#fff;padding:0 30px;
+                color:#6ea8f0;font-size:48px;font-weight:900;">
+                {sub_headline}
+            </div>
             {grid}
         </div>
 
-        <!-- ===== 底部标语 (~13%) ===== -->
-        <div style="flex:0 0 auto;padding-top:18px;text-align:center;
-            display:flex;align-items:center;justify-content:center;gap:16px;">
-            <span style="font-size:24px;font-weight:700;color:#555;letter-spacing:2px;">
-                {tagline}
-            </span>
+        <!-- 底部标语 -->
+        <div style="font-family:'DisplayBold',system-ui,sans-serif;font-size:42px;
+            font-weight:900;color:#2d3748;letter-spacing:4px;margin-top:40px;">
+            {tagline_display}
         </div>
     </div>
 </div>'''
 
-    return wrap_page(body, bg=f"{primary_light}30")
+    return wrap_page(body, bg="#dce5f5")

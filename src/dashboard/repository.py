@@ -118,7 +118,7 @@ class LiveDashboardDataSource:
     def get_summary(self) -> dict[str, Any]:
         products = self._fetch_all_products()
 
-        active = sum(1 for p in products if isinstance(p, dict) and p.get("sale_status") == 2)
+        active = sum(1 for p in products if isinstance(p, dict) and p.get("product_status") == 22)
         total_sold = sum(int(p.get("sold", 0)) for p in products if isinstance(p, dict))
 
         _, total_order_count = self._fetch_orders(page_size=1)
@@ -134,7 +134,7 @@ class LiveDashboardDataSource:
 
     def get_top_products(self, limit: int) -> list[dict[str, Any]]:
         products = self._fetch_all_products()
-        on_sale = [p for p in products if isinstance(p, dict) and p.get("sale_status") == 2]
+        on_sale = [p for p in products if isinstance(p, dict) and p.get("product_status") == 22]
         on_sale.sort(key=lambda p: int(p.get("sold", 0)), reverse=True)
 
         result = []

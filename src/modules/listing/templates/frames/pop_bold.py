@@ -1,6 +1,4 @@
-"""波普大字风格 — 参考图5复刻。
-白色背景、超大黄色描边文字、橙色副标题、无容器直铺 Logo。
-"""
+"""3D立体漫画风格 — 白色背景，超大描边阴影文字，气泡标签，箭头分隔线。"""
 
 from __future__ import annotations
 from typing import Any
@@ -8,85 +6,85 @@ from ._common import e, brand_grid_html, wrap_page
 
 FRAME_META = {
     "id": "pop_bold",
-    "name": "波普大字",
-    "desc": "超大描边文字，大胆配色，无框直铺",
-    "tags": ["醒目", "大胆", "年轻"],
+    "name": "3D立体漫画",
+    "desc": "超大描边文字配3D阴影偏移，气泡标签与箭头装饰",
+    "tags": ["冲击", "年轻", "大胆"],
 }
 
 
 def render(params: dict[str, Any], theme: dict[str, str]) -> str:
     headline = e(params.get("headline") or theme.get("headline", ""))
     sub_headline = e(params.get("sub_headline") or theme.get("sub_headline", ""))
-    labels = e(params.get("labels") or theme.get("labels", ""))
+    labels_raw = str(params.get("labels") or theme.get("labels", "") or "")
     tagline = e(params.get("tagline") or theme.get("tagline", ""))
     brand_items = params.get("brand_items", [])
 
-    grid = brand_grid_html(brand_items, shape="circle", size=150, gap=18)
+    grid = brand_grid_html(
+        brand_items, shape="circle", size=130, gap=20, max_cols=4,
+    )
+
+    short_label = e(sub_headline[:6]) if sub_headline else ""
+    labels_display = " ".join(p.strip() for p in labels_raw.split("/") if p.strip())
 
     body = f'''
-<style>
-.pop-title {{
-    font-family: 'DisplayBold', sans-serif;
-    font-size: 120px; font-weight: 900; letter-spacing: 4px;
-    color: #fbbf24;
-    -webkit-text-stroke: 3px #333;
-    text-shadow: 5px 5px 0 rgba(51,51,51,0.15);
-    line-height: 1.1;
-}}
-.pop-sub {{
-    font-family: 'DisplayBold', sans-serif;
-    font-size: 60px; font-weight: 900;
-    color: #fbbf24;
-    -webkit-text-stroke: 2px #ea580c;
-    text-shadow: 3px 3px 0 rgba(234,88,12,0.2);
-    letter-spacing: 3px;
-}}
-</style>
-<div style="width:1080px;height:1080px;background:#ffffff;
-    display:flex;flex-direction:column;align-items:center;
-    padding:30px 50px;position:relative;overflow:hidden;">
+<div style="width:1080px;height:1080px;background-color:#ffffff;
+    display:flex;flex-direction:column;align-items:center;padding:80px 40px;
+    position:relative;overflow:hidden;">
 
-    <!-- 主标题 -->
-    <div class="pop-title" style="text-align:center;margin-top:30px;">
-        {headline}
+    <!-- 中心光晕 -->
+    <div style="position:absolute;top:40%;left:50%;
+        transform:translate(-50%,-50%);width:800px;height:800px;
+        background:radial-gradient(circle, #fff9cc 0%, transparent 70%);
+        z-index:0;"></div>
+
+    <!-- 主标题 + 气泡标签 -->
+    <div style="position:relative;z-index:1;display:flex;align-items:center;
+        justify-content:center;width:100%;margin-bottom:20px;">
+        <div style="font-family:'DisplayBold',system-ui,sans-serif;font-size:130px;
+            font-weight:900;color:#ffffff;letter-spacing:4px;font-style:italic;
+            -webkit-text-stroke:6px #111;
+            text-shadow:10px 10px 0 #ffd166, 10px 10px 0 #111;">
+            {headline}
+        </div>
+        <div style="position:absolute;right:40px;top:10px;background-color:#fff;
+            border:5px solid #111;border-radius:16px;padding:12px 24px;
+            transform:rotate(5deg);box-shadow:6px 6px 0 #ffd166;">
+            <span style="font-size:36px;font-weight:900;color:#111;">
+                {short_label}
+            </span>
+            <div style="position:absolute;bottom:-20px;left:20px;width:0;height:0;
+                border-left:15px solid transparent;border-right:15px solid transparent;
+                border-top:20px solid #111;"></div>
+        </div>
     </div>
 
-    <!-- 爆炸标签：橙色底+白字 -->
-    <div style="margin-top:10px;display:inline-flex;align-items:center;">
-        <span style="background:#ea580c;color:#fff;padding:8px 28px;
-            border-radius:24px;font-size:28px;font-weight:800;
-            font-family:'DisplayBold',sans-serif;
-            box-shadow:3px 3px 8px rgba(0,0,0,0.15);
-            transform:rotate(-2deg);display:inline-block;">
-            {labels}
-        </span>
+    <!-- 副标题 -->
+    <div style="position:relative;z-index:1;margin-bottom:60px;">
+        <div style="font-family:'DisplayBold',system-ui,sans-serif;font-size:110px;
+            font-weight:900;color:#ffffff;letter-spacing:8px;font-style:italic;
+            -webkit-text-stroke:6px #111;
+            text-shadow:8px 8px 0 #e9edc9, 8px 8px 0 #111;">
+            {sub_headline}
+        </div>
     </div>
 
-    <!-- 副标题：橙色描边效果 -->
-    <div class="pop-sub" style="margin-top:14px;text-align:center;">
-        {sub_headline}
-    </div>
-
-    <!-- Logo 网格：无修饰直铺 -->
-    <div style="margin-top:24px;flex:1;display:flex;align-items:center;
-        justify-content:center;width:95%;">
+    <!-- Logo 网格 -->
+    <div style="position:relative;z-index:1;width:100%;flex:1;
+        display:flex;align-items:center;justify-content:center;">
         {grid}
     </div>
 
-    <!-- 长箭头线条 -->
-    <div style="width:70%;height:3px;margin-top:16px;position:relative;
-        background:linear-gradient(90deg,transparent 0%,#333 10%,#333 90%,transparent 100%);">
-        <div style="position:absolute;right:-6px;top:-10px;
-            width:0;height:0;border-left:14px solid #333;
-            border-top:12px solid transparent;border-bottom:12px solid transparent;"></div>
-    </div>
-
-    <!-- 底部标语 -->
-    <div style="margin-top:14px;margin-bottom:20px;text-align:center;">
-        <span style="font-size:30px;font-weight:800;color:#333;letter-spacing:5px;
-            font-family:'DisplayBold',sans-serif;">
-            ...{tagline}...
-        </span>
+    <!-- 箭头分隔线 + 底部标语 -->
+    <div style="position:relative;z-index:1;margin-top:40px;width:90%;">
+        <div style="border-top:3px solid #111;position:relative;margin-bottom:40px;">
+            <div style="position:absolute;right:-10px;top:-11px;width:0;height:0;
+                border-top:10px solid transparent;border-bottom:10px solid transparent;
+                border-left:20px solid #111;"></div>
+        </div>
+        <div style="text-align:center;font-family:'DisplayBold',system-ui,sans-serif;
+            font-size:48px;font-weight:900;color:#111;letter-spacing:6px;">
+            ...{labels_display} {tagline}...
+        </div>
     </div>
 </div>'''
 
