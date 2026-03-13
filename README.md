@@ -186,14 +186,26 @@ graph LR
 - 闲鱼账号 Cookie
 - AI 服务 API Key
 
-### 方式一：一键启动（推荐）
+### 方式一：交互式快速启动（推荐新用户）
 
 ```bash
 # 1. 克隆项目
 git clone https://github.com/G3niusYukki/xianyu-openclaw.git
 cd xianyu-openclaw
 
-# 2. 一键启动（自动安装所有依赖）
+# 2. 交互式启动（含引导 + 状态检查）
+# macOS / Linux
+bash quick-start.sh
+
+# Windows
+quick-start.bat
+```
+
+带交互引导的启动脚本，自动完成：环境检查 → 依赖安装 → 配置校验 → 服务启动 → 首次使用引导。
+
+### 方式二：精简一键启动
+
+```bash
 # macOS / Linux
 ./start.sh
 
@@ -201,9 +213,9 @@ cd xianyu-openclaw
 start.bat
 ```
 
-一键启动脚本会自动完成：Python 虚拟环境创建、pip 依赖安装、Playwright Chromium 浏览器下载（首次约 150MB）、Node.js 依赖安装、启动所有服务。
+功能同上但无交互引导，适合已配置好的环境直接启动。
 
-### 方式二：手动安装
+### 方式三：手动安装
 
 ```bash
 # 1. 克隆项目
@@ -611,11 +623,13 @@ By connecting directly to Xianyu's message channel via WebSocket and combining A
 git clone https://github.com/G3niusYukki/xianyu-openclaw.git
 cd xianyu-openclaw
 
-# One-click start (recommended, auto-installs everything)
+# Interactive quick start (recommended for new users)
 # macOS / Linux
-./start.sh
-# Windows
-start.bat
+bash quick-start.sh
+# Windows: quick-start.bat
+
+# Or one-click start (no guide):
+# ./start.sh  or  start.bat
 
 # Or manual install:
 python3 -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
