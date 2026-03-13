@@ -1,12 +1,40 @@
 @echo off
 chcp 65001 >nul 2>&1
 title 闲鱼管家 - 一键启动
+setlocal enabledelayedexpansion
 
 echo.
 echo =========================================
 echo   闲鱼管家 - 一键启动 (Windows)
 echo =========================================
 echo.
+
+:: 0. 网络环境检测
+set "USE_CN_MIRROR=0"
+set "PIP_MIRROR_ARGS="
+set "NPM_REGISTRY_ARGS="
+
+if "%CHINA_MIRROR%"=="1" (
+    set "USE_CN_MIRROR=1"
+    goto :mirror_done
+)
+if "%CN_MIRROR%"=="1" (
+    set "USE_CN_MIRROR=1"
+    goto :mirror_done
+)
+if "%CHINA_MIRROR%"=="0" goto :mirror_done
+if "%CN_MIRROR%"=="0" goto :mirror_done
+
+curl -s --max-time 3 https://pypi.org/ >nul 2>&1
+if errorlevel 1 set "USE_CN_MIRROR=1"
+
+:mirror_done
+if "%USE_CN_MIRROR%"=="1" (
+    set "PIP_MIRROR_ARGS=-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
+    set "NPM_REGISTRY_ARGS=--registry=https://registry.npmmirror.com"
+    set "PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright"
+    echo [OK] 国内网络环境，已切换国内镜像源
+)
 
 :: 检查 Python
 where python >nul 2>&1
@@ -51,7 +79,7 @@ echo [OK] Python 虚拟环境已激活
 :: 安装依赖
 if not exist ".venv\.deps_installed" (
     echo [*] 安装 Python 依赖...
-    pip install -q -r requirements.txt
+    pip install -q -r requirements.txt %PIP_MIRROR_ARGS%
     echo. > .venv\.deps_installed
 )
 
@@ -67,12 +95,12 @@ if not exist ".venv\.playwright_installed" (
 
 if not exist "server\node_modules" (
     echo [*] 安装 Node.js 后端依赖...
-    cd server && npm install --silent && cd ..
+    cd server && npm install --silent %NPM_REGISTRY_ARGS% && cd ..
 )
 
 if not exist "client\node_modules" (
     echo [*] 安装 React 前端依赖...
-    cd client && npm install --silent && cd ..
+    cd client && npm install --silent %NPM_REGISTRY_ARGS% && cd ..
 )
 
 echo.

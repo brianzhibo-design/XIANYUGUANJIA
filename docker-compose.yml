@@ -1,8 +1,18 @@
+# 国内环境构建: MIRROR=china docker compose build
+# 或在每个 service 的 build.args 中添加 MIRROR: china
+#
+# Docker 镜像加速（国内拉取基础镜像）:
+#   编辑 /etc/docker/daemon.json 添加:
+#   { "registry-mirrors": ["https://mirror.ccs.tencentyun.com"] }
+#   然后 sudo systemctl restart docker
+
 services:
   node-backend:
     build:
       context: ./server
       dockerfile: Dockerfile
+      args:
+        MIRROR: ${MIRROR:-international}
     container_name: xianyu-node-backend
     ports:
       - "${NODE_PORT:-3001}:3001"
@@ -24,6 +34,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.python
+      args:
+        MIRROR: ${MIRROR:-international}
     container_name: xianyu-python-backend
     ports:
       - "${PYTHON_PORT:-8091}:8091"
@@ -46,6 +58,7 @@ services:
       context: ./client
       dockerfile: Dockerfile
       args:
+        MIRROR: ${MIRROR:-international}
         VITE_NODE_API_URL: ${VITE_NODE_API_URL:-/api}
         VITE_PY_API_URL: ${VITE_PY_API_URL:-/py}
     container_name: xianyu-react-frontend

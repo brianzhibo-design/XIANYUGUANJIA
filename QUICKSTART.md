@@ -256,6 +256,111 @@ Cookie 有效期 7-30 天。过期后通过管理面板在线更新。
 
 ---
 
+## 国内环境部署（无外网）
+
+项目完全支持国内无外网环境部署。启动脚本会**自动检测网络环境**并切换国内镜像源。
+
+### 自动模式（推荐）
+
+启动脚本会自动探测 `pypi.org` 是否可达，不可达时自动切换：
+
+```bash
+# 直接运行，脚本自动判断
+bash quick-start.sh
+```
+
+### 手动强制使用国内源
+
+```bash
+# macOS / Linux
+CHINA_MIRROR=1 bash quick-start.sh
+
+# Windows
+set CHINA_MIRROR=1 && quick-start.bat
+```
+
+### 国内源对照表
+
+| 依赖 | 国内镜像 | 环境变量 |
+|------|---------|---------|
+| pip (Python) | `mirrors.aliyun.com/pypi/simple/` | 自动设置 |
+| npm (Node.js) | `registry.npmmirror.com` | 自动设置 |
+| Playwright | `npmmirror.com/mirrors/playwright` | `PLAYWRIGHT_DOWNLOAD_HOST` |
+| Docker 基础镜像 | 见下方 Docker 配置 | Docker daemon 配置 |
+
+### 手动配置国内源（不使用启动脚本时）
+
+```bash
+# pip 使用阿里云源
+pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+
+# npm 使用 npmmirror
+npm config set registry https://registry.npmmirror.com
+npm install
+
+# Playwright 使用国内镜像下载
+export PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+playwright install chromium
+```
+
+### Docker 国内构建
+
+```bash
+# 使用国内镜像源构建所有容器
+MIRROR=china docker compose build
+docker compose up -d
+```
+
+Docker 拉取基础镜像加速 — 编辑 `/etc/docker/daemon.json`：
+
+```json
+{
+  "registry-mirrors": [
+    "https://mirror.ccs.tencentyun.com",
+    "https://docker.mirrors.ustc.edu.cn"
+  ]
+}
+```
+
+然后重启 Docker：`sudo systemctl restart docker`
+
+### 离线部署方案
+
+在有网络的机器上预打包，拷贝到目标机器：
+
+```bash
+# 有网机器：安装所有依赖后打包
+bash quick-start.sh              # 先完成所有依赖安装
+tar czf deploy.tar.gz \
+  --exclude='.git' \
+  --exclude='__pycache__' \
+  --exclude='*.pyc' \
+  --exclude='htmlcov' \
+  --exclude='logs' \
+  .
+
+# 目标机器：解压后直接启动（无需联网）
+tar xzf deploy.tar.gz
+source .venv/bin/activate
+python3 -m src.dashboard_server --port 8091 &
+cd server && node src/app.js &
+cd ../client && npx vite --host &
+```
+
+### AI 服务
+
+AI 功能使用国内供应商无需外网：
+
+| 提供商 | 推荐 | 说明 |
+|--------|------|------|
+| 百炼千问 (Qwen) | **首选** | `dashscope.aliyuncs.com`，国内直连 |
+| DeepSeek | 推荐 | `api.deepseek.com`，国内直连 |
+| 火山方舟 | 可选 | `ark.cn-beijing.volces.com`，国内直连 |
+| 智谱 | 可选 | `open.bigmodel.cn`，国内直连 |
+| OpenAI | 需代理 | 国内无法直连 |
+
+---
+
 ## 常见问题
 
 ### 端口被占用
@@ -281,11 +386,19 @@ npm cache clean --force    # 清除缓存
 npm install                # 重试
 ```
 
-### pip install 失败（国内用户）
+### pip / npm install 失败（国内用户）
+
+使用启动脚本会自动切换国内源。手动安装时：
 
 ```bash
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# pip 使用阿里云
+pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+
+# npm 使用 npmmirror
+npm install --registry=https://registry.npmmirror.com
 ```
+
+详见上方「国内环境部署」章节。
 
 ---
 

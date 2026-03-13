@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 闲鱼管家 - 快速启动 (交互式引导)
 # 用法: bash quick-start.sh
+# 支持国内无外网环境自动切换镜像源
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -29,6 +30,44 @@ cat << 'BANNER'
   ╚══════════════════════════════════════════════╝
 BANNER
 printf "${N}"
+echo ""
+
+# ═══════════════ 0. 网络环境检测 ═══════════════
+USE_CN_MIRROR=0
+PIP_MIRROR_ARGS=""
+NPM_REGISTRY=""
+
+detect_network() {
+  if [ "${CHINA_MIRROR:-}" = "1" ] || [ "${CN_MIRROR:-}" = "1" ]; then
+    USE_CN_MIRROR=1
+    return
+  fi
+  if [ "${CHINA_MIRROR:-}" = "0" ] || [ "${CN_MIRROR:-}" = "0" ]; then
+    USE_CN_MIRROR=0
+    return
+  fi
+  if curl -s --max-time 3 https://pypi.org/ >/dev/null 2>&1; then
+    USE_CN_MIRROR=0
+  else
+    USE_CN_MIRROR=1
+  fi
+}
+
+detect_network
+
+if [ "$USE_CN_MIRROR" -eq 1 ]; then
+  PIP_MIRROR_ARGS="-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
+  NPM_REGISTRY="https://registry.npmmirror.com"
+  export PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright"
+  printf "${Y}  [镜像]${N} 检测到国内网络环境，已自动切换国内镜像源\n"
+  info "pip  → mirrors.aliyun.com"
+  info "npm  → registry.npmmirror.com"
+  info "Playwright → npmmirror.com"
+  echo ""
+  info "强制使用国际源: CHINA_MIRROR=0 bash quick-start.sh"
+else
+  printf "${G}  [镜像]${N} 使用国际源 (可设 CHINA_MIRROR=1 强制使用国内源)\n"
+fi
 echo ""
 
 # ═══════════════ 1. 环境检查 ═══════════════
@@ -82,15 +121,20 @@ source .venv/bin/activate
 
 if [ ! -f ".venv/.deps_ok" ] || [ requirements.txt -nt ".venv/.deps_ok" ]; then
   info "安装 Python 依赖 (首次约 2 分钟)..."
-  pip install -q -r requirements.txt && touch .venv/.deps_ok
+  pip install -q -r requirements.txt $PIP_MIRROR_ARGS && touch .venv/.deps_ok
   ok "Python 依赖安装完成"
 else
   ok "Python 依赖已是最新"
 fi
 
+NPM_INSTALL_ARGS="--silent"
+if [ -n "$NPM_REGISTRY" ]; then
+  NPM_INSTALL_ARGS="$NPM_INSTALL_ARGS --registry=$NPM_REGISTRY"
+fi
+
 if [ ! -d "client/node_modules" ]; then
   info "安装前端依赖 (首次约 1 分钟)..."
-  (cd client && npm install --silent 2>/dev/null)
+  (cd client && npm install $NPM_INSTALL_ARGS 2>/dev/null)
   ok "前端依赖安装完成"
 else
   ok "前端依赖已存在"
@@ -98,7 +142,7 @@ fi
 
 if [ ! -d "server/node_modules" ]; then
   info "安装 Node 后端依赖..."
-  (cd server && npm install --silent 2>/dev/null)
+  (cd server && npm install $NPM_INSTALL_ARGS 2>/dev/null)
   ok "Node 后端依赖安装完成"
 else
   ok "Node 后端依赖已存在"
@@ -169,7 +213,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# 清理残留端口
 for port in 8091 5173 3001; do
   lsof -ti :$port 2>/dev/null | xargs kill -9 2>/dev/null || true
 done

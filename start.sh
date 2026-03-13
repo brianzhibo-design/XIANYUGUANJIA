@@ -19,6 +19,26 @@ echo "  闲鱼管家 - 一键启动"
 echo "========================================="
 echo ""
 
+# 0. 网络环境检测 - 自动切换国内镜像源
+USE_CN_MIRROR=0
+PIP_MIRROR_ARGS=""
+NPM_REGISTRY_ARGS=""
+
+if [ "${CHINA_MIRROR:-}" = "1" ] || [ "${CN_MIRROR:-}" = "1" ]; then
+  USE_CN_MIRROR=1
+elif [ "${CHINA_MIRROR:-}" = "0" ] || [ "${CN_MIRROR:-}" = "0" ]; then
+  USE_CN_MIRROR=0
+elif ! curl -s --max-time 3 https://pypi.org/ >/dev/null 2>&1; then
+  USE_CN_MIRROR=1
+fi
+
+if [ "$USE_CN_MIRROR" -eq 1 ]; then
+  PIP_MIRROR_ARGS="-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
+  NPM_REGISTRY_ARGS="--registry=https://registry.npmmirror.com"
+  export PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright"
+  info "国内网络环境，已切换国内镜像源"
+fi
+
 # 1. 检查 Python
 if ! command -v python3 &>/dev/null; then
   fail "未找到 python3，请先安装 Python 3.10+"
@@ -58,7 +78,7 @@ info "Python 虚拟环境已激活"
 
 if [ ! -f ".venv/.deps_installed" ] || [ requirements.txt -nt ".venv/.deps_installed" ]; then
   info "安装 Python 依赖..."
-  pip install -q -r requirements.txt
+  pip install -q -r requirements.txt $PIP_MIRROR_ARGS
   touch .venv/.deps_installed
   info "Python 依赖安装完成"
 else
@@ -68,15 +88,15 @@ fi
 # 5. 安装 Node.js 依赖
 if [ ! -d "server/node_modules" ]; then
   info "安装 Node.js 后端依赖..."
-  (cd server && npm install --silent)
+  (cd server && npm install --silent $NPM_REGISTRY_ARGS)
 fi
 
 if [ ! -d "client/node_modules" ]; then
   info "安装 React 前端依赖..."
-  (cd client && npm install --silent)
+  (cd client && npm install --silent $NPM_REGISTRY_ARGS)
 fi
 
-# 5.5 确保 Playwright Chromium 浏览器已下载（Cookie 自动获取 + 消息服务需要）
+# 5.5 确保 Playwright Chromium 浏览器已下载
 if [ ! -f ".venv/.playwright_installed" ] || ! python3 -c "
 from playwright.sync_api import sync_playwright
 p=sync_playwright().start()

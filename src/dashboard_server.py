@@ -4975,6 +4975,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "rules": result})
                 return
 
+            # ---------- vendor static files (Chart.js etc.) ----------
+            if path.startswith("/vendor/"):
+                self._serve_vendor_file(path)
+                return
+
             # ---------- SPA static file serving ----------
             if path.startswith("/api/") or path == "/not-found":
                 self._send_json(_error_payload("Not Found", code="NOT_FOUND"), status=404)
@@ -5013,6 +5018,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_html(index_html.read_text(encoding="utf-8"))
         else:
             self._send_html(_get_embedded_html("DASHBOARD_HTML"))
+
+    def _serve_vendor_file(self, path: str) -> None:
+        """Serve bundled vendor files from src/dashboard/vendor/ (e.g. Chart.js)."""
+        filename = Path(path.lstrip("/")).name
+        if not filename or ".." in path:
+            self._send_json(_error_payload("Not Found", code="NOT_FOUND"), status=404)
+            return
+        vendor_dir = Path(__file__).resolve().parent / "dashboard" / "vendor"
+        file_path = vendor_dir / filename
+        if not file_path.is_file():
+            self._send_json(_error_payload("Not Found", code="NOT_FOUND"), status=404)
+            return
+        content_type, _ = mimetypes.guess_type(str(file_path))
+        content_type = content_type or "application/octet-stream"
+        data = file_path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "public, max-age=604800")
+        self.end_headers()
+        self.wfile.write(data)
 
     def do_PUT(self) -> None:
         parsed = urlparse(self.path)

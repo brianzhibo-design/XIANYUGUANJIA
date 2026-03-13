@@ -1,5 +1,8 @@
 FROM python:3.12-slim
 
+ARG MIRROR=international
+# 国内构建: docker build --build-arg MIRROR=china -f Dockerfile.python .
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -7,9 +10,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN if [ "$MIRROR" = "china" ]; then \
+      pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com -r requirements.txt; \
+    else \
+      pip install --no-cache-dir -r requirements.txt; \
+    fi
 
-RUN pip install --no-cache-dir playwright && playwright install --with-deps chromium
+RUN if [ "$MIRROR" = "china" ]; then \
+      pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com playwright && \
+      PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright playwright install --with-deps chromium; \
+    else \
+      pip install --no-cache-dir playwright && playwright install --with-deps chromium; \
+    fi
 
 RUN groupadd -r appgrp && useradd -r -g appgrp -d /app appusr
 

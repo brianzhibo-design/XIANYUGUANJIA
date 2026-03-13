@@ -12,6 +12,42 @@ echo   ║       Xianyu OpenClaw Quick Start           ║
 echo   ╚══════════════════════════════════════════════╝
 echo.
 
+:: ═══════════════ 0. 网络环境检测 ═══════════════
+set "USE_CN_MIRROR=0"
+set "PIP_MIRROR_ARGS="
+set "NPM_REGISTRY_ARGS="
+
+if "%CHINA_MIRROR%"=="1" (
+    set "USE_CN_MIRROR=1"
+    goto :mirror_decided
+)
+if "%CN_MIRROR%"=="1" (
+    set "USE_CN_MIRROR=1"
+    goto :mirror_decided
+)
+if "%CHINA_MIRROR%"=="0" goto :mirror_decided
+if "%CN_MIRROR%"=="0" goto :mirror_decided
+
+:: 尝试访问 pypi.org 判断网络环境
+curl -s --max-time 3 https://pypi.org/ >nul 2>&1
+if errorlevel 1 set "USE_CN_MIRROR=1"
+
+:mirror_decided
+if "%USE_CN_MIRROR%"=="1" (
+    set "PIP_MIRROR_ARGS=-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
+    set "NPM_REGISTRY_ARGS=--registry=https://registry.npmmirror.com"
+    set "PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright"
+    echo   [镜像] 检测到国内网络环境，已自动切换国内镜像源
+    echo   --^>  pip  → mirrors.aliyun.com
+    echo   --^>  npm  → registry.npmmirror.com
+    echo   --^>  Playwright → npmmirror.com
+    echo.
+    echo   强制使用国际源: set CHINA_MIRROR=0 ^&^& quick-start.bat
+) else (
+    echo   [镜像] 使用国际源 ^(可设 CHINA_MIRROR=1 强制使用国内源^)
+)
+echo.
+
 :: ═══════════════ 1. 环境检查 ═══════════════
 echo [1/5] 检查运行环境
 
@@ -65,7 +101,7 @@ call .venv\Scripts\activate.bat
 
 if not exist ".venv\.deps_ok" (
     echo   --^>  安装 Python 依赖 ^(首次约 2 分钟^)...
-    pip install -q -r requirements.txt && echo. > .venv\.deps_ok
+    pip install -q -r requirements.txt %PIP_MIRROR_ARGS% && echo. > .venv\.deps_ok
     echo   [OK] Python 依赖安装完成
 ) else (
     echo   [OK] Python 依赖已是最新
@@ -73,7 +109,7 @@ if not exist ".venv\.deps_ok" (
 
 if not exist "client\node_modules" (
     echo   --^>  安装前端依赖 ^(首次约 1 分钟^)...
-    cd client && npm install --silent 2>nul && cd ..
+    cd client && npm install --silent %NPM_REGISTRY_ARGS% 2>nul && cd ..
     echo   [OK] 前端依赖安装完成
 ) else (
     echo   [OK] 前端依赖已存在
@@ -81,7 +117,7 @@ if not exist "client\node_modules" (
 
 if not exist "server\node_modules" (
     echo   --^>  安装 Node 后端依赖...
-    cd server && npm install --silent 2>nul && cd ..
+    cd server && npm install --silent %NPM_REGISTRY_ARGS% 2>nul && cd ..
     echo   [OK] Node 后端依赖安装完成
 ) else (
     echo   [OK] Node 后端依赖已存在
