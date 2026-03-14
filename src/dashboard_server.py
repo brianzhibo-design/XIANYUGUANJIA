@@ -4323,14 +4323,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send_json(self.mimic_ops.get_cookie())
                 return
 
-            if path == "/api/route-stats":
-                self._send_json(self.mimic_ops.route_stats())
-                return
 
-            if path == "/api/export-routes":
-                data, filename = self.mimic_ops.export_routes_zip()
-                self._send_bytes(data=data, content_type="application/zip", download_name=filename)
-                return
 
             if path == "/api/download-cookie-plugin":
                 try:
@@ -4338,16 +4331,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     self._send_bytes(data=data, content_type="application/zip", download_name=filename)
                 except FileNotFoundError as exc:
                     self._send_json(_error_payload(str(exc), code="NOT_FOUND"), status=404)
-                return
-
-            if path == "/api/get-template":
-                use_default = (query.get("default") or ["false"])[0].lower() in {"1", "true", "yes"}
-                self._send_json(self.mimic_ops.get_template(default=use_default))
-                return
-
-
-            if path == "/api/get-markup-rules":
-                self._send_json(self.mimic_ops.get_markup_rules())
                 return
 
 
@@ -5061,81 +5044,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
 
-            if path == "/api/import-routes":
-                try:
-                    files = self._read_multipart_files()
-                except Exception as exc:
-                    self._send_json(
-                        {
-                            "success": False,
-                            "error": "Failed to parse upload body. Please retry with xlsx/xls/csv/zip files.",
-                            "details": str(exc),
-                        },
-                        status=400,
-                    )
-                    return
-
-                try:
-                    payload = self.mimic_ops.import_route_files(files)
-                except Exception as exc:
-                    self._send_json(
-                        {
-                            "success": False,
-                            "error": "Import processing failed.",
-                            "details": str(exc),
-                        },
-                        status=400,
-                    )
-                    return
-
-                self._send_json(payload, status=200 if payload.get("success") else 400)
-                return
-
-            if path == "/api/import-markup":
-                try:
-                    files = self._read_multipart_files()
-                except Exception as exc:
-                    self._send_json(
-                        {
-                            "success": False,
-                            "error": "Failed to parse upload body. Please retry with markup files.",
-                            "details": str(exc),
-                        },
-                        status=400,
-                    )
-                    return
-
-                try:
-                    payload = self.mimic_ops.import_markup_files(files)
-                except Exception as exc:
-                    self._send_json(
-                        {
-                            "success": False,
-                            "error": "Import processing failed.",
-                            "details": str(exc),
-                        },
-                        status=400,
-                    )
-                    return
-
-                self._send_json(payload, status=200 if payload.get("success") else 400)
-                return
-
-
-            if path == "/api/save-template":
-                body = self._read_json_body()
-                payload = self.mimic_ops.save_template(
-                    weight_template=str(body.get("weight_template") or ""),
-                    volume_template=str(body.get("volume_template") or ""),
-                )
-                self._send_json(payload, status=200 if payload.get("success") else 400)
-                return
-
-            if path == "/api/save-markup-rules":
-                body = self._read_json_body()
-                payload = self.mimic_ops.save_markup_rules(body.get("markup_rules"))
-                self._send_json(payload, status=200 if payload.get("success") else 400)
-                return
 
 
 
