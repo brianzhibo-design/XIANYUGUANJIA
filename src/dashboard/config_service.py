@@ -9,7 +9,21 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_SYS_CONFIG_FILE = Path(__file__).resolve().parents[2] / "server" / "data" / "system_config.json"
+_SYS_CONFIG_FILE = Path(__file__).resolve().parents[2] / "data" / "system_config.json"
+
+_OLD_SYS_CONFIG_FILE = Path(__file__).resolve().parents[2] / "server" / "data" / "system_config.json"
+
+
+def _migrate_config_if_needed() -> None:
+    """One-time migration: move system_config.json from server/data/ to data/."""
+    if _OLD_SYS_CONFIG_FILE.exists() and not _SYS_CONFIG_FILE.exists():
+        import shutil
+        _SYS_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(_OLD_SYS_CONFIG_FILE), str(_SYS_CONFIG_FILE))
+        logger.info("Migrated system_config.json from server/data/ to data/")
+
+
+_migrate_config_if_needed()
 
 _ALLOWED_CONFIG_SECTIONS = {
     "xianguanjia",

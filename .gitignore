@@ -166,7 +166,7 @@ node_modules/
 .ruff_cache/
 
 # CookieCloud data
-server/data/cookie_cloud/
+data/cookie_cloud/
 
 # Plans (auto-generated)
 .plan/

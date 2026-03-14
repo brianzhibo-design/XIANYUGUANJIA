@@ -150,6 +150,7 @@ messages:
   non_empty_reply_fallback: "发送 寄件城市 - 收件城市 - 重量 就能帮您查最优价格哦~\n示例：广东省 - 浙江省 - 3kg"
   context_memory_enabled: true
   context_memory_ttl_seconds: 3600
+  manual_mode_timeout: 3600  # 卖家手动发消息后该会话暂停自动回复的时长（秒），0=永不自动恢复
   courier_lock_template: "已为你锁定 {courier}（{price}，预计{eta_days}）。\n下单流程：\n1. 先拍下链接，先不要付款；\n2. 我改价后你再付款；\n3. 付款后系统自动发放兑换码，用兑换码到小橙序下单即可。\n付款后的地址和手机号在小橙序填写，这里无需提供。\n提醒：以上为参考价，首次使用小橙序的手机号可享额外优惠哦~"
   strict_format_reply_enabled: true
   quote_reply_all_couriers: true

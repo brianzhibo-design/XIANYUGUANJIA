@@ -62,11 +62,11 @@ if errorlevel 1 (
 
 node --version >nul 2>&1
 if errorlevel 1 (
-    echo   [NG] 未安装 Node.js ^(需要 18+^)
+    echo   [NG] 未安装 Node.js ^(需要 18+，前端开发工具^)
     echo   --^>  安装: https://nodejs.org
     goto :env_fail
 ) else (
-    for /f "tokens=*" %%v in ('node -v') do echo   [OK] Node.js %%v
+    for /f "tokens=*" %%v in ('node -v') do echo   [OK] Node.js %%v（前端开发工具）
 )
 
 npm --version >nul 2>&1
@@ -115,14 +115,6 @@ if not exist "client\node_modules" (
     echo   [OK] 前端依赖已存在
 )
 
-if not exist "server\node_modules" (
-    echo   --^>  安装 Node 后端依赖...
-    cd server && npm install --silent %NPM_REGISTRY_ARGS% 2>nul && cd ..
-    echo   [OK] Node 后端依赖安装完成
-) else (
-    echo   [OK] Node 后端依赖已存在
-)
-
 if not exist ".venv\.playwright_ok" (
     echo   --^>  安装 Playwright 浏览器...
     playwright install chromium 2>nul && echo. > .venv\.playwright_ok
@@ -130,6 +122,10 @@ if not exist ".venv\.playwright_ok" (
 ) else (
     echo   [OK] Playwright 已就绪
 )
+
+:: 确保 data 目录存在
+if not exist "data" mkdir data
+
 echo.
 
 :: ═══════════════ 3. 配置检查 ═══════════════
@@ -165,9 +161,6 @@ start /b "" python -m src.dashboard_server --port 8091
 echo   --^>  启动 React 前端 ^(端口 5173^)...
 start /b "" cmd /c "cd client && npx vite --host"
 
-echo   --^>  启动 Node.js 后端 ^(端口 3001^)...
-start /b "" cmd /c "cd server && node src\app.js"
-
 timeout /t 5 /nobreak >nul
 echo   [OK] 所有服务已启动
 echo.
@@ -178,7 +171,6 @@ echo.
 echo   ┌──────────────────────────────────────────────┐
 echo   │  管理面板:     http://localhost:5173         │
 echo   │  Python API:   http://localhost:8091         │
-echo   │  Node.js API:  http://localhost:3001         │
 echo   │  对话沙盒:     管理面板 → 消息 → 对话沙盒   │
 echo   └──────────────────────────────────────────────┘
 echo.

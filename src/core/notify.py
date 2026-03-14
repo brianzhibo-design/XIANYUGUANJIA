@@ -26,7 +26,7 @@ _EVENT_TOGGLE_MAP: dict[str, str] = {
     "manual_takeover": "notify_manual_takeover",
 }
 
-_CONFIG_PATH = Path(__file__).resolve().parents[2] / "server" / "data" / "system_config.json"
+_CONFIG_PATH = Path(__file__).resolve().parents[2] / "data" / "system_config.json"
 
 
 def _load_notify_config() -> dict[str, Any]:

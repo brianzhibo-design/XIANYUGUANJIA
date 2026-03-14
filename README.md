@@ -143,13 +143,6 @@ graph LR
 └───────────────────────────┬─────────────────────────────────────┘
                             │ HTTP / WebSocket
 ┌───────────────────────────┴─────────────────────────────────────┐
-│                   📦 Node.js 后端 (Express)                     │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐           │
-│  │ 闲管家 API 代理│ │ 配置管理     │ │ Webhook 接收 │           │
-│  └──────────────┘ └──────────────┘ └──────────────┘           │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-┌───────────────────────────┴─────────────────────────────────────┐
 │                    🐍 Python 后端 (asyncio)                     │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
 │  │ WebSocket│ │ AI 服务  │ │ 报价引擎 │ │ 任务调度 │           │
@@ -167,8 +160,7 @@ graph LR
 | 层级 | 技术 | 说明 |
 |------|------|------|
 | **前端** | React 18 / Vite / TailwindCSS | 响应式管理面板，支持 PWA |
-| **Node 后端** | Express / Joi | API 代理、配置校验、Webhook |
-| **Python 后端** | Python 3.10+ / asyncio | 核心引擎：WebSocket、AI、调度 |
+| **Python 后端** | Python 3.10+ / asyncio | 核心引擎：WebSocket、AI、API 代理、配置管理 |
 | **数据库** | SQLite / PostgreSQL | 开发用 SQLite，生产用 PostgreSQL |
 | **消息队列** | 内存队列 + SQLite | 轻量级，无需额外依赖 |
 | **AI 服务** | OpenAI 兼容 API | 支持 DeepSeek、阿里百炼、智谱等 |
@@ -229,30 +221,25 @@ pip install -r requirements.txt
 # 3. 安装 Playwright Chromium 浏览器（Cookie 自动获取和消息服务需要）
 playwright install chromium
 
-# 4. 安装 Node.js 依赖
-cd server && npm install && cd ..
+# 4. 安装前端依赖（Vite 需要 Node.js）
 cd client && npm install && cd ..
 
 # 5. 配置环境变量
 cp .env.example .env
 # 编辑 .env，填入 Cookie 和 AI Key
 
-# 6. 启动服务（需要3个终端窗口）
+# 6. 启动服务（需要2个终端窗口）
 
-# 终端1 - Python 后端（必需，处理核心API）
+# 终端1 - Python 后端
 python -m src.dashboard_server --port 8091
 
-# 终端2 - Node.js 后端
-npm run dev:server
-
-# 终端3 - React 前端
-npm run dev:client
+# 终端2 - React 前端
+cd client && npx vite --host
 ```
 
 访问地址：
 - **前端面板**: http://localhost:5173
 - **Python API**: http://localhost:8091
-- **Node API**: http://localhost:3001
 
 > **注意**：前端代理配置指向 Python 后端 8091 端口，必须先启动 Python 服务，否则前端页面无法正常工作。
 
@@ -309,7 +296,6 @@ COOKIE_REFRESH_INTERVAL=30
 
 # 端口配置（可选）
 FRONTEND_PORT=5173
-NODE_PORT=3001
 PYTHON_PORT=8091
 ```
 
@@ -354,8 +340,7 @@ COOKIE_CLOUD_PASSWORD=your-password  # CookieCloud 加密密码
 
 ### 实时健康面板
 
-Dashboard 集成 5 大服务状态：
-- 🟢 Node 后端
+Dashboard 集成 4 大服务状态：
 - 🟢 Python 后端  
 - 🟢 Cookie 健康
 - 🟢 AI 服务
@@ -412,11 +397,6 @@ xianyu-openclaw/
 │       │   └── providers.py      # 报价数据源
 │       ├── analytics/            # 数据分析
 │       └── accounts/             # 账号管理
-├── server/                       # Node.js 后端
-│   └── src/
-│       ├── routes/
-│       │   ├── xianguanjia.js    # 闲管家代理
-│       │   └── config.js         # 配置管理
 ├── client/                       # React 前端（TypeScript）
 │   └── src/
 │       ├── pages/                # 页面
@@ -447,10 +427,9 @@ xianyu-openclaw/
 ## 🛠️ 开发指南
 
 ```bash
-# 开发模式（需要同时运行3个服务）
-python -m src.dashboard_server --port 8091  # Python 后端（必需）
-npm run dev:server                          # Node 后端
-npm run dev:client                          # React 前端
+# 开发模式（需要同时运行2个服务）
+python -m src.dashboard_server --port 8091  # Python 后端
+cd client && npx vite --host                # React 前端
 
 # 或使用 Docker（推荐新手）
 docker compose up -d
@@ -635,7 +614,7 @@ bash quick-start.sh
 python3 -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 playwright install chromium    # Required for cookie auto-grab
-cd server && npm install && cd ../client && npm install && cd ..
+cd client && npm install && cd ..
 cp .env.example .env
 # Edit .env with your Cookie and AI Key
 ```
@@ -643,7 +622,6 @@ cp .env.example .env
 Access:
 - Frontend: http://localhost:5173
 - Python API: http://localhost:8091
-- Node API: http://localhost:3001
 
 ---
 

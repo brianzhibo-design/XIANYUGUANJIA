@@ -6,7 +6,6 @@ import { CheckCircle, Circle, ArrowRight, X, Zap, Cookie, Settings, Bot, Play, C
 const DISMISS_KEY = 'xianyu_setup_guide_dismissed';
 
 interface ChecksState {
-  nodeBackend: boolean | null;
   pythonBackend: boolean | null;
   xgjConfigured: boolean | null;
   aiConfigured: boolean | null;
@@ -29,7 +28,6 @@ interface StepItem {
 export default function SetupGuide() {
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === '1');
   const [checks, setChecks] = useState<ChecksState>({
-    nodeBackend: null,
     pythonBackend: null,
     xgjConfigured: null,
     aiConfigured: null,
@@ -48,7 +46,6 @@ export default function SetupGuide() {
   const runChecks = async () => {
     setLoading(true);
     const result: ChecksState = {
-      nodeBackend: false,
       pythonBackend: false,
       xgjConfigured: false,
       aiConfigured: false,
@@ -59,7 +56,6 @@ export default function SetupGuide() {
 
     try {
       const res = await api.get('/config');
-      result.nodeBackend = true;
       result.pythonBackend = true;
       const cfg = res.data?.config || {};
       const xgj = cfg.xianguanjia || {};
@@ -109,7 +105,7 @@ export default function SetupGuide() {
 
   if (dismissed) return null;
 
-  const allDone = checks.nodeBackend && checks.pythonBackend && checks.xgjConfigured && checks.aiConfigured && checks.cookieSet && checks.notifyConfigured;
+  const allDone = checks.pythonBackend && checks.xgjConfigured && checks.aiConfigured && checks.cookieSet && checks.notifyConfigured;
 
   if (loading) {
     return (
@@ -170,19 +166,9 @@ export default function SetupGuide() {
       validated: !!details.notify,
     },
     {
-      key: 'nodeBackend',
-      label: 'Node.js 后端',
-      desc: '配置管理和闲管家 API 代理',
-      done: checks.nodeBackend,
-      action: null,
-      actionLabel: null,
-      icon: null,
-      hint: '运行 ./start.sh 自动启动',
-    },
-    {
       key: 'pythonBackend',
-      label: 'Python 后端',
-      desc: '自动化引擎和消息处理',
+      label: '后端服务',
+      desc: '自动化引擎、消息处理和配置管理',
       done: checks.pythonBackend,
       action: null,
       actionLabel: null,

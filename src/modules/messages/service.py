@@ -22,6 +22,7 @@ from src.core.config import get_config
 from src.core.error_handler import BrowserError
 from src.core.logger import get_logger
 from src.modules.compliance.center import ComplianceCenter
+from src.modules.messages.manual_mode import ManualModeStore
 from src.modules.messages.reply_engine import ReplyStrategyEngine
 from src.modules.quote.engine import AutoQuoteEngine
 
@@ -72,7 +73,7 @@ DEFAULT_COURIER_LOCK_TEMPLATE = (
     "2. 我改价后您再付款；\n"
     "3. 付款后系统自动发兑换码，到小橙序下单即可。\n"
     "地址和手机号在小橙序填写就好，这边不需要提供哦~\n"
-    "新用户福利：以上为首单优惠价，若手机号已在小橙序用过则按正常价计费（正常价也比自寄便宜5折起）"
+    "新用户福利：以上为首单优惠价（每个手机号限一次）~ 若已使用过小橙序，后续可直接在小橙序下单，正常价也比自寄便宜5折起"
 )
 
 
@@ -92,7 +93,7 @@ class MessagesService:
         self.config = config or app_config.get_section("messages", {})
 
         self._sys_ai_config: dict[str, Any] = {}
-        sys_cfg_path = os.path.join("server", "data", "system_config.json")
+        sys_cfg_path = os.path.join("data", "system_config.json")
         if os.path.exists(sys_cfg_path):
             try:
                 with open(sys_cfg_path, encoding="utf-8") as f:
@@ -255,6 +256,12 @@ class MessagesService:
         self.context_memory_ttl_seconds = max(300, int(self.config.get("context_memory_ttl_seconds", 3600)))
         self.courier_lock_template = str(self.config.get("courier_lock_template", DEFAULT_COURIER_LOCK_TEMPLATE))
         self._quote_context_memory: dict[str, dict[str, Any]] = {}
+
+        manual_timeout = int(self.config.get("manual_mode_timeout", 3600))
+        self._manual_mode_store = ManualModeStore(
+            os.path.join("data", "manual_mode.db"),
+            timeout_seconds=manual_timeout,
+        )
 
         self.compliance_guard = get_compliance_guard()
         self.compliance_center = ComplianceCenter()
@@ -494,7 +501,7 @@ class MessagesService:
             lines.append("温馨提示：本次已按体积重与实际重量中较大值计费，如实际体积有出入可能需补差价哦~")
         else:
             lines.append("温馨提示：以上按实际重量计算，如包裹体积较大（体积重=长×宽×高/8000），快递按较大值计费，届时可能需补差价哦~")
-        lines.append("新用户福利：以上为首单优惠价~ 若该手机号已在小橙序使用过，则按正常价计费（正常价也比自寄便宜5折起哦）")
+        lines.append("新用户福利：以上为首单优惠价（每个手机号限一次）~ 若已使用过小橙序，则按正常价计费，后续可直接在小橙序下单，无需再走闲鱼，正常价也比自寄便宜5折起~")
         return "\n".join(lines)
 
     def _should_use_ws_transport(self) -> bool:
@@ -772,6 +779,18 @@ class MessagesService:
             flags=re.IGNORECASE,
         )
         if not m:
+            _UNIT_CN = r"(?:cm|厘米|㎝|CM)?"
+            m2 = re.search(
+                rf"长[：:]?\s*(\d+\.?\d*)\s*{_UNIT_CN}\s*"
+                rf"宽[：:]?\s*(\d+\.?\d*)\s*{_UNIT_CN}\s*"
+                rf"高[：:]?\s*(\d+\.?\d*)\s*{_UNIT_CN}",
+                text, flags=re.IGNORECASE,
+            )
+            if m2:
+                a, b, c = float(m2.group(1)), float(m2.group(2)), float(m2.group(3))
+                volume = a * b * c
+                if volume > 0:
+                    return round(volume, 3)
             return None
         a, b, c = float(m.group(1)), float(m.group(2)), float(m.group(3))
         trailing_unit = (m.group(4) or "").strip().lower()
@@ -1081,7 +1100,7 @@ class MessagesService:
                     pass
             return parsed if parsed else None
         except Exception as e:
-            logger.warning(f"AI extract failed: {e}")
+            self.logger.warning(f"AI extract failed: {e}")
             return None
 
     def _ai_generate_express_reply(self, message_text: str, context: dict[str, Any] | None = None) -> str | None:
@@ -1111,7 +1130,7 @@ class MessagesService:
                     return result
             return None
         except Exception as e:
-            logger.warning(f"AI reply generation failed: {e}")
+            self.logger.warning(f"AI reply generation failed: {e}")
             return None
 
     def _load_faq_context(self) -> str:
@@ -1455,18 +1474,36 @@ class MessagesService:
                         "rule_matched": pre_matched.name,
                     }
 
-            reply = pre_matched.reply
-            if item_title and not item_title.isdigit() and not pre_matched.categories:
-                reply = f"关于「{item_title}」，{reply}"
-            if self.reply_engine.compliance_enabled:
-                reply = self.reply_engine._check_compliance(reply)
-            return self._sanitize_reply(reply), {
-                "is_quote": False,
-                "rule_matched": pre_matched.name,
-                "needs_human": pre_matched.needs_human,
-                "human_reason": pre_matched.human_reason,
-                "phase": pre_matched.phase,
-            }
+            _QUOTE_YIELDABLE_RULES = frozenset({
+                "express_large",
+                "express_volume",
+                "express_remote_area",
+            })
+            use_rule_reply = True
+            if is_quote_intent and pre_matched.name in _QUOTE_YIELDABLE_RULES:
+                _origin, _dest = self._extract_locations(message_text)
+                _weight = self._extract_weight_kg(message_text)
+                if _origin and _dest and _weight is not None and _weight > 0:
+                    use_rule_reply = False
+                    self.logger.info(
+                        "[quote_override] Rule '%s' yielded to quote engine "
+                        "(buyer has quote intent + complete info)",
+                        pre_matched.name,
+                    )
+
+            if use_rule_reply:
+                reply = pre_matched.reply
+                if item_title and not item_title.isdigit() and not pre_matched.categories:
+                    reply = f"关于「{item_title}」，{reply}"
+                if self.reply_engine.compliance_enabled:
+                    reply = self.reply_engine._check_compliance(reply)
+                return self._sanitize_reply(reply), {
+                    "is_quote": False,
+                    "rule_matched": pre_matched.name,
+                    "needs_human": pre_matched.needs_human,
+                    "human_reason": pre_matched.human_reason,
+                    "phase": pre_matched.phase,
+                }
 
         if has_checkout_context and has_quote_rows and self._is_checkout_followup(message_text):
             selected_courier = str(context_after.get("courier_choice") or "已选渠道")
@@ -1720,7 +1757,7 @@ class MessagesService:
                 quote_rows=quote_rows,
             )
         except Exception:
-            logger.debug("Failed to persist quote to ledger", exc_info=True)
+            self.logger.debug("Failed to persist quote to ledger", exc_info=True)
 
     _ORDER_TRIGGER_PATTERNS = re.compile(
         r"拍了|已拍|已下单|下单了|付款|已买|改价|改个价|帮我改|拍好了|我拍了"
@@ -1889,6 +1926,28 @@ class MessagesService:
             "details": details,
         }
 
+    async def _check_manual_intervention(self, session_id: str) -> bool:
+        """Check if a human seller sent messages in this session (not the bot)."""
+        ws_transport = self._ws_transport
+        if ws_transport is None:
+            return False
+        try:
+            recent = await ws_transport.fetch_recent_messages(session_id, limit=5)
+        except Exception as exc:
+            self.logger.debug(f"fetch_recent_messages failed for {session_id}: {exc}")
+            return False
+        if not recent:
+            return False
+        for m in recent:
+            if m.get("sender_id") == ws_transport.my_user_id:
+                if not ws_transport.is_bot_sent(session_id, m.get("text", "")):
+                    self._manual_mode_store.set_state(session_id, True)
+                    self.logger.info(
+                        f"检测到人工介入: session={session_id}, text={str(m.get('text', ''))[:30]}"
+                    )
+                    return True
+        return False
+
     async def process_session(
         self,
         session: dict[str, Any],
@@ -1904,6 +1963,20 @@ class MessagesService:
 
         session_start = perf_counter()
         session_id = str(session.get("session_id", ""))
+
+        if session_id and self._manual_mode_store:
+            mode_result = self._manual_mode_store.get_state(session_id)
+            if mode_result.state.enabled:
+                self.logger.info(f"process_session skipped: 人工模式, session={session_id}")
+                return {"skipped": True, "reason": "manual_mode", "session_id": session_id}
+            if mode_result.timeout_recovered:
+                self.logger.info(f"人工模式超时恢复: session={session_id}")
+
+        if session_id:
+            manual_detected = await self._check_manual_intervention(session_id)
+            if manual_detected:
+                return {"skipped": True, "reason": "manual_mode", "session_id": session_id}
+
         msg = str(session.get("last_message", ""))
         item_title = str(session.get("item_title", ""))
         peer_name = str(session.get("peer_name", ""))

@@ -140,14 +140,6 @@ else
   ok "前端依赖已存在"
 fi
 
-if [ ! -d "server/node_modules" ]; then
-  info "安装 Node 后端依赖..."
-  (cd server && npm install $NPM_INSTALL_ARGS 2>/dev/null)
-  ok "Node 后端依赖安装完成"
-else
-  ok "Node 后端依赖已存在"
-fi
-
 if [ ! -f ".venv/.playwright_ok" ]; then
   info "安装 Playwright 浏览器 (首次约 150MB)..."
   playwright install chromium 2>/dev/null && touch .venv/.playwright_ok
@@ -180,11 +172,11 @@ else
   fi
 fi
 
-if [ -f "server/data/system_config.json" ]; then
+if [ -f "data/system_config.json" ]; then
   HAS_AI_KEY=$(python3 -c "
 import json
 try:
-  d=json.load(open('server/data/system_config.json'))
+  d=json.load(open('data/system_config.json'))
   k=d.get('ai',{}).get('api_key','')
   print('yes' if k and len(k)>10 else 'no')
 except: print('no')
@@ -207,7 +199,6 @@ cleanup() {
   warn "正在停止所有服务..."
   kill $PY_PID 2>/dev/null || true
   kill $FE_PID 2>/dev/null || true
-  kill $ND_PID 2>/dev/null || true
   wait 2>/dev/null || true
   ok "所有服务已停止"
 }
@@ -225,10 +216,6 @@ PY_PID=$!
 info "启动 React 前端 (端口 5173)..."
 (cd client && npx vite --host 2>/dev/null) &
 FE_PID=$!
-
-info "启动 Node.js 后端 (端口 3001)..."
-(cd server && node src/app.js 2>/dev/null) &
-ND_PID=$!
 
 sleep 4
 
@@ -248,7 +235,6 @@ cat << 'INFO'
   ┌──────────────────────────────────────────────┐
   │  管理面板:     http://localhost:5173         │
   │  Python API:   http://localhost:8091         │
-  │  Node.js API:  http://localhost:3001         │
   │  对话沙盒:     管理面板 → 消息 → 对话沙盒   │
   └──────────────────────────────────────────────┘
 INFO

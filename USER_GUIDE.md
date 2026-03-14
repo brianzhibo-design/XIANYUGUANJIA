@@ -75,8 +75,7 @@ python3 -m venv .venv
 source .venv/bin/activate    # Windows 用: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# Node.js 依赖
-cd server && npm install && cd ..
+# 前端依赖（Vite 需要 Node.js）
 cd client && npm install && cd ..
 ```
 
@@ -268,7 +267,6 @@ docker compose down
 ```bash
 git pull
 pip install -r requirements.txt
-cd server && npm install && cd ..
 cd client && npm install && cd ..
 ```
 

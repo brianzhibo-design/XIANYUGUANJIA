@@ -2340,7 +2340,73 @@ class MimicOps:
         self.template_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return {"success": True, "message": "Template saved", **payload}
 
-    def get_replies(self) -> dict[str, Any]:
+    def get_replies(self) -> list[dict[str, Any]]:
+        """查询自动回复日志（关联 workflow_jobs + compliance_audit 补充缺失数据）。"""
+        db = self.project_root / "data" / "workflow.db"
+        if not db.exists():
+            return []
+        try:
+            conn = sqlite3.connect(str(db))
+            conn.row_factory = sqlite3.Row
+
+            comp_db = self.project_root / "data" / "compliance.db"
+            has_comp = comp_db.exists()
+            if has_comp:
+                conn.execute("ATTACH DATABASE ? AS comp", (str(comp_db),))
+
+            rows = conn.execute(
+                """SELECT id, session_id, to_state, metadata, created_at
+                   FROM session_state_transitions
+                   WHERE to_state IN ('REPLIED','QUOTED') AND status='success'
+                   ORDER BY created_at DESC LIMIT 200"""
+            ).fetchall()
+
+            sids = list({r["session_id"] for r in rows})
+
+            job_map: dict[str, dict] = {}
+            if sids:
+                ph = ",".join("?" * len(sids))
+                for jr in conn.execute(
+                    f"SELECT session_id, payload_json FROM workflow_jobs"
+                    f" WHERE session_id IN ({ph}) AND stage='reply' ORDER BY id DESC",
+                    sids,
+                ):
+                    if jr["session_id"] not in job_map:
+                        job_map[jr["session_id"]] = json.loads(jr["payload_json"]) if jr["payload_json"] else {}
+
+            audit_map: dict[str, str] = {}
+            if has_comp and sids:
+                ph = ",".join("?" * len(sids))
+                for ar in conn.execute(
+                    f"SELECT session_id, content FROM comp.compliance_audit"
+                    f" WHERE session_id IN ({ph}) AND action='message_send' AND blocked=0"
+                    f" ORDER BY created_at DESC",
+                    sids,
+                ):
+                    if ar["session_id"] not in audit_map:
+                        audit_map[ar["session_id"]] = ar["content"]
+
+            conn.close()
+        except Exception:
+            return []
+
+        logs: list[dict[str, Any]] = []
+        for r in rows:
+            meta = json.loads(r["metadata"]) if r["metadata"] else {}
+            payload = job_map.get(r["session_id"], {})
+            logs.append({
+                "id": str(r["id"]),
+                "session_id": r["session_id"],
+                "buyer_message": meta.get("buyer_message") or payload.get("last_message", ""),
+                "reply_text": meta.get("reply_text") or audit_map.get(r["session_id"], ""),
+                "intent": "quote" if meta.get("quote") else meta.get("intent", "auto_reply"),
+                "item_title": meta.get("peer_name") or payload.get("peer_name", ""),
+                "replied_at": r["created_at"],
+            })
+        return logs
+
+    def get_reply_templates(self) -> dict[str, Any]:
+        """返回回复模板配置（原 get_replies 功能）。"""
         template = self.get_template(default=False)
         return {
             "success": bool(template.get("success")),
@@ -4169,7 +4235,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         password = os.environ.get("COOKIE_CLOUD_PASSWORD", "").strip()
         if not uuid_val or not password:
             try:
-                cfg_path = Path(__file__).resolve().parents[1] / "server" / "data" / "system_config.json"
+                cfg_path = Path(__file__).resolve().parents[1] / "data" / "system_config.json"
                 if cfg_path.exists():
                     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
                     cc = cfg.get("cookie_cloud", {}) if isinstance(cfg.get("cookie_cloud"), dict) else {}
@@ -4676,7 +4742,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     if not ai_key or not ai_base:
                         try:
                             _sys_cfg_path = (
-                                Path(__file__).resolve().parents[1] / "server" / "data" / "system_config.json"
+                                Path(__file__).resolve().parents[1] / "data" / "system_config.json"
                             )
                             if _sys_cfg_path.exists():
                                 _sys_cfg = json.loads(_sys_cfg_path.read_text(encoding="utf-8"))
@@ -4738,7 +4804,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     xgj_info = {"ok": False, "message": f"检查异常: {type(exc).__name__}"}
                 result["xgj"] = xgj_info
 
-                result["node"] = {"ok": True, "message": "已合并至 Python"}
                 result["services"] = {"python": {"ok": True, "message": "运行中"}}
                 self._send_json(result)
                 return
@@ -4975,6 +5040,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "rules": result})
                 return
 
+            if path == "/api/manual-mode":
+                from src.modules.messages.manual_mode import ManualModeStore
+                timeout = int(get_config().get_section("messages", {}).get("manual_mode_timeout", 3600))
+                store = ManualModeStore(os.path.join("data", "manual_mode.db"), timeout_seconds=timeout)
+                sessions = store.list_active()
+                self._send_json({
+                    "ok": True,
+                    "sessions": [
+                        {
+                            "session_id": s.session_id,
+                            "enabled": s.enabled,
+                            "updated_at": s.updated_at,
+                            "expires_at": s.expires_at,
+                        }
+                        for s in sessions
+                    ],
+                    "timeout_seconds": timeout,
+                })
+                return
+
             # ---------- vendor static files (Chart.js etc.) ----------
             if path.startswith("/vendor/"):
                 self._serve_vendor_file(path)
@@ -5179,9 +5264,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
                             msgs_cfg = {}
                             try:
-                                from src.core.config import get_config
+                                from src.core.config import get_config as _get_config
 
-                                msgs_cfg = get_config().messages
+                                msgs_cfg = _get_config().messages
                             except Exception:
                                 pass
                             svc = MessagesService(msgs_cfg)
@@ -5473,6 +5558,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 body = self._read_json_body()
                 payload = self.mimic_ops.test_reply(body)
                 self._send_json(payload, status=200 if payload.get("success") else 400)
+                return
+
+            if path == "/api/manual-mode":
+                body = self._read_json_body()
+                sid = str(body.get("session_id", "")).strip()
+                if not sid:
+                    self._send_json(_error_payload("session_id required"), status=400)
+                    return
+                enabled = body.get("enabled", True)
+                from src.modules.messages.manual_mode import ManualModeStore
+                timeout = int(get_config().get_section("messages", {}).get("manual_mode_timeout", 3600))
+                store = ManualModeStore(os.path.join("data", "manual_mode.db"), timeout_seconds=timeout)
+                state = store.set_state(sid, bool(enabled))
+                self._send_json({
+                    "ok": True,
+                    "session_id": state.session_id,
+                    "enabled": state.enabled,
+                    "updated_at": state.updated_at,
+                    "expires_at": state.expires_at,
+                })
                 return
 
             if path == "/api/xgj/settings":

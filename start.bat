@@ -45,14 +45,14 @@ if errorlevel 1 (
 )
 echo [OK] Python 已安装
 
-:: 检查 Node.js
+:: 检查 Node.js（前端开发工具需要）
 where node >nul 2>&1
 if errorlevel 1 (
-    echo [X] 未找到 node，请先安装 Node.js 18+
+    echo [X] 未找到 node，请先安装 Node.js 18+（React 前端开发工具需要）
     pause
     exit /b 1
 )
-echo [OK] Node.js 已安装
+echo [OK] Node.js 已安装（前端开发工具）
 
 :: 创建 .env
 if not exist ".env" (
@@ -93,15 +93,13 @@ if not exist ".venv\.playwright_installed" (
     echo [OK] Playwright Chromium 已就绪
 )
 
-if not exist "server\node_modules" (
-    echo [*] 安装 Node.js 后端依赖...
-    cd server && npm install --silent %NPM_REGISTRY_ARGS% && cd ..
-)
-
 if not exist "client\node_modules" (
     echo [*] 安装 React 前端依赖...
     cd client && npm install --silent %NPM_REGISTRY_ARGS% && cd ..
 )
+
+:: 确保 data 目录存在
+if not exist "data" mkdir data
 
 echo.
 echo =========================================
@@ -112,10 +110,7 @@ echo.
 :: 启动 Python 后端
 start "Python Backend" cmd /c "call .venv\Scripts\activate.bat && python -m src.dashboard_server --port 8091"
 
-:: 启动 Node.js 后端
-start "Node Backend" cmd /c "cd server && node src\app.js"
-
-:: 启动 React 前端
+:: 启动 React 前端（Vite dev server）
 start "React Frontend" cmd /c "cd client && npx vite --host"
 
 timeout /t 3 >nul
@@ -126,7 +121,6 @@ echo   所有服务已启动
 echo =========================================
 echo.
 echo [OK] 管理面板:    http://localhost:5173
-echo [OK] Node 后端:   http://localhost:3001
 echo [OK] Python 后端: http://localhost:8091
 echo.
 echo 关闭此窗口不会停止服务。

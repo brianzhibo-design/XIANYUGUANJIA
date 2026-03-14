@@ -11,7 +11,6 @@ export interface ServiceHealth {
 export interface HealthState {
   loading: boolean;
   lastChecked: string | null;
-  node: ServiceHealth;
   python: ServiceHealth;
   cookie: ServiceHealth;
   ai: ServiceHealth;
@@ -21,7 +20,6 @@ export interface HealthState {
 const EMPTY: HealthState = {
   loading: true,
   lastChecked: null,
-  node:   { ok: false, message: '检查中...' },
   python: { ok: false, message: '检查中...' },
   cookie: { ok: false, message: '检查中...' },
   ai:     { ok: false, message: '检查中...' },
@@ -39,13 +37,11 @@ export default function useHealthCheck(enabled = true) {
     try {
       const res = await api.get('/health/check');
       const d = res.data;
-      next.node   = d.node   || { ok: true, message: '运行中' };
       next.python = d.services?.python || d.python || { ok: false, message: '未检查' };
       next.xgj    = d.xgj    || { ok: false, message: '未检查' };
       next.cookie  = d.cookie || { ok: false, message: '未检查' };
       next.ai      = d.ai     || { ok: false, message: '未检查' };
     } catch {
-      next.node   = { ok: false, message: '不可达' };
       next.python = { ok: false, message: '不可达' };
       next.xgj    = { ok: false, message: '未知' };
       next.cookie = { ok: false, message: '后端不可达' };

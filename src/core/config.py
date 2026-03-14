@@ -496,7 +496,7 @@ def load_category_config(category_id: str) -> dict:
 def get_active_category() -> str:
     """Return the currently active store category from system_config.json, defaulting to 'express'."""
     try:
-        sys_cfg_path = os.path.join("server", "data", "system_config.json")
+        sys_cfg_path = os.path.join("data", "system_config.json")
         if os.path.exists(sys_cfg_path):
             import json
 
