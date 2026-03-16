@@ -897,7 +897,11 @@ async def try_slider_recovery(
             for p in pages:
                 if "goofish.com/im" in (p.url or ""):
                     page = p
-                    _log.info(f"Slider recovery: reusing IM tab: {p.url}")
+                    _log.info(f"Slider recovery: reusing IM tab, reloading to trigger slider: {p.url}")
+                    try:
+                        await p.reload(wait_until="domcontentloaded", timeout=15000)
+                    except Exception as reload_exc:
+                        _log.info(f"Slider recovery: IM tab reload error (non-fatal): {reload_exc}")
                     break
             if not page:
                 for p in pages:
@@ -946,24 +950,39 @@ async def try_slider_recovery(
                                 p.split("=")[0].strip()
                                 for p in cookie_str.split(";") if "=" in p
                             }
-                            if "_m_h5_tk" not in cookie_keys:
-                                _log.info(
-                                    "Slider recovery: no slider, cookies missing _m_h5_tk. "
-                                    "Reloading page to trigger token generation..."
+                            if "_m_h5_tk" in cookie_keys:
+                                _log.info("Slider recovery: no slider found, complete cookies detected")
+                                return {"cookie": cookie_str}
+
+                            _log.info(
+                                "Slider recovery: no slider, cookies missing _m_h5_tk. "
+                                "Reloading page to trigger slider/token..."
+                            )
+                            try:
+                                await page.reload(
+                                    wait_until="domcontentloaded", timeout=15000
                                 )
-                                try:
-                                    await page.reload(
-                                        wait_until="domcontentloaded", timeout=15000
-                                    )
-                                    await asyncio.sleep(5)
-                                    all_cookies = await context.cookies()
-                                    cookie_str = _extract_goofish_cookies(all_cookies) or cookie_str
-                                except Exception as reload_exc:
-                                    _log.info(f"Page reload failed: {reload_exc}")
-                            _log.info("Slider recovery: no slider found, valid cookies detected")
-                            return {"cookie": cookie_str}
-                    _log.info("Slider recovery: no slider element found on page")
-                    break
+                                await asyncio.sleep(5)
+                            except Exception as reload_exc:
+                                _log.info(f"Page reload failed: {reload_exc}")
+
+                            slider_after_reload = await _find_slider_in_frames(page)
+                            if slider_after_reload:
+                                _log.info("Slider appeared after reload!")
+                                slider_info = slider_after_reload
+                            else:
+                                all_cookies = await context.cookies()
+                                cookie_str = _extract_goofish_cookies(all_cookies) or cookie_str
+                                if attempt < max_attempts - 1:
+                                    _log.info("Slider recovery: no slider after reload, trying next attempt...")
+                                    continue
+                                _log.info("Slider recovery: no slider found, returning partial cookies")
+                                return {"cookie": cookie_str}
+                    else:
+                        _log.info("Slider recovery: no slider element and no login cookies on page")
+                        if attempt < max_attempts - 1:
+                            continue
+                        break
 
                 frame, slider_el, slider_type = slider_info
                 _log.info(f"Slider detected: type={slider_type}")
