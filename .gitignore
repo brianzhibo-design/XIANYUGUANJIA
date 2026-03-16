@@ -171,6 +171,9 @@ data/cookie_cloud/
 # Plans (auto-generated)
 .plan/
 
+# Offline deployment vendor (prepared by scripts/prepare_offline.sh)
+vendor/
+
 # Cursor / Codex
 .cursor/
 .codex/

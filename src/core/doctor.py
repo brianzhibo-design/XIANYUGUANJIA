@@ -30,6 +30,14 @@ _SUGGESTIONS = {
     "消息首响SLA": "建议开启 `messages.fast_reply_enabled=true` 且 `reply_target_seconds<=3`。",
     "自动报价成本源": "请提供成本表（data/quote_costs）或配置 `quote.cost_api_url`。",
     "报价Mock门禁": "请在配置中设置 `quote.providers.remote.allow_mock=false`，并确认生产环境未通过环境变量覆盖为 true。",
+    "BitBrowser 指纹浏览器": (
+        "请从 https://www.bitbrowser.net 下载安装 BitBrowser，启动后"
+        "在管理面板 → 系统配置 → 滑块验证 中配置 API 地址和 browser_id。"
+    ),
+    "CookieCloud 自动同步": (
+        "服务端已内置无需额外部署。请安装 Chrome/Edge CookieCloud 扩展，"
+        "然后在管理面板 → 系统配置 → CookieCloud 中填入 UUID 和密码。"
+    ),
 }
 
 
@@ -188,6 +196,72 @@ def _extra_checks(skip_quote: bool = False) -> list[dict[str, Any]]:
             message=f"检查失败: {exc}",
             critical=False,
         )
+
+    # BitBrowser 指纹浏览器检测
+    try:
+        config = get_config()
+        ws_cfg = config.get_section("messages", {}).get("ws", {})
+        slider_cfg = ws_cfg.get("slider_auto_solve", {}) if isinstance(ws_cfg, dict) else {}
+        fp_cfg = slider_cfg.get("fingerprint_browser", {}) if isinstance(slider_cfg, dict) else {}
+        fp_enabled = bool(fp_cfg.get("enabled", False)) if isinstance(fp_cfg, dict) else False
+
+        if not fp_enabled:
+            _append_check(
+                checks,
+                name="BitBrowser 指纹浏览器",
+                passed=True,
+                message="未启用（可选功能，用于降低风控检测概率）",
+                critical=False,
+            )
+        else:
+            api_url = str(fp_cfg.get("api_url", "http://127.0.0.1:54345"))
+            try:
+                port = int(api_url.rstrip("/").split(":")[-1])
+            except (ValueError, IndexError):
+                port = 54345
+            port_open = _check_port_open(port)
+            browser_id = str(fp_cfg.get("browser_id", "")).strip()
+            _append_check(
+                checks,
+                name="BitBrowser 指纹浏览器",
+                passed=port_open and bool(browser_id),
+                message=(
+                    f"API {'可达' if port_open else '不可达'} (:{port}), "
+                    f"browser_id={'已配置' if browser_id else '未配置'}"
+                ),
+                critical=False,
+                meta={"port": port, "port_open": port_open, "browser_id_set": bool(browser_id)},
+            )
+    except Exception as exc:
+        _append_check(
+            checks,
+            name="BitBrowser 指纹浏览器",
+            passed=True,
+            message=f"检查跳过: {exc}",
+            critical=False,
+        )
+
+    # CookieCloud 自动同步配置检测
+    cc_uuid = os.getenv("COOKIE_CLOUD_UUID", "").strip()
+    cc_pwd = os.getenv("COOKIE_CLOUD_PASSWORD", "").strip()
+    if not cc_uuid or not cc_pwd:
+        try:
+            cfg_path = Path("data/system_config.json")
+            if cfg_path.exists():
+                sys_cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+                cc = sys_cfg.get("cookie_cloud", {}) if isinstance(sys_cfg.get("cookie_cloud"), dict) else {}
+                cc_uuid = cc_uuid or str(cc.get("cookie_cloud_uuid", "")).strip()
+                cc_pwd = cc_pwd or str(cc.get("cookie_cloud_password", "")).strip()
+        except Exception:
+            pass
+    cc_configured = bool(cc_uuid and cc_pwd)
+    _append_check(
+        checks,
+        name="CookieCloud 自动同步",
+        passed=cc_configured,
+        message="已配置（Cookie 秒级自动恢复）" if cc_configured else "未配置（推荐配置以实现 Cookie 自动同步恢复）",
+        critical=False,
+    )
 
     if skip_quote:
         return checks
