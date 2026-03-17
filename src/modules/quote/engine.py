@@ -35,7 +35,7 @@ class AutoQuoteEngine:
         self.mode = self._normalize_mode(str(cfg.get("mode", "rule_only")).lower())
         self.timeout_ms = int(cfg.get("timeout_ms", 3000))
         self.retry_times = int(cfg.get("retry_times", 1))
-        self.safety_margin = float(cfg.get("safety_margin", 0.0))
+        self.safety_margin = self._resolve_safety_margin(cfg)
         self.validity_minutes = int(cfg.get("validity_minutes", 30))
         self.circuit_fail_threshold = int(cfg.get("circuit_fail_threshold", 3))
         self.circuit_open_seconds = int(cfg.get("circuit_open_seconds", 30))
@@ -303,6 +303,20 @@ class AutoQuoteEngine:
         if raw.startswith("${") and raw.endswith("}") and len(raw) > 3:
             return raw[2:-1]
         return "QUOTE_API_KEY"
+
+    @staticmethod
+    def _resolve_safety_margin(cfg: dict[str, Any]) -> float:
+        """Read safety_margin from system_config.json (Dashboard UI) first, fallback to config.yaml."""
+        try:
+            from src.dashboard.config_service import read_system_config
+            sys_cfg = read_system_config()
+            pricing = sys_cfg.get("pricing", {})
+            ui_val = pricing.get("safety_margin_percent")
+            if ui_val is not None:
+                return float(ui_val) / 100.0
+        except Exception:
+            pass
+        return float(cfg.get("safety_margin", 0.0))
 
     @staticmethod
     def _classify_failure(error: Exception | None) -> str:

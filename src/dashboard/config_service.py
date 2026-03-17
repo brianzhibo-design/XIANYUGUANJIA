@@ -674,6 +674,13 @@ CONFIG_SECTIONS: list[dict[str, Any]] = [
         "name": "定价规则",
         "fields": [
             {
+                "key": "safety_margin_percent",
+                "label": "报价安全加价(%)",
+                "type": "number",
+                "default": 0,
+                "hint": "在成本价基础上额外加价的百分比，0 表示不加价。例如填 3 表示加价 3%",
+            },
+            {
                 "key": "auto_adjust",
                 "label": "自动调价",
                 "type": "toggle",
