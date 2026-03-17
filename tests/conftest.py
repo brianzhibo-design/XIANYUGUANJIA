@@ -41,7 +41,7 @@ def temp_config_file(temp_dir):
     config_content = """
 app:
   name: "xianyu-openclaw"
-  version: "1.0.0"
+  version: "8.0.0"
   debug: true
   log_level: "DEBUG"
 

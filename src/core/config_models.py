@@ -228,7 +228,7 @@ class AppConfig(BaseModel):
     """应用配置模型"""
 
     name: str = Field(default="xianyu-openclaw", description="应用名称")
-    version: str = Field(default="1.0.0", description="版本号")
+    version: str = Field(default="8.0.0", description="版本号")
     debug: bool = Field(default=False, description="调试模式")
     log_level: str = Field(default="INFO", description="日志级别")
     data_dir: str = Field(default="data", description="数据目录")

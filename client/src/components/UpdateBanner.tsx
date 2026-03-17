@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api/index';
-import { ArrowUpCircle, X, ExternalLink, Download, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { ArrowUpCircle, X, ExternalLink, Download, Loader2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 
 const CACHE_KEY = 'xianyu_update_check';
 const CACHE_TTL = 24 * 60 * 60 * 1000;
@@ -51,31 +51,37 @@ export default function UpdateBanner() {
   const [dismissed, setDismissed] = useState(false);
   const [phase, setPhase] = useState<UpdatePhase>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [manualChecking, setManualChecking] = useState(false);
+  const [upToDate, setUpToDate] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const upToDateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    checkForUpdate();
+    checkForUpdate(false);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
       if (reconnectRef.current) clearInterval(reconnectRef.current);
+      if (upToDateTimer.current) clearTimeout(upToDateTimer.current);
     };
   }, []);
 
-  const checkForUpdate = async () => {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-      try {
-        const parsed: VersionInfo = JSON.parse(cached);
-        if (Date.now() - parsed.checkedAt < CACHE_TTL) {
-          const dismissedVersion = localStorage.getItem(DISMISS_KEY);
-          if (parsed.hasUpdate && dismissedVersion === parsed.latest) {
-            setDismissed(true);
+  const checkForUpdate = async (force: boolean) => {
+    if (!force) {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        try {
+          const parsed: VersionInfo = JSON.parse(cached);
+          if (Date.now() - parsed.checkedAt < CACHE_TTL) {
+            const dismissedVersion = localStorage.getItem(DISMISS_KEY);
+            if (parsed.hasUpdate && dismissedVersion === parsed.latest) {
+              setDismissed(true);
+            }
+            setInfo(parsed);
+            return;
           }
-          setInfo(parsed);
-          return;
-        }
-      } catch { /* stale cache */ }
+        } catch { /* stale cache */ }
+      }
     }
 
     try {
@@ -101,8 +107,27 @@ export default function UpdateBanner() {
       };
 
       localStorage.setItem(CACHE_KEY, JSON.stringify(result));
+      if (result.hasUpdate) setDismissed(false);
       setInfo(result);
     } catch { /* version endpoint unavailable */ }
+  };
+
+  const latestInfoRef = useRef(info);
+  latestInfoRef.current = info;
+
+  const handleManualCheck = async () => {
+    setManualChecking(true);
+    setUpToDate(false);
+    localStorage.removeItem(CACHE_KEY);
+    await checkForUpdate(true);
+    setManualChecking(false);
+    setTimeout(() => {
+      if (!latestInfoRef.current?.hasUpdate) {
+        setUpToDate(true);
+        if (upToDateTimer.current) clearTimeout(upToDateTimer.current);
+        upToDateTimer.current = setTimeout(() => setUpToDate(false), 3000);
+      }
+    }, 0);
   };
 
   const handleDismiss = () => {
@@ -264,7 +289,29 @@ export default function UpdateBanner() {
     );
   }
 
-  if (!info?.hasUpdate || dismissed) return null;
+  if (!info?.hasUpdate || dismissed) {
+    return (
+      <div className="mb-4 flex items-center gap-3 px-4 py-2.5 bg-xy-gray-50 border border-xy-border rounded-xl text-sm">
+        <span className="text-xy-text-secondary">
+          当前版本: <span className="font-medium text-xy-text-primary">v{info?.current || '...'}</span>
+        </span>
+        {upToDate && (
+          <span className="flex items-center gap-1 text-green-600">
+            <CheckCircle className="w-3.5 h-3.5" /> 已是最新版本
+          </span>
+        )}
+        <div className="flex-1" />
+        <button
+          onClick={handleManualCheck}
+          disabled={manualChecking}
+          className="flex items-center gap-1.5 px-3 py-1 text-sm font-medium text-xy-text-secondary hover:text-xy-brand-600 hover:bg-xy-brand-50 rounded-lg transition-colors disabled:opacity-50"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${manualChecking ? 'animate-spin' : ''}`} />
+          {manualChecking ? '检查中...' : '检查更新'}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm">

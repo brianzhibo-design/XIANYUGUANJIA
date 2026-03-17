@@ -20,7 +20,8 @@ async def main():
     config = get_config()
     logger = get_logger()
 
-    logger.info(f"Starting {config.app.get('name', 'xianyu-openclaw')} v{config.app.get('version', '1.0.0')}")
+    from src import __version__
+    logger.info(f"Starting {config.app.get('name', 'xianyu-openclaw')} v{config.app.get('version', __version__)}")
 
     try:
         from src.modules.accounts.service import AccountsService  # noqa: F401

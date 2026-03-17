@@ -192,7 +192,7 @@ class Config:
         defaults = {
             "app": {
                 "name": "xianyu-openclaw",
-                "version": "1.0.0",
+                "version": __import__("src").__version__,
                 "debug": False,
                 "log_level": "INFO",
                 "data_dir": "data",

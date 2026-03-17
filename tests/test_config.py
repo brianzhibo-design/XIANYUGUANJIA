@@ -44,7 +44,7 @@ class TestConfig:
         """测试获取配置段落"""
         app_config = config.get_section("app")
         assert app_config["name"] == "xianyu-openclaw"
-        assert app_config["version"] == "1.0.0"
+        assert app_config["version"] == "8.0.0"
 
     def test_config_get_value(self, config):
         """测试获取配置值"""
@@ -61,7 +61,7 @@ class TestConfig:
         config_content = """
 app:
   name: "updated_name"
-  version: "1.0.0"
+  version: "8.0.0"
 """
         temp_config_file.write_text(config_content)
 
@@ -167,7 +167,7 @@ class TestConfigModels:
         config_data = {
             "app": {
                 "name": "test_app",
-                "version": "1.0.0",
+                "version": "8.0.0",
                 "debug": True,
                 "log_level": "DEBUG"
             },
@@ -209,7 +209,7 @@ class TestConfigModels:
             config_data = {
                 "app": {
                     "name": "test",
-                    "version": "1.0.0",
+                    "version": "8.0.0",
                     "log_level": level
                 }
             }
@@ -220,7 +220,7 @@ class TestConfigModels:
         config_data = {
             "app": {
                 "name": "test",
-                "version": "1.0.0",
+                "version": "8.0.0",
                 "log_level": "INVALID"
             }
         }
