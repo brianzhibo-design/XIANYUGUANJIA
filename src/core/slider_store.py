@@ -138,6 +138,8 @@ class SliderEventStore:
                 "puzzle_attempts": 0,
                 "puzzle_passed": 0,
                 "avg_cookie_ttl_seconds": None,
+                "fail_reason_counts": {},
+                "trigger_source_counts": {},
                 "screenshots": [],
             }
 
@@ -151,6 +153,17 @@ class SliderEventStore:
 
         ttls = [r["cookie_ttl_seconds"] for r in rows if r["cookie_ttl_seconds"] is not None]
         avg_ttl = sum(ttls) / len(ttls) if ttls else None
+
+        fail_reason_counts: dict[str, int] = {}
+        for r in rows:
+            reason = r["fail_reason"]
+            if reason:
+                fail_reason_counts[reason] = fail_reason_counts.get(reason, 0) + 1
+
+        trigger_source_counts: dict[str, int] = {}
+        for r in rows:
+            src = r["trigger_source"] or "unknown"
+            trigger_source_counts[src] = trigger_source_counts.get(src, 0) + 1
 
         screenshots = [
             {"path": r["screenshot_path"], "ts": r["trigger_ts"], "type": r["slider_type"], "result": r["result"]}
@@ -173,6 +186,8 @@ class SliderEventStore:
             "puzzle_passed": puzzle_passed,
             "puzzle_success_rate": round(puzzle_passed / puzzle_attempts * 100, 1) if puzzle_attempts else 0.0,
             "avg_cookie_ttl_seconds": round(avg_ttl) if avg_ttl else None,
+            "fail_reason_counts": dict(sorted(fail_reason_counts.items(), key=lambda x: x[1], reverse=True)),
+            "trigger_source_counts": trigger_source_counts,
             "screenshots": screenshots[-10:],
         }
 

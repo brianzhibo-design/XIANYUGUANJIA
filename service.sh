@@ -59,6 +59,31 @@ _kill_by_pid() {
   _clear_pid "$name"
 }
 
+_read_daemon_pid() {
+  local json_file="$ROOT_DIR/data/module_runtime/$1.json"
+  if [ -f "$json_file" ]; then
+    "$VENV_PY" -c "import json,sys;print(json.load(open(sys.argv[1])).get('pid',''))" "$json_file" 2>/dev/null || echo ""
+  else
+    echo ""
+  fi
+}
+
+_kill_presales() {
+  local pid daemon_pid
+  pid="$(_read_pid presales)"
+  daemon_pid="$(_read_daemon_pid presales)"
+
+  for p in $pid $daemon_pid; do
+    if [ -n "$p" ] && _is_running "$p"; then
+      kill "$p" 2>/dev/null
+      sleep 1
+      _is_running "$p" && kill -9 "$p" 2>/dev/null
+    fi
+  done
+  _clear_pid presales
+  pkill -f 'src\.cli module.*presales' 2>/dev/null || true
+}
+
 _kill_port() {
   local port="$1"
   local pids
@@ -139,21 +164,20 @@ do_stop() {
   log "停止全部服务..."
   echo ""
 
-  _kill_by_pid presales
+  # 先停后端(Dashboard + watchdog)，防止 watchdog 在 presales 被杀后自动重启
+  _kill_by_pid backend
+  _kill_port "$BACKEND_PORT"
+  ok "后端已停止"
+
+  _kill_presales
   ok "Presales daemon 已停止"
 
   _kill_by_pid frontend
   _kill_port "$FRONTEND_PORT"
   ok "前端已停止"
 
-  _kill_by_pid backend
-  _kill_port "$BACKEND_PORT"
-  ok "后端已停止"
-
-  # 清理残留的 vite/esbuild 进程
   pkill -f 'npx vite' 2>/dev/null || true
   pkill -f 'npm exec vite' 2>/dev/null || true
-  pkill -f 'src.cli module.*presales' 2>/dev/null || true
 
   echo ""
   log "全部服务已停止"

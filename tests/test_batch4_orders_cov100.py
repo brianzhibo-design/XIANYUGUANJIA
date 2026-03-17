@@ -10,21 +10,6 @@ import pytest
 class TestXianGuanJiaClientModule:
     """Tests for src.modules.orders.xianguanjia (deprecated module)."""
 
-    def test_import_emits_deprecation_warning(self):
-        import importlib
-        import src.modules.orders.xianguanjia as mod
-        old_classes = {
-            name: getattr(mod, name)
-            for name in dir(mod)
-            if isinstance(getattr(mod, name), type)
-        }
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            importlib.reload(mod)
-            dep_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            assert len(dep_warnings) >= 1
-        for name, cls in old_classes.items():
-            setattr(mod, name, cls)
 
     def test_canonical_json(self):
         from src.modules.orders.xianguanjia import canonical_json

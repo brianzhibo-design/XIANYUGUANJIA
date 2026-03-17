@@ -301,7 +301,7 @@ class GoofishWsTransport:
         self.config = config or {}
         self.base_url = str(self.config.get("base_url", "wss://wss-goofish.dingtalk.com/")).strip()
         self.heartbeat_interval = int(self.config.get("heartbeat_interval_seconds", 15))
-        self.heartbeat_timeout = int(self.config.get("heartbeat_timeout_seconds", 5))
+        self.heartbeat_timeout = int(self.config.get("heartbeat_timeout_seconds", 30))
         self.reconnect_delay = float(self.config.get("reconnect_delay_seconds", 3.0))
         self.event_expire_ms = int(self.config.get("message_expire_ms", 5 * 60 * 1000))
         self.max_queue_size = int(self.config.get("max_queue_size", 200))
@@ -718,6 +718,9 @@ class GoofishWsTransport:
     _last_slider_recovery_at: float = 0.0
     _last_cookie_applied_at: float = 0.0
     _SLIDER_RECOVERY_COOLDOWN = 60.0
+    _slider_recovery_attempts: int = 0
+    _SLIDER_MAX_ATTEMPTS_PER_CYCLE = 3
+    _RGV587_BACKOFF_CAP = 300.0
 
     def _record_slider_events(self, result: dict[str, Any], trigger_source: str) -> None:
         """Persist slider attempt data to SliderEventStore."""
@@ -1456,7 +1459,7 @@ class GoofishWsTransport:
                     if (now - self._last_heartbeat_ack) > (self.heartbeat_interval + self.heartbeat_timeout):
                         raise BrowserError("WebSocket heartbeat timeout")
 
-                    if self._token_ts > 0 and (now - self._token_ts) >= self.token_refresh_interval_seconds * 0.9:
+                    if self._token_ts > 0 and (now - self._token_ts) >= self.token_refresh_interval_seconds * 0.95:
                         self.logger.info("Token approaching expiry, forcing WS reconnect for renewal")
                         self._token = ""
                         self._token_ts = 0.0
@@ -1542,46 +1545,68 @@ class GoofishWsTransport:
                         slider_cfg = self.config.get("slider_auto_solve", {})
                         slider_enabled = bool(slider_cfg.get("enabled")) if isinstance(slider_cfg, dict) else False
 
-                        self.logger.warning(f"RGV587 风控检测 ({self._rgv587_consecutive})，尝试恢复...")
+                        rgv_backoff = min(
+                            self._RGV587_BACKOFF_CAP,
+                            60.0 * (2 ** (self._rgv587_consecutive - 1)),
+                        )
+
+                        self.logger.warning(
+                            f"RGV587 风控检测 ({self._rgv587_consecutive}), "
+                            f"slider_attempts={self._slider_recovery_attempts}/{self._SLIDER_MAX_ATTEMPTS_PER_CYCLE}, "
+                            f"退避 {rgv_backoff:.0f}s..."
+                        )
 
                         if self._rgv587_consecutive <= 2 and await self._try_goofish_im_refresh(urgent=True):
                             self._connect_failures = 0
-                            rgv_backoff = 30.0 * self._rgv587_consecutive
                             self.logger.info(f"闲管家IM Cookie刷新成功，退避 {rgv_backoff:.0f}s 后重试 WS 连接")
                             await asyncio.sleep(rgv_backoff)
                             continue
 
-                        if slider_enabled:
+                        can_try_slider = (
+                            slider_enabled
+                            and self._slider_recovery_attempts < self._SLIDER_MAX_ATTEMPTS_PER_CYCLE
+                        )
+
+                        if can_try_slider:
                             self._send_risk_control_notification()
+                            self._slider_recovery_attempts += 1
                             recovered = await self._try_slider_recovery(trigger_source="rgv587")
                             if recovered:
                                 self._connect_failures = 0
                                 self._rgv587_consecutive = 0
+                                self._slider_recovery_attempts = 0
                                 self.logger.info("滑块验证恢复成功，立即重试 WS 连接")
                                 continue
-                            self.logger.warning("滑块自动恢复失败，等待 Cookie 更新...")
-                        else:
-                            _RGV587_BACKOFF_MAX = 2
-                            if self._rgv587_consecutive <= _RGV587_BACKOFF_MAX:
-                                backoff = 60.0 * self._rgv587_consecutive
-                                self.logger.warning(
-                                    f"RGV587 风控检测 ({self._rgv587_consecutive}/{_RGV587_BACKOFF_MAX})，"
-                                    f"退避 {backoff:.0f}s 后重试..."
-                                )
-                                await self._try_goofish_im_refresh(urgent=True)
-                                if await self._try_active_cookie_refresh():
-                                    self.logger.info("Active cookie refresh succeeded during RGV587 backoff")
-                                await asyncio.sleep(backoff)
-                                continue
                             self.logger.warning(
-                                "RGV587 风控持续触发，请在浏览器打开闲鱼消息页(https://www.goofish.com/im)完成滑块验证后更新 Cookie。"
-                                " 暂停自动重连，等待 Cookie 更新..."
+                                f"滑块自动恢复失败 ({self._slider_recovery_attempts}/{self._SLIDER_MAX_ATTEMPTS_PER_CYCLE})，"
+                                f"退避 {rgv_backoff:.0f}s..."
                             )
-                            self._send_risk_control_notification()
+                            await asyncio.sleep(rgv_backoff)
+                            continue
+                        elif not slider_enabled and self._rgv587_consecutive <= 3:
+                            self.logger.warning(
+                                f"RGV587 风控检测 ({self._rgv587_consecutive}/3)，"
+                                f"退避 {rgv_backoff:.0f}s 后重试..."
+                            )
+                            await self._try_goofish_im_refresh(urgent=True)
+                            if await self._try_active_cookie_refresh():
+                                self.logger.info("Active cookie refresh succeeded during RGV587 backoff")
+                            await asyncio.sleep(rgv_backoff)
+                            continue
+
+                        self.logger.warning(
+                            "RGV587 风控持续触发（slider %d/%d 次已耗尽），"
+                            "请在浏览器打开闲鱼消息页(https://www.goofish.com/im)完成滑块验证后更新 Cookie。"
+                            " 暂停自动重连，等待 Cookie 更新...",
+                            self._slider_recovery_attempts,
+                            self._SLIDER_MAX_ATTEMPTS_PER_CYCLE,
+                        )
+                        self._send_risk_control_notification()
 
                         if await self._wait_for_cookie_update_forever():
                             self._connect_failures = 0
                             self._rgv587_consecutive = 0
+                            self._slider_recovery_attempts = 0
                             self.logger.info("检测到 Cookie 更新，立即重试 WS 连接")
                             continue
                     elif await self._try_goofish_im_refresh(urgent=True):
