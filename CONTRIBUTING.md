@@ -63,6 +63,39 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 | `test:` | Adding or updating tests |
 | `chore:` | Build, CI, dependency updates |
 
+## Versioning (版本号规范)
+
+项目遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-CN/) (语义化版本)。
+
+版本号格式：`MAJOR.MINOR.PATCH`
+
+| 变更类型 | 版本位 | 何时递增 | 示例 |
+|----------|--------|---------|------|
+| **MAJOR** | 主版本 | 架构重构、破坏性变更、大规模重写 | 移除 Node.js 后端 → 8.0.0 |
+| **MINOR** | 次版本 | 新增功能（向后兼容） | 新增大件快运品类 → 8.1.0 |
+| **PATCH** | 修订号 | Bug 修复、小优化（向后兼容） | 修复报价计算 → 8.1.1 |
+
+### 版本号存储位置（唯一真相源）
+
+版本号定义在 `src/__init__.py` 的 `__version__` 变量中。修改版本时 **必须同步更新**：
+
+1. `src/__init__.py` — `__version__ = "X.Y.Z"` (Python 后端读取)
+2. `package.json` — `"version": "X.Y.Z"` (npm 元数据)
+
+`scripts/build_release.sh` 会自动从 `src/__init__.py` 读取版本号生成发布包，无需手动改。
+
+### 何时更新版本号
+
+- 每次准备发布新 Release 前更新，不要在开发中频繁修改
+- git tag 必须与 `__version__` 一致：`git tag v8.0.0`
+- GitHub Release 标题格式：`v8.0.0`
+
+### 禁止事项
+
+- 不得回退版本号（如从 8.0.0 改回 1.0.0）
+- 不得跳过版本号（如从 8.0.0 跳到 10.0.0）
+- 不得使用非数字后缀（如 8.0.0-beta）除非团队明确约定
+
 ## Code Style
 
 - Python 3.10+
