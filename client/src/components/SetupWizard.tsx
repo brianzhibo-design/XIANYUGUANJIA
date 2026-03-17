@@ -221,11 +221,7 @@ export default function SetupWizard() {
   const handleSkip = async () => {
     setErrors({});
     setTestResults({});
-    if (step < STEPS.length - 1) {
-      setStep(step + 1);
-    } else {
-      await completeWizard();
-    }
+    await completeWizard();
   };
 
   const completeWizard = async () => {
