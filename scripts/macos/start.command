@@ -9,6 +9,12 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$PROJECT_ROOT"
 
+# 从 Finder 双击时 PATH 不完整，补充常见路径
+for p in /opt/homebrew/bin /opt/homebrew/sbin /usr/local/bin "$HOME/.nvm/versions/node"/*/bin; do
+  [ -d "$p" ] && case ":$PATH:" in *:"$p":*) ;; *) export PATH="$p:$PATH" ;; esac
+done
+[ -s "$HOME/.nvm/nvm.sh" ] && source "$HOME/.nvm/nvm.sh" 2>/dev/null || true
+
 echo ""
 echo "========================================="
 echo "  🐟 闲鱼管家 v1.0.0 - 启动中..."
