@@ -1411,7 +1411,7 @@ class MessagesService:
         )
 
     _ORDER_TRIGGER_PATTERNS = re.compile(
-        r"拍了|已拍|已下单|下单了|付款|已买|改价|改个价|帮我改|拍好了|我拍了"
+        r"拍了|拍下|已拍|已下单|下单了|付款|已买|改价|改个价|帮我改|拍好了|我拍了"
     )
 
     def _check_order_trigger(self, msg: str) -> None:

@@ -140,6 +140,7 @@ class AutoPricePoller:
         from src.modules.quote.ledger import get_quote_ledger
 
         buyer_nick = str(order_summary.get("buyer_nick", "")).strip()
+        buyer_eid = str(order_summary.get("buyer_eid", "")).strip()
         goods = order_summary.get("goods") or {}
         item_id = str(goods.get("item_id", "")).strip()
         total_amount = 0
@@ -154,6 +155,8 @@ class AutoPricePoller:
                 if detail_resp.ok and isinstance(detail_resp.data, dict):
                     detail = detail_resp.data
                     buyer_nick = str(detail.get("buyer_nick", "")).strip()
+                    if not buyer_eid:
+                        buyer_eid = str(detail.get("buyer_eid", "")).strip()
                     if not goods:
                         goods = detail.get("goods") or {}
                         item_id = str(goods.get("item_id", "")).strip()
@@ -162,20 +165,28 @@ class AutoPricePoller:
             except Exception:
                 logger.debug("AutoPricePoller: failed to get detail for %s", order_no)
 
-        if not buyer_nick:
-            logger.debug("AutoPricePoller: no buyer_nick for order %s, skipping", order_no)
+        if not buyer_nick and not buyer_eid:
+            logger.debug("AutoPricePoller: no buyer_nick/buyer_eid for order %s, skipping", order_no)
             return
 
         max_age = int(apm_cfg.get("max_quote_age_seconds", _MAX_QUOTE_AGE_DEFAULT))
         ledger = get_quote_ledger()
-        quote = ledger.find_by_buyer(buyer_nick, item_id=item_id, max_age_seconds=max_age)
+        quote = ledger.find_by_buyer(
+            buyer_nick, item_id=item_id, max_age_seconds=max_age,
+            sender_user_id=buyer_eid,
+        )
 
         if not quote:
             fallback = apm_cfg.get("fallback_action", "skip")
-            if fallback == "skip":
-                logger.debug("AutoPricePoller: no quote for buyer=%s order=%s", buyer_nick, order_no)
+            if fallback == "use_listing_price":
+                logger.info(
+                    "AutoPricePoller: no quote for buyer=%s order=%s, "
+                    "fallback=use_listing_price — accepting at current price",
+                    buyer_nick, order_no,
+                )
+                self._processed[order_no] = time.time()
                 return
-            logger.debug("AutoPricePoller: fallback=%s for order=%s, skipping", fallback, order_no)
+            logger.debug("AutoPricePoller: no quote for buyer=%s order=%s, fallback=%s", buyer_nick, order_no, fallback)
             return
 
         quote_rows = quote.get("quote_rows", [])

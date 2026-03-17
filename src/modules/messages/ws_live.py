@@ -1405,6 +1405,9 @@ class GoofishWsTransport:
             if event:
                 self.logger.info(f"WS chat event: chat={event.get('chat_id','?')}, sender={event.get('sender_user_id','?')}, text={event.get('text','')[:50]}")
                 await self._push_event(event)
+            else:
+                top_keys = list(decoded.keys())[:6] if isinstance(decoded, dict) else type(decoded).__name__
+                self.logger.debug(f"WS sync item[{idx}] not a chat event, keys={top_keys}")
 
     async def _run(self) -> None:
         if websockets is None:

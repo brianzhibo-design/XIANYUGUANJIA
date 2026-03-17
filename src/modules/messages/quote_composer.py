@@ -273,6 +273,11 @@ class QuoteReplyComposer:
                         quote_rows = [{"courier": qr.get("selected_courier", ""), "total_fee": qr.get("total_fee", 0)}]
 
             if not quote_rows:
+                self.logger.warning(
+                    "persist_to_ledger: quote_rows empty, skipping persist "
+                    "(session=%s, peer=%s, meta_keys=%s)",
+                    session_id, peer_name, list(quote_meta.keys()),
+                )
                 return
 
             from src.modules.quote.ledger import get_quote_ledger

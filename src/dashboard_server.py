@@ -680,24 +680,35 @@ class MimicOps:
 
             detail = detail_resp.data or {}
             buyer_nick = str(detail.get("buyer_nick", ""))
+            buyer_eid = str(detail.get("buyer_eid", "")).strip()
             goods = detail.get("goods") or {}
             item_id = str(goods.get("item_id", ""))
             total_amount = int(detail.get("total_amount", 0))
 
-            if not buyer_nick:
-                logger.info("Auto-price-modify: no buyer_nick in order %s", order_no)
+            if not buyer_nick and not buyer_eid:
+                logger.info("Auto-price-modify: no buyer_nick/buyer_eid in order %s", order_no)
                 return
 
             max_age = int(apm_cfg.get("max_quote_age_seconds", 7200))
             ledger = get_quote_ledger()
-            quote = ledger.find_by_buyer(buyer_nick, item_id=item_id, max_age_seconds=max_age)
+            quote = ledger.find_by_buyer(
+                buyer_nick, item_id=item_id, max_age_seconds=max_age,
+                sender_user_id=buyer_eid,
+            )
 
             if not quote:
                 fallback = apm_cfg.get("fallback_action", "skip")
-                if fallback == "skip":
-                    logger.info("Auto-price-modify: no matching quote for buyer=%s order=%s", buyer_nick, order_no)
+                if fallback == "use_listing_price":
+                    logger.info(
+                        "Auto-price-modify: no quote for buyer=%s order=%s, "
+                        "fallback=use_listing_price — accepting at current price",
+                        buyer_nick, order_no,
+                    )
                     return
-                logger.info("Auto-price-modify: fallback=%s, no price change for order=%s", fallback, order_no)
+                logger.info(
+                    "Auto-price-modify: no matching quote for buyer=%s order=%s, fallback=%s",
+                    buyer_nick, order_no, fallback,
+                )
                 return
 
             quote_rows = quote.get("quote_rows", [])
@@ -739,6 +750,7 @@ class MimicOps:
                     target_price_cents,
                     express_fee_cents,
                 )
+                self._mark_order_processed_in_poller(order_no)
             else:
                 logger.warning(
                     "Auto-price-modify: FAILED order=%s error=%s",
@@ -748,6 +760,18 @@ class MimicOps:
 
         except Exception:
             logger.error("Auto-price-modify: unexpected error for order=%s", order_no, exc_info=True)
+
+    @staticmethod
+    def _mark_order_processed_in_poller(order_no: str) -> None:
+        """Notify the poller that this order was already handled by the push callback."""
+        try:
+            from src.modules.orders.auto_price_poller import get_price_poller
+
+            poller = get_price_poller()
+            if poller is not None:
+                poller._processed[order_no] = __import__("time").time()
+        except Exception:
+            pass
 
     def _resolve_session_id_for_order(self, order_no: str) -> str:
         """Try to find the chat session_id for a given order.
