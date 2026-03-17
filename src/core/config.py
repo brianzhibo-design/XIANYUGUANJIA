@@ -188,7 +188,7 @@ class Config:
             env_key = obj[2:-1]
             value = os.getenv(env_key)
             if value is None:
-                self.logger.warning(f"Environment variable {env_key} not found, using placeholder")
+                self.logger.debug(f"Environment variable {env_key} not found, using placeholder")
                 return obj
             return value
         return obj

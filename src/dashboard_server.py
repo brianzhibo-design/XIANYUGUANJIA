@@ -4794,18 +4794,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except Exception as e:  # pragma: no cover - safety net
             self._send_json(_error_payload(str(e), code="INTERNAL_ERROR"), status=500)
 
-    _QUIET_PATHS = frozenset({
-        "/api/update/status", "/api/dashboard/summary",
-        "/api/system/status", "/healthz",
-    })
+    _QUIET_PREFIXES = (
+        "/api/update/status", "/api/dashboard/summary", "/api/system/status",
+        "/api/summary", "/api/status", "/api/trend", "/api/top-products",
+        "/api/recent-operations", "/api/slider/stats", "/api/slider/events",
+        "/healthz", "/assets/", "/favicon",
+    )
 
     def log_message(self, format: str, *args: Any) -> None:
         from loguru import logger as _loguru
 
-        msg = format % args if args else format
-        if any(p in msg for p in self._QUIET_PATHS) and "200" in msg:
+        path = getattr(self, "path", "").split("?")[0]
+        code = str(args[1]) if len(args) >= 2 else ""
+        if path.startswith(self._QUIET_PREFIXES) and code == "200":
             return
-        _loguru.info(msg)
+        reqline = str(args[0]).split(" HTTP/")[0] if args else ""
+        _loguru.info("{} → {}", reqline or path, code)
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = None) -> None:
