@@ -4803,7 +4803,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         msg = format % args if args else format
         if any(p in msg for p in self._QUIET_PATHS) and "200" in msg:
             return
-        logger.debug(msg)
+        logger.info(msg)
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = None) -> None:
