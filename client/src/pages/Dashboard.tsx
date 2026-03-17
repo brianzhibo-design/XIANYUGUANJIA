@@ -191,6 +191,7 @@ const Dashboard = () => {
   const [sysStatus, setSysStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
   const [lastUpdated, setLastUpdated] = useState<number>(0);
   const [agoText, setAgoText] = useState('');
 
@@ -250,7 +251,8 @@ const Dashboard = () => {
   }, [applyDashboardResults]);
 
   const silentRefreshDashboard = useCallback(async () => {
-    if (refreshing) return;
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
     setRefreshing(true);
     try {
       const results = await Promise.allSettled([
@@ -260,8 +262,8 @@ const Dashboard = () => {
         applyDashboardResults(results);
       }
     } catch { /* silent */ }
-    finally { setRefreshing(false); }
-  }, [refreshing, applyDashboardResults]);
+    finally { refreshingRef.current = false; setRefreshing(false); }
+  }, [applyDashboardResults]);
 
   const applyAnalyticsResults = useCallback((trendRes: any, topRes: any) => {
     if (trendRes?.data) {

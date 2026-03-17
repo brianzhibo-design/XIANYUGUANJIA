@@ -49,7 +49,7 @@ export default function Orders() {
   const [priceEditOrder, setPriceEditOrder] = useState(null);
   const [priceEditValue, setPriceEditValue] = useState('');
 
-  useEffect(() => { fetchOrders(); }, [tab]);
+  useEffect(() => { setCurrentPage(1); fetchOrders(); }, [tab]);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -238,7 +238,7 @@ export default function Orders() {
           <div className="divide-y divide-xy-border">
             {filteredOrders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((order, idx) => {
               const statusInfo = getStatusInfo(order.order_status);
-              const orderNo = order.order_no || order.order_id || `unknown-${idx}`;
+              const orderNo = order.order_no || order.order_id || `order-${(currentPage - 1) * PAGE_SIZE + idx}-${order.order_time || ''}`;
               const picUrl = order.goods?.images?.[0] || order.pic_url || '';
               const title = order.goods?.title || order.title || '未知商品';
 

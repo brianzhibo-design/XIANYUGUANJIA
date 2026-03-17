@@ -53,14 +53,8 @@ export default function SetupGuide() {
         if (res.data?.completed) {
           setWizardDone(true);
           localStorage.setItem(WIZARD_CACHE_KEY, '1');
-        } else {
-          setLoading(false);
-          return;
         }
-      } catch {
-        setLoading(false);
-        return;
-      }
+      } catch { /* backend unavailable */ }
     }
     runChecks();
   };
@@ -126,7 +120,6 @@ export default function SetupGuide() {
   };
 
   if (dismissed) return null;
-  if (!wizardDone) return null;
 
   const allDone = checks.pythonBackend && checks.xgjConfigured && checks.aiConfigured && checks.cookieSet && checks.notifyConfigured;
 
