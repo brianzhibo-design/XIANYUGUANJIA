@@ -7,6 +7,7 @@ Configuration Management Module
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 from functools import lru_cache
@@ -19,6 +20,28 @@ from pydantic import ValidationError
 from src.core.config_models import ConfigModel
 from src.core.error_handler import ConfigError
 from src.core.logger import get_logger
+
+_AUTO_REPLY_FIELD_MAP: dict[str, str] = {
+    "default_reply": "default_reply",
+    "virtual_default_reply": "virtual_default_reply",
+    "enabled": "enabled",
+    "ai_intent_enabled": "ai_intent_enabled",
+    "quote_missing_template": "quote_missing_template",
+    "strict_format_reply_enabled": "strict_format_reply_enabled",
+    "force_non_empty_reply": "force_non_empty_reply",
+    "non_empty_reply_fallback": "non_empty_reply_fallback",
+    "quote_failed_template": "quote_failed_template",
+    "quote_reply_max_couriers": "quote_reply_max_couriers",
+    "first_reply_delay": "first_reply_delay_seconds",
+    "inter_reply_delay": "inter_reply_delay_seconds",
+}
+
+_RANGE_FIELDS = {"first_reply_delay", "inter_reply_delay"}
+
+_INTENT_RULE_KEYS = {
+    "name", "keywords", "reply", "patterns", "priority",
+    "categories", "needs_human", "human_reason", "phase", "skip_reply",
+}
 
 
 class Config:
@@ -69,11 +92,13 @@ class Config:
             self._load_env_file()
             self._resolve_env_variables()
             self._set_defaults()
+            self._merge_system_config()
             self._apply_env_overrides()
         else:
             if config_path:
                 self.logger.error(f"指定的配置文件不存在: {config_path}，使用默认配置")
             self._set_defaults()
+            self._merge_system_config()
             self._load_env_file()
             self._apply_env_overrides()
 
@@ -303,6 +328,96 @@ class Config:
             self._config["browser_runtime"] = dict(self._config["openclaw"])
         if "openclaw" not in self._config and "browser_runtime" in self._config:
             self._config["openclaw"] = dict(self._config["browser_runtime"])
+
+    def _merge_system_config(self) -> None:
+        """Merge data/system_config.json into runtime config.
+
+        Priority: config.yaml defaults < system_config.json < .env overrides.
+        This removes the need for _sync_system_config_to_yaml as the bridging
+        mechanism between Dashboard-persisted config and the runtime.
+        """
+        sys_path = os.path.join("data", "system_config.json")
+        if not os.path.exists(sys_path):
+            return
+
+        try:
+            with open(sys_path, encoding="utf-8") as f:
+                sys_cfg = json.load(f)
+        except Exception:
+            return
+
+        if not isinstance(sys_cfg, dict):
+            return
+
+        for sys_section in ("ai", "pricing", "delivery", "store"):
+            src = sys_cfg.get(sys_section)
+            if not isinstance(src, dict):
+                continue
+            target = self._config.setdefault(sys_section, {})
+            if isinstance(target, dict):
+                target.update(src)
+
+        cc = sys_cfg.get("cookie_cloud")
+        if isinstance(cc, dict):
+            self._config.setdefault("cookie_cloud", {}).update(cc)
+
+        ar = sys_cfg.get("auto_reply")
+        if isinstance(ar, dict):
+            msgs = self._config.setdefault("messages", {})
+            if isinstance(msgs, dict):
+                for src_key, dst_key in _AUTO_REPLY_FIELD_MAP.items():
+                    if src_key not in ar:
+                        continue
+                    val = ar[src_key]
+                    if src_key in _RANGE_FIELDS and isinstance(val, str) and "-" in val:
+                        try:
+                            parts = val.split("-", 1)
+                            val = [float(parts[0].strip()), float(parts[1].strip())]
+                        except (ValueError, IndexError):
+                            pass
+                    msgs[dst_key] = val
+
+                kw_text = ar.get("keyword_replies_text")
+                if isinstance(kw_text, str) and kw_text.strip():
+                    kw_dict: dict[str, str] = {}
+                    for line in kw_text.strip().splitlines():
+                        line = line.strip()
+                        if "=" in line:
+                            k, v = line.split("=", 1)
+                            k, v = k.strip(), v.strip()
+                            if k and v:
+                                kw_dict[k] = v
+                    if kw_dict:
+                        msgs["keyword_replies"] = kw_dict
+
+                custom_rules = ar.get("custom_intent_rules")
+                if isinstance(custom_rules, list):
+                    msgs["intent_rules"] = [
+                        {k: v for k, v in r.items() if k in _INTENT_RULE_KEYS}
+                        for r in custom_rules
+                        if isinstance(r, dict) and r.get("name")
+                    ]
+
+        slider = sys_cfg.get("slider_auto_solve")
+        if isinstance(slider, dict):
+            msgs = self._config.setdefault("messages", {})
+            if isinstance(msgs, dict):
+                ws_cfg = msgs.setdefault("ws", {})
+                if isinstance(ws_cfg, dict):
+                    slider_dict: dict[str, Any] = {
+                        "enabled": bool(slider.get("enabled", False)),
+                        "max_attempts": int(slider.get("max_attempts", 2)),
+                        "cooldown_seconds": int(slider.get("cooldown_seconds", 300)),
+                        "headless": bool(slider.get("headless", False)),
+                    }
+                    fp = slider.get("fingerprint_browser")
+                    if isinstance(fp, dict):
+                        slider_dict["fingerprint_browser"] = {
+                            "enabled": bool(fp.get("enabled", False)),
+                            "api_url": str(fp.get("api_url", "http://127.0.0.1:54345")),
+                            "browser_id": str(fp.get("browser_id", "")),
+                        }
+                    ws_cfg["slider_auto_solve"] = slider_dict
 
     def _apply_env_overrides(self) -> None:
         """将常用运行时环境变量映射到结构化配置。"""

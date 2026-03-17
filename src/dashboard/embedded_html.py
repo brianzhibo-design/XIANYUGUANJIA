@@ -398,7 +398,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     function statusClassByRisk(level) {
       if (level === "blocked") return "error";
       if (level === "warning") return "warning";
+      if (level === "recovering") return "warning";
       if (level === "normal") return "success";
+      if (level === "stale") return "info";
       return "info";
     }
 

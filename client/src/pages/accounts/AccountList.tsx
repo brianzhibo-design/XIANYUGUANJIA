@@ -23,10 +23,12 @@ const GRAB_STAGE_CONFIG: Record<string, { color: string; label: string }> = {
 };
 
 const RISK_LEVEL_CONFIG: Record<string, any> = {
-  normal:  { label: '正常',     icon: ShieldCheck, bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800' },
-  warning: { label: '风险预警', icon: Shield,      bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800' },
-  blocked: { label: '疑似封控', icon: ShieldAlert,  bg: 'bg-red-50',   border: 'border-red-200',   text: 'text-red-800' },
-  unknown: { label: '未检测',   icon: Shield,      bg: 'bg-gray-50',  border: 'border-gray-200',  text: 'text-gray-600' },
+  normal:     { label: '正常',             icon: ShieldCheck, bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-800' },
+  warning:    { label: '风险预警',         icon: Shield,      bg: 'bg-amber-50',  border: 'border-amber-200',  text: 'text-amber-800' },
+  blocked:    { label: '疑似封控',         icon: ShieldAlert, bg: 'bg-red-50',    border: 'border-red-200',    text: 'text-red-800' },
+  stale:      { label: '历史风控（已过期）', icon: Shield,      bg: 'bg-slate-50',  border: 'border-slate-200',  text: 'text-slate-600' },
+  recovering: { label: '恢复中',           icon: RefreshCw,   bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-800' },
+  unknown:    { label: '未检测',           icon: Shield,      bg: 'bg-gray-50',   border: 'border-gray-200',   text: 'text-gray-600' },
 };
 
 const RECOVERY_STAGE_LABELS: Record<string, string> = {
@@ -40,7 +42,18 @@ const RECOVERY_STAGE_LABELS: Record<string, string> = {
 };
 
 function getRecoveryGuide(riskLevel: string, recoveryStage: string, cookieCloudConfigured: boolean = false, sliderAutoSolve: boolean = false) {
-  if (riskLevel === 'normal') return null;
+  if (riskLevel === 'normal' || riskLevel === 'stale') return null;
+  if (riskLevel === 'recovering') {
+    return {
+      severity: 'info' as const,
+      title: 'Cookie 已刷新，等待恢复',
+      steps: [
+        '系统已检测到新的 Cookie，正在尝试恢复连接',
+        '通常 20-30 秒内会自动恢复，请耐心等待',
+        '如果超过 1 分钟仍未恢复，请检查 Cookie 是否有效',
+      ],
+    };
+  }
   if (riskLevel === 'warning') {
     return {
       severity: 'warning',

@@ -865,4 +865,9 @@ def update_config(updates: dict[str, Any]) -> dict[str, Any]:
                 continue
             current[section][k] = v
     write_system_config(current)
+    try:
+        from src.core.config import get_config
+        get_config().reload()
+    except Exception:
+        pass
     return current

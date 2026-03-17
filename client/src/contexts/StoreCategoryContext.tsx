@@ -8,8 +8,7 @@ export interface CategoryMeta {
 }
 
 export const CATEGORY_META: Record<string, CategoryMeta> = {
-  express:      { label: '快递代发',     icon: '📦', desc: '转转、闲鱼代发快递包裹' },
-  freight:      { label: '大件快运',     icon: '🚛', desc: '大件物流、家具电器搬家寄件' },
+  express:      { label: '快递代发',     icon: '📦', desc: '快递+大件快运，自动报价、自动上架' },
   exchange:     { label: '兑换码/卡密', icon: '🔑', desc: '游戏兑换码、充值卡密等虚拟商品' },
   recharge:     { label: '充值代充',     icon: '💳', desc: '游戏代充、会员充值' },
   movie_ticket: { label: '电影票',       icon: '🎬', desc: '电影票代购' },
@@ -73,7 +72,7 @@ export function StoreCategoryProvider({ children }: { children: ReactNode }) {
 
   const isFeatureVisible = useCallback((featureKey: string) => {
     if (UNIVERSAL_FEATURES.has(featureKey)) return true;
-    if (category === 'express' || category === 'freight') return EXPRESS_FEATURES.has(featureKey);
+    if (category === 'express') return EXPRESS_FEATURES.has(featureKey);
     return VIRTUAL_FEATURES.has(featureKey);
   }, [category]);
 

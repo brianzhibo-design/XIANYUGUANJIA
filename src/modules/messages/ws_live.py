@@ -323,9 +323,13 @@ class GoofishWsTransport:
         self._cookie_fp = ""
         self._apply_cookie_text(cookie_text, reason="init")
 
-        manual_timeout = int(self.config.get("manual_mode_timeout", 3600))
+        manual_timeout = int(self.config.get("manual_mode_timeout", 600))
+        manual_resume = int(self.config.get("manual_mode_resume_seconds", 300))
         db_path = os.path.join("data", "manual_mode.db")
-        self._manual_mode_store = ManualModeStore(db_path, timeout_seconds=manual_timeout)
+        self._manual_mode_store = ManualModeStore(
+            db_path, timeout_seconds=manual_timeout, resume_after_seconds=manual_resume
+        )
+        self._on_manual_takeover: Any | None = None
 
         self._bot_sent_sigs: dict[str, float] = {}
         self._BOT_SIG_TTL = 7200.0
@@ -350,9 +354,11 @@ class GoofishWsTransport:
         self._last_heartbeat_ack = 0.0
         self._connect_failures = 0
         self._rgv587_consecutive = 0
+        self._active_refresh_401_streak = 0
         self._last_disconnect_reason = ""
         self._cookie_changed = threading.Event()
         self._last_cookie_check: float = 0.0
+        self._last_im_refresh_at: float = 0.0
 
     def notify_cookie_changed(self) -> None:
         """Thread-safe signal: external cookie update detected."""
@@ -381,6 +387,7 @@ class GoofishWsTransport:
         if changed:
             self._token = ""
             self._token_ts = 0.0
+            self._last_cookie_applied_at = time.time()
             if reason:
                 self.logger.info(
                     f"WS cookie applied ({reason}), uid={self.my_user_id[:10]}..., fields={len(self.cookies)}"
@@ -517,6 +524,44 @@ class GoofishWsTransport:
             self.logger.debug(f"CookieCloud poll failed: {exc}")
             return False
 
+    _IM_REFRESH_COOLDOWN = 60.0
+    _last_im_cookie_refresh_at: float = 0.0
+
+    async def _try_goofish_im_refresh(self) -> bool:
+        """从闲管家IM Electron应用直接读取最新Cookie（首选恢复方式）。
+
+        内置 60s 冷却期，避免 RGV587 场景下无限快速循环。
+        """
+        now = time.time()
+        if (now - self._last_im_cookie_refresh_at) < self._IM_REFRESH_COOLDOWN:
+            return False
+
+        try:
+            from src.core.goofish_im_cookie import read_goofish_im_cookies, merge_cookies
+        except ImportError:
+            return False
+
+        self._last_im_cookie_refresh_at = now
+
+        result = read_goofish_im_cookies(user_id=self.my_user_id)
+        if not result:
+            self.logger.debug("goofish_im refresh: no valid cookies from IM app")
+            return False
+
+        existing_cookie = os.environ.get("XIANYU_COOKIE_1", "") or self.cookie_text
+        merged = merge_cookies(result["cookies"], existing_cookie)
+
+        changed = self._apply_cookie_text(merged, reason="goofish_im")
+        if changed:
+            self._last_cookie_applied_at = time.time()
+            os.environ["XIANYU_COOKIE_1"] = merged
+            self._session_peer.clear()
+            self._seen_event.clear()
+            ttl = result.get("m_h5_tk_ttl")
+            ttl_str = f", _m_h5_tk TTL={ttl:.0f}s" if ttl else ""
+            self.logger.info(f"goofish_im refresh succeeded{ttl_str}")
+        return changed
+
     async def _try_active_cookie_refresh(self) -> bool:
         """主动调用 rookiepy 从浏览器 DB 读取最新 Cookie（含 _m_h5_tk）。
 
@@ -615,9 +660,72 @@ class GoofishWsTransport:
             pass
 
     _last_slider_recovery_at: float = 0.0
+    _last_cookie_applied_at: float = 0.0
     _SLIDER_RECOVERY_COOLDOWN = 60.0
 
-    async def _try_slider_recovery(self) -> bool:
+    def _record_slider_events(
+        self, result: dict[str, Any], trigger_source: str
+    ) -> None:
+        """Persist slider attempt data to SliderEventStore."""
+        try:
+            from src.core.slider_store import SliderEventStore
+            store = SliderEventStore.get_instance()
+
+            prev_ts = store.get_last_cookie_apply_ts()
+            cookie_ttl = None
+            if self._last_cookie_applied_at > 0:
+                cookie_ttl = int(time.time() - self._last_cookie_applied_at)
+
+            attempts = result.get("attempts", [])
+            if not attempts:
+                store.record_event(
+                    trigger_source=trigger_source,
+                    rgv587_consecutive=self._rgv587_consecutive,
+                    browser_strategy=result.get("browser_strategy", "none"),
+                    browser_connect_ms=result.get("browser_connect_ms"),
+                    result="error" if result.get("error") else "no_attempts",
+                    error_message=result.get("error"),
+                    total_duration_ms=result.get("total_duration_ms"),
+                    prev_cookie_applied_at=prev_ts,
+                    cookie_ttl_seconds=cookie_ttl,
+                )
+                return
+
+            for att in attempts:
+                cookie_applied = bool(result.get("cookie")) and att is attempts[-1]
+                cookie_str = result.get("cookie") or ""
+                cookie_keys = {
+                    p.split("=")[0].strip()
+                    for p in cookie_str.split(";") if "=" in p
+                } if cookie_str else set()
+
+                store.record_event(
+                    trigger_source=trigger_source,
+                    rgv587_consecutive=self._rgv587_consecutive,
+                    browser_strategy=att.get("browser_strategy", result.get("browser_strategy", "none")),
+                    browser_connect_ms=att.get("browser_connect_ms", result.get("browser_connect_ms")),
+                    attempt_num=att.get("attempt_num", 0),
+                    slider_type=att.get("slider_type"),
+                    nc_track_width=att.get("nc_track_width"),
+                    nc_drag_distance=att.get("nc_drag_distance"),
+                    puzzle_bg_found=int(att.get("puzzle_bg_found", False)),
+                    puzzle_slice_found=int(att.get("puzzle_slice_found", False)),
+                    puzzle_gap_x=att.get("puzzle_gap_x"),
+                    puzzle_match_score=att.get("puzzle_match_score"),
+                    result=att.get("result", "failed"),
+                    fail_reason=att.get("fail_reason"),
+                    screenshot_path=att.get("screenshot_path"),
+                    cookie_applied=int(cookie_applied),
+                    cookie_fields_count=len(cookie_keys) if cookie_applied else None,
+                    cookie_has_h5tk=int("_m_h5_tk" in cookie_keys) if cookie_applied else None,
+                    total_duration_ms=result.get("total_duration_ms"),
+                    prev_cookie_applied_at=prev_ts,
+                    cookie_ttl_seconds=cookie_ttl,
+                )
+        except Exception as exc:
+            self.logger.debug(f"Failed to record slider events: {exc}")
+
+    async def _try_slider_recovery(self, trigger_source: str = "rgv587") -> bool:
         """Phase 2+3: open browser for slider verification, optionally auto-solve."""
         now = time.time()
         if now - self._last_slider_recovery_at < self._SLIDER_RECOVERY_COOLDOWN:
@@ -639,75 +747,84 @@ class GoofishWsTransport:
                 config=self.config,
                 logger=self.logger,
             )
-            if result and result.get("cookie"):
-                cookie_str = result["cookie"]
-                _required = {"sgcookie", "unb", "cookie2", "_m_h5_tk"}
-                cookie_keys = {p.split("=")[0].strip() for p in cookie_str.split(";") if "=" in p}
-                missing = _required - cookie_keys
-                is_complete = not missing
+            if not result:
+                return False
 
-                if is_complete:
-                    changed = self._apply_cookie_text(cookie_str, reason="slider_recovery")
-                    if changed:
-                        os.environ["XIANYU_COOKIE_1"] = cookie_str
+            self._record_slider_events(result, trigger_source)
+
+            cookie_str = result.get("cookie")
+            if not cookie_str:
+                return False
+
+            _required = {"sgcookie", "unb", "cookie2", "_m_h5_tk"}
+            cookie_keys = {p.split("=")[0].strip() for p in cookie_str.split(";") if "=" in p}
+            missing = _required - cookie_keys
+            is_complete = not missing
+
+            if is_complete:
+                changed = self._apply_cookie_text(cookie_str, reason="slider_recovery")
+                if changed:
+                    self._last_cookie_applied_at = time.time()
+                    os.environ["XIANYU_COOKIE_1"] = cookie_str
+                    self._session_peer.clear()
+                    self._seen_event.clear()
+                    try:
+                        from src.core.notify import send_system_notification
+                        send_system_notification(
+                            "【闲鱼自动化】✅ 风控滑块验证已通过\nCookie 已自动恢复，WS 即将重连",
+                            event="risk_control",
+                        )
+                    except Exception:
+                        pass
+                return changed
+
+            self.logger.info(
+                f"Slider recovery: cookie incomplete (missing: {missing}), "
+                f"got {len(cookie_keys)} fields. Trying hasLogin to generate _m_h5_tk..."
+            )
+
+            if "_m_h5_tk" in missing and len(missing) == 1:
+                self._apply_cookie_text(cookie_str, reason="slider_partial")
+                os.environ["XIANYU_COOKIE_1"] = self.cookie_text
+                try:
+                    hl_ok = await self._preflight_has_login()
+                    if hl_ok and self.cookies.get("_m_h5_tk"):
+                        self.logger.info(
+                            "hasLogin 补全 _m_h5_tk 成功，WS 即将重连"
+                        )
+                        self._last_cookie_applied_at = time.time()
                         self._session_peer.clear()
                         self._seen_event.clear()
                         try:
                             from src.core.notify import send_system_notification
                             send_system_notification(
-                                "【闲鱼自动化】✅ 风控滑块验证已通过\nCookie 已自动恢复，WS 即将重连",
+                                "【闲鱼自动化】✅ hasLogin 补全 _m_h5_tk 成功\nCookie 已自动恢复，WS 即将重连",
                                 event="risk_control",
                             )
                         except Exception:
                             pass
-                    return changed
-
-                self.logger.info(
-                    f"Slider recovery: cookie incomplete (missing: {missing}), "
-                    f"got {len(cookie_keys)} fields. Trying hasLogin to generate _m_h5_tk..."
-                )
-
-                if "_m_h5_tk" in missing and len(missing) == 1:
-                    self._apply_cookie_text(cookie_str, reason="slider_partial")
-                    os.environ["XIANYU_COOKIE_1"] = self.cookie_text
-                    try:
-                        hl_ok = await self._preflight_has_login()
-                        if hl_ok and self.cookies.get("_m_h5_tk"):
-                            self.logger.info(
-                                "hasLogin 补全 _m_h5_tk 成功，WS 即将重连"
-                            )
-                            self._session_peer.clear()
-                            self._seen_event.clear()
-                            try:
-                                from src.core.notify import send_system_notification
-                                send_system_notification(
-                                    "【闲鱼自动化】✅ hasLogin 补全 _m_h5_tk 成功\nCookie 已自动恢复，WS 即将重连",
-                                    event="risk_control",
-                                )
-                            except Exception:
-                                pass
-                            return True
-                        self.logger.info("hasLogin 未能补全 _m_h5_tk，回退 CookieCloud 轮询")
-                    except Exception as exc:
-                        self.logger.info(f"hasLogin 补全失败: {exc}")
-
-                try:
-                    from src.core.notify import send_system_notification
-                    send_system_notification(
-                        "【闲鱼自动化】⚠️ 滑块页面无验证码，但提取的 Cookie 不完整\n"
-                        "缺少字段: " + ", ".join(sorted(missing)) + "\n"
-                        "请在 CookieCloud 扩展中点「手动同步」或在闲鱼网页重新登录",
-                        event="risk_control",
-                    )
-                except Exception:
-                    pass
-                for _ in range(20):
-                    refreshed = await self._try_cookiecloud_poll()
-                    if refreshed is True:
-                        self.logger.info("CookieCloud provided complete cookie after slider solve")
                         return True
-                    await asyncio.sleep(15)
-                return False
+                    self.logger.info("hasLogin 未能补全 _m_h5_tk，回退 CookieCloud 轮询")
+                except Exception as exc:
+                    self.logger.info(f"hasLogin 补全失败: {exc}")
+
+            try:
+                from src.core.notify import send_system_notification
+                send_system_notification(
+                    "【闲鱼自动化】⚠️ 滑块页面无验证码，但提取的 Cookie 不完整\n"
+                    "缺少字段: " + ", ".join(sorted(missing)) + "\n"
+                    "请在 CookieCloud 扩展中点「手动同步」或在闲鱼网页重新登录",
+                    event="risk_control",
+                )
+            except Exception:
+                pass
+            for _ in range(20):
+                refreshed = await self._try_cookiecloud_poll()
+                if refreshed is True:
+                    self._last_cookie_applied_at = time.time()
+                    self.logger.info("CookieCloud provided complete cookie after slider solve")
+                    return True
+                await asyncio.sleep(15)
             return False
         except Exception as exc:
             self.logger.info(f"Slider recovery failed: {exc}")
@@ -1052,6 +1169,33 @@ class GoofishWsTransport:
         for k in stale_cache:
             self._recent_msgs_cache.pop(k, None)
 
+    _SYSTEM_MSG_PATTERNS: list[str] = [
+        "记得及时确认收货",
+        "已修改价格",
+        "我已修改价格",
+        "等待你付款",
+        "请确认价格",
+        "已发货",
+        "你已发货",
+        "等待你发货",
+        "交易成功",
+        "订单已完成",
+        "订单已关闭",
+        "已退款",
+        "请在24小时内",
+        "交易已关闭",
+        "已确认收货",
+        "申请退款",
+        "同意退款",
+    ]
+
+    def _is_system_message(self, text: str) -> bool:
+        """Check if text matches a platform system message pattern."""
+        for pattern in self._SYSTEM_MSG_PATTERNS:
+            if pattern in text:
+                return True
+        return False
+
     async def _push_event(self, event: dict[str, Any]) -> None:
         chat_id = str(event.get("chat_id", "") or "")
         sender_id = str(event.get("sender_user_id", "") or "")
@@ -1062,8 +1206,17 @@ class GoofishWsTransport:
 
         if sender_id == self.my_user_id:
             if not self.is_bot_sent(chat_id, text):
+                if self._is_system_message(text):
+                    self.logger.debug(f"[人工介入] 跳过平台系统消息: session={chat_id}, text={text[:30]}")
+                    return
                 try:
                     self._manual_mode_store.set_state(chat_id, True)
+                    self._manual_mode_store.record_seller_activity(chat_id)
+                    if self._on_manual_takeover is not None:
+                        try:
+                            self._on_manual_takeover(chat_id, True)
+                        except Exception:
+                            pass
                     self.logger.info(
                         f"[人工介入] 检测到卖家手动消息: session={chat_id}, text={text[:30]}"
                     )
@@ -1080,6 +1233,11 @@ class GoofishWsTransport:
 
         self._seen_event[dedupe_key] = time.time()
         self._cleanup_seen()
+
+        try:
+            self._manual_mode_store.record_buyer_activity(chat_id)
+        except Exception:
+            pass
 
         self._session_peer[chat_id] = sender_id
         if sender_id:
@@ -1183,6 +1341,7 @@ class GoofishWsTransport:
                 self._ready.set()
                 self._connect_failures = 0
                 self._rgv587_consecutive = 0
+                self._active_refresh_401_streak = 0
                 self.logger.info("Connected to Goofish WebSocket transport")
 
                 while not self._stop_event.is_set():
@@ -1219,6 +1378,23 @@ class GoofishWsTransport:
                             self._connect_failures = 0
                             break
 
+                    im_refresh_interval = 45 * 60
+                    if (now - self._last_im_refresh_at) >= im_refresh_interval:
+                        ttl = self._m_h5_tk_seconds_until_expiry()
+                        if ttl is not None and ttl < 900:
+                            self.logger.info(
+                                f"_m_h5_tk TTL={ttl:.0f}s < 900s, proactive IM refresh"
+                            )
+                            if await self._try_goofish_im_refresh():
+                                self._last_im_refresh_at = now
+                                self.logger.info("Proactive IM cookie refresh succeeded")
+                                self._ready.clear()
+                                self._token = ""
+                                self._token_ts = 0.0
+                                self._connect_failures = 0
+                                break
+                        self._last_im_refresh_at = now
+
                     try:
                         msg_text = await asyncio.wait_for(self._ws.recv(), timeout=1.0)
                     except asyncio.TimeoutError:
@@ -1248,12 +1424,22 @@ class GoofishWsTransport:
                         slider_cfg = self.config.get("slider_auto_solve", {})
                         slider_enabled = bool(slider_cfg.get("enabled")) if isinstance(slider_cfg, dict) else False
 
-                        if slider_enabled:
-                            self.logger.warning(
-                                f"RGV587 风控检测 ({self._rgv587_consecutive})，立即尝试滑块恢复..."
+                        self.logger.warning(
+                            f"RGV587 风控检测 ({self._rgv587_consecutive})，尝试恢复..."
+                        )
+
+                        if self._rgv587_consecutive <= 2 and await self._try_goofish_im_refresh():
+                            self._connect_failures = 0
+                            rgv_backoff = 30.0 * self._rgv587_consecutive
+                            self.logger.info(
+                                f"闲管家IM Cookie刷新成功，退避 {rgv_backoff:.0f}s 后重试 WS 连接"
                             )
+                            await asyncio.sleep(rgv_backoff)
+                            continue
+
+                        if slider_enabled:
                             self._send_risk_control_notification()
-                            recovered = await self._try_slider_recovery()
+                            recovered = await self._try_slider_recovery(trigger_source="rgv587")
                             if recovered:
                                 self._connect_failures = 0
                                 self._rgv587_consecutive = 0
@@ -1268,6 +1454,7 @@ class GoofishWsTransport:
                                     f"RGV587 风控检测 ({self._rgv587_consecutive}/{_RGV587_BACKOFF_MAX})，"
                                     f"退避 {backoff:.0f}s 后重试..."
                                 )
+                                await self._try_goofish_im_refresh()
                                 if await self._try_active_cookie_refresh():
                                     self.logger.info("Active cookie refresh succeeded during RGV587 backoff")
                                 await asyncio.sleep(backoff)
@@ -1283,7 +1470,27 @@ class GoofishWsTransport:
                             self._rgv587_consecutive = 0
                             self.logger.info("检测到 Cookie 更新，立即重试 WS 连接")
                             continue
+                    elif await self._try_goofish_im_refresh():
+                        self._active_refresh_401_streak = 0
+                        self._connect_failures = 0
+                        self.logger.info("闲管家IM Cookie刷新成功 (401恢复)，立即重试 WS 连接")
+                        continue
                     elif await self._try_active_cookie_refresh():
+                        self._active_refresh_401_streak += 1
+                        if self._active_refresh_401_streak >= 3:
+                            self.logger.warning(
+                                "Active refresh 连续 %d 次仍 401，升级到 slider_recovery",
+                                self._active_refresh_401_streak,
+                            )
+                            if await self._try_slider_recovery(trigger_source="401_streak"):
+                                self._active_refresh_401_streak = 0
+                                self._connect_failures = 0
+                                self.logger.info("slider_recovery 成功，立即重试 WS 连接")
+                                continue
+                            if await self._wait_for_cookie_update_forever():
+                                self._active_refresh_401_streak = 0
+                                self._connect_failures = 0
+                                continue
                         self._connect_failures = 0
                         self.logger.info("Active cookie refresh succeeded, retrying WS immediately")
                         continue
@@ -1386,14 +1593,17 @@ class GoofishWsTransport:
         if not self._ready.is_set() and not await self._wait_event_with_timeout(self._ready, 10.0):
             return False
 
-        if self._ws is None:
+        chat_id = str(session_id or "").strip()
+        if not chat_id:
             return False
 
-        chat_id = str(session_id or "").strip()
         to_user_id = str(self._session_peer.get(chat_id, "") or "").strip()
-        if not chat_id or not to_user_id:
-            self.logger.warning(f"WS send skipped: missing peer mapping for session `{chat_id}`")
-            return False
+        if not to_user_id:
+            self.logger.info(f"WS send: peer mapping miss for `{chat_id}`, falling back to mtop send")
+            return await self._send_text_via_mtop(chat_id, text)
+
+        if self._ws is None:
+            return await self._send_text_via_mtop(chat_id, text)
 
         payload = {
             "contentType": 1,
@@ -1424,7 +1634,44 @@ class GoofishWsTransport:
             self._bot_sent_sigs[sig] = time.time()
             return True
         except Exception as exc:
-            self.logger.warning(f"WS send failed: {exc}")
+            self.logger.warning(f"WS send failed: {exc}, falling back to mtop")
+            return await self._send_text_via_mtop(chat_id, text)
+
+    async def _send_text_via_mtop(self, chat_id: str, text: str) -> bool:
+        """通过 mtop HTTP API 发送消息（WS 不可用或 peer 映射缺失时的回退路径）。"""
+        cid = f"{chat_id}@goofish" if "@" not in chat_id else chat_id
+        payload_inner = {
+            "contentType": 1,
+            "text": {"text": str(text or "")},
+        }
+        content_b64 = base64.b64encode(
+            json.dumps(payload_inner, ensure_ascii=False).encode("utf-8")
+        ).decode("utf-8")
+        data_dict = {
+            "uuid": generate_uuid(),
+            "cid": cid,
+            "content": json.dumps(
+                {"contentType": 101, "custom": {"type": 1, "data": content_b64}},
+                ensure_ascii=False,
+            ),
+        }
+        try:
+            result = await self._mtop_call(
+                "mtop.taobao.idle.pc.im.msg.send",
+                "1.0",
+                data_dict,
+            )
+            ret = result.get("ret", []) if isinstance(result, dict) else []
+            success = any("SUCCESS" in str(item) for item in ret) if ret else bool(result.get("data"))
+            if success:
+                sig = hashlib.sha1(f"{chat_id}:{str(text or '')[:100]}".encode()).hexdigest()[:16]
+                self._bot_sent_sigs[sig] = time.time()
+                self.logger.info(f"mtop send succeeded for session `{chat_id}`")
+            else:
+                self.logger.warning(f"mtop send response not successful for `{chat_id}`: ret={ret}")
+            return success
+        except Exception as exc:
+            self.logger.warning(f"mtop send failed for `{chat_id}`: {exc}")
             return False
 
     def is_bot_sent(self, chat_id: str, text: str) -> bool:

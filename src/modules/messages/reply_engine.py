@@ -411,6 +411,17 @@ DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
         "categories": ["express"],
     },
     {
+        "name": "express_oversize_fee",
+        "keywords": ["超长", "超长费", "超长怎么算", "超长收费", "超出长度", "太长了", "超长怎么收"],
+        "patterns": [r"超长.*(?:怎么|如何|收费|费用)", r"(?:长度|尺寸).*超"],
+        "reply": (
+            "关于超长费：快递单边超过1.2米、快运单边超过1.5米，物流方可能根据具体超长情况收取超长费。"
+            "如果产生超长费，小橙序会自动推送补差价通知，直接在小橙序内支付即可~"
+        ),
+        "priority": 43,
+        "categories": ["express"],
+    },
+    {
         "name": "express_human_request",
         "keywords": ["人工", "转人工", "找人工", "人工客服", "真人"],
         "reply": "好的，已为您转接人工客服，请稍等~",
@@ -918,7 +929,14 @@ class ReplyStrategyEngine:
         return self._dedup
 
     def _get_bargain_tracker(self):
-        return None
+        if self._bargain_tracker is None:
+            try:
+                from src.modules.messages.bargain_tracker import BargainTracker
+
+                self._bargain_tracker = BargainTracker()
+            except Exception:
+                pass
+        return self._bargain_tracker
 
     def classify_intent(self, message_text: str, item_title: str = "") -> str:
         normalized = self._normalize_text(message_text)

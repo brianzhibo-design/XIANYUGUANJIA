@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -91,7 +92,12 @@ class WorkflowStore:
         self.db_path = Path(db_path or default_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.logger = get_logger()
+        self._manual_mode_store: Any | None = None
         self._init_schema()
+
+    def bind_manual_mode_store(self, store: Any) -> None:
+        """绑定 ManualModeStore 实例以实现双向同步。"""
+        self._manual_mode_store = store
 
     @staticmethod
     def _now() -> str:
@@ -181,6 +187,10 @@ class WorkflowStore:
                 );
                 """
             )
+            try:
+                conn.execute("ALTER TABLE sla_events ADD COLUMN intent TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass
 
     def ensure_session(self, session: dict[str, Any]) -> None:
         session_id = str(session.get("session_id", ""))
@@ -244,6 +254,12 @@ class WorkflowStore:
                 ),
             )
             changed = cur.rowcount > 0
+
+        if self._manual_mode_store is not None:
+            try:
+                self._manual_mode_store.set_state(session_id, enabled)
+            except Exception as exc:
+                self.logger.debug("sync manual_mode_store failed: %s", exc)
 
         if changed and enabled:
             from src.core.notify import send_system_notification
@@ -377,16 +393,12 @@ class WorkflowStore:
         dedupe_key = f"{session_id}:{last_hash}:{stage}"
         payload_json = json.dumps(session, ensure_ascii=False)
         now = self._now()
-        stale_cutoff = (
-            datetime.now(timezone.utc) - timedelta(seconds=self._DEDUPE_STALE_SECONDS)
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         with self._connect() as conn:
             conn.execute(
                 """DELETE FROM workflow_jobs
-                   WHERE dedupe_key = ? AND status IN ('done', 'dead')
-                   AND created_at < ?""",
-                (dedupe_key, stale_cutoff),
+                   WHERE dedupe_key = ? AND status IN ('done', 'dead')""",
+                (dedupe_key,),
             )
             cur = conn.execute(
                 """
@@ -397,7 +409,17 @@ class WorkflowStore:
                 """,
                 (dedupe_key, session_id, stage, payload_json, now, now, now),
             )
-            return cur.rowcount > 0
+            inserted = cur.rowcount > 0
+            if inserted and stage == "reply":
+                conn.execute(
+                    """
+                    INSERT INTO session_state_transitions(
+                        session_id, from_state, to_state, status, reason, metadata, created_at
+                    ) VALUES (?, ?, ?, 'success', 'msg_received', '{}', ?)
+                    """,
+                    (session_id, "none", WorkflowState.NEW.value, now),
+                )
+            return inserted
 
     def enqueue_delayed_job(
         self, session_id: str, stage: str, delay_seconds: int, payload: dict[str, Any] | None = None,
@@ -575,14 +597,15 @@ class WorkflowStore:
         outcome: str,
         latency_ms: int,
         quote_fallback: bool = False,
+        intent: str = "",
     ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO sla_events(session_id, stage, outcome, latency_ms, quote_fallback, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO sla_events(session_id, stage, outcome, latency_ms, quote_fallback, intent, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, stage, outcome, max(latency_ms, 0), 1 if quote_fallback else 0, self._now()),
+                (session_id, stage, outcome, max(latency_ms, 0), 1 if quote_fallback else 0, intent or "", self._now()),
             )
 
     def _percentile(self, samples: list[int], p: float) -> int:
@@ -727,6 +750,26 @@ class WorkflowWorker:
         db_path = self.config.get("db_path")
         self.store = store or WorkflowStore(db_path=db_path)
 
+        manual_timeout = int(self.config.get("manual_mode_timeout", 600))
+        manual_resume = int(self.config.get("manual_mode_resume_seconds", 300))
+        from src.modules.messages.manual_mode import ManualModeStore
+        self._manual_mode_store = ManualModeStore(
+            os.path.join("data", "manual_mode.db"),
+            timeout_seconds=manual_timeout,
+            resume_after_seconds=manual_resume,
+        )
+        self.store.bind_manual_mode_store(self._manual_mode_store)
+
+        if hasattr(self.message_service, "_workflow_store"):
+            self.message_service._workflow_store = self.store
+
+        try:
+            ws = getattr(self.message_service, "_ws_transport", None)
+            if ws is not None and hasattr(ws, "_on_manual_takeover"):
+                ws._on_manual_takeover = self.store.set_manual_takeover
+        except Exception:
+            pass
+
         self.scan_limit = int(self.config.get("scan_limit", 20))
         self.claim_limit = int(self.config.get("claim_limit", 10))
         self.lease_seconds = int(self.config.get("lease_seconds", 60))
@@ -856,7 +899,16 @@ class WorkflowWorker:
         for job in claimed:
             try:
                 session = self.store.get_session(job.session_id)
-                if session and int(session.get("manual_takeover", 0)) == 1:
+                wf_manual = session and int(session.get("manual_takeover", 0)) == 1
+                mm_manual = False
+                if self._manual_mode_store is not None:
+                    mm_result = self._manual_mode_store.get_state(job.session_id)
+                    mm_manual = mm_result.state.enabled
+                if wf_manual or mm_manual:
+                    if mm_manual and not wf_manual:
+                        self.store.set_manual_takeover(job.session_id, True)
+                    elif wf_manual and not mm_manual and self._manual_mode_store is not None:
+                        self._manual_mode_store.set_state(job.session_id, True)
                     skipped_manual += 1
                     self.store.complete_job(job.id, expected_lease_until=job.lease_until)
                     continue
@@ -882,13 +934,21 @@ class WorkflowWorker:
                 sent = detail.get("sent", False)
                 skipped = detail.get("skipped", False)
                 reason = detail.get("reason", "")
+                rule_matched = detail.get("rule_matched", "")
+                intent = rule_matched or ("quote" if detail.get("is_quote") else "")
                 self.logger.info(
                     f"process_session done: session_id={job.session_id}, "
-                    f"sent={sent}, skipped={skipped}, reason={reason}, latency={latency_ms}ms"
+                    f"sent={sent}, skipped={skipped}, reason={reason}, "
+                    f"intent={intent}, latency={latency_ms}ms"
                 )
 
-                if not sent:
+                if not sent and not skipped:
                     raise RuntimeError(f"reply_not_sent:{reason}")
+
+                if skipped:
+                    self.store.complete_job(job.id, expected_lease_until=job.lease_until)
+                    skipped_manual += 1
+                    continue
 
                 is_quote = bool(detail.get("is_quote", False))
                 quote_need_info = bool(detail.get("quote_need_info", False))
@@ -904,7 +964,8 @@ class WorkflowWorker:
                         "buyer_message": str(detail.get("last_message", ""))[:200],
                         "reply_text": str(detail.get("reply", ""))[:500],
                         "peer_name": str(detail.get("peer_name", "")),
-                        "intent": str(detail.get("policy_reason", "")),
+                        "intent": intent,
+                        "rule_matched": rule_matched,
                     },
                 )
 
@@ -936,6 +997,7 @@ class WorkflowWorker:
                     outcome=outcome,
                     latency_ms=latency_ms,
                     quote_fallback=bool(detail.get("quote_fallback", False)),
+                    intent=intent,
                 )
 
                 completed = self.store.complete_job(job.id, expected_lease_until=job.lease_until)
@@ -988,9 +1050,12 @@ class WorkflowWorker:
             "sla": sla_summary,
         }
 
+    _RUN_FOREVER_CONSECUTIVE_FAIL_MAX = 10
+
     async def run_forever(self, dry_run: bool = False, max_loops: int | None = None) -> dict[str, Any]:
         loops = 0
-        last = {}
+        last: dict[str, Any] = {}
+        consecutive_failures = 0
 
         if self.notify_on_start:
             await self._send_notification(format_start_message(self.poll_interval_seconds, dry_run=dry_run))
@@ -998,7 +1063,20 @@ class WorkflowWorker:
 
         while True:
             loops += 1
-            last = await self.run_once(dry_run=dry_run)
+            try:
+                last = await self.run_once(dry_run=dry_run)
+                consecutive_failures = 0
+            except Exception as exc:
+                consecutive_failures += 1
+                self.logger.exception("run_once raised, consecutive_failures=%d: %s", consecutive_failures, exc)
+                if consecutive_failures >= self._RUN_FOREVER_CONSECUTIVE_FAIL_MAX:
+                    self.logger.error(
+                        "run_forever exiting: consecutive_failures >= %d",
+                        self._RUN_FOREVER_CONSECUTIVE_FAIL_MAX,
+                    )
+                    raise
+                await asyncio.sleep(5.0)
+                continue
 
             if self.heartbeat_minutes > 0:
                 now = time.time()

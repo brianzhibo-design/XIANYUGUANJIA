@@ -54,3 +54,44 @@ export const serviceControl = (action: string): Promise<AxiosResponse> =>
 
 export const moduleControl = (action: string, target: string): Promise<AxiosResponse> =>
   api.post('/module/control', { action, target });
+
+export interface SliderStats {
+  ok: boolean;
+  total_triggers: number;
+  total_attempts: number;
+  passed: number;
+  failed: number;
+  success_rate: number;
+  nc_attempts: number;
+  nc_passed: number;
+  nc_success_rate: number;
+  puzzle_attempts: number;
+  puzzle_passed: number;
+  puzzle_success_rate: number;
+  avg_cookie_ttl_seconds: number | null;
+  screenshots: Array<{ path: string; ts: string; type: string; result: string }>;
+}
+
+export interface SliderEvent {
+  id: number;
+  trigger_ts: string;
+  trigger_source: string;
+  attempt_num: number;
+  slider_type: string;
+  result: string;
+  fail_reason: string | null;
+  screenshot_path: string | null;
+  cookie_ttl_seconds: number | null;
+  browser_strategy: string;
+  total_duration_ms: number | null;
+  nc_track_width: number | null;
+  nc_drag_distance: number | null;
+  puzzle_bg_found: boolean;
+  puzzle_slice_found: boolean;
+}
+
+export const getSliderStats = (hours = 24): Promise<AxiosResponse<SliderStats>> =>
+  api.get(`/slider/stats?hours=${hours}`);
+
+export const getSliderEvents = (limit = 50): Promise<AxiosResponse<{ ok: boolean; events: SliderEvent[] }>> =>
+  api.get(`/slider/events?limit=${limit}`);

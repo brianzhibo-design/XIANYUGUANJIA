@@ -22,6 +22,13 @@ logger = get_logger()
 
 QUEUE_FILE = Path("data/publish_queue.json")
 
+_DEFAULT_CATEGORIES = ["express", "freight"]
+
+DEFAULT_BRANDS: dict[str, str] = {
+    "express": "圆通·中通·韵达",
+    "freight": "德邦快运·安能·百世快运",
+}
+
 TITLE_TEMPLATES: dict[str, list[str]] = {
     "express": [
         "便宜快递代下单 代发 {brands} 优惠发快递 菜鸟裹裹上门取件 全国可寄",
@@ -187,7 +194,7 @@ class QueueItem:
     replace_product_id: str | None = None
     published_product_id: str | None = None
     scheduled_time: str = ""  # HH:MM 格式的计划发布时间
-    composition: dict[str, str] = field(default_factory=dict)  # 组合模式图层选择
+    composition: dict[str, str] = field(default_factory=dict)  # 预留: compositor 组合模式图层选择，当前未接入发布流程
 
 
 def _now_iso() -> str:
@@ -323,14 +330,21 @@ class PublishQueue:
 
     async def generate_daily_queue(
         self,
-        category: str = "express",
+        category: str | None = None,
+        categories: list[str] | None = None,
         user_schedule: dict | None = None,
     ) -> list[QueueItem]:
-        """根据调度计划生成今日队列。幂等：已有则跳过。"""
+        """根据调度计划生成今日队列。幂等：已有则跳过。
+
+        支持同时为多个品类生成队列项，总数按品类均分。
+        向后兼容：传 category 单值时等同于 categories=[category]。
+        """
         today = _today()
         if self.has_queue_for_date(today):
             logger.info(f"Queue already exists for {today}, skipping generation")
             return self.get_queue(today)
+
+        cats = categories or ([category] if category else _DEFAULT_CATEGORIES)
 
         from .scheduler import AutoPublishScheduler
 
@@ -342,75 +356,90 @@ class PublishQueue:
             logger.info("Scheduler says skip today")
             return []
 
-        count = plan.get("new_count", 1)
-        frames = self._get_available_frame_ids()
+        total_count = plan.get("new_count", 1)
+
+        cat_counts = self._split_count(total_count, len(cats))
 
         from .brand_assets import BrandAssetManager
-        mgr = BrandAssetManager()
-        assets = mgr.list_assets(category=category)
-        all_asset_ids = [a["id"] for a in assets]
-
         from .auto_publish import AutoPublishService
-        svc = AutoPublishService()
 
-        scheduled_times = _allocate_publish_times(count)
+        mgr = BrandAssetManager()
+        svc = AutoPublishService()
+        scheduled_times = _allocate_publish_times(total_count)
 
         items: list[QueueItem] = []
-        for i in range(count):
-            title, description = await self._ai_generate_content(svc, category, i)
+        time_idx = 0
+        for cat_idx, cat in enumerate(cats):
+            cat_asset_ids = [a["id"] for a in mgr.list_assets(category=cat)]
+            count_for_cat = cat_counts[cat_idx]
 
-            brand_items = self._load_brand_items_for_generation(mgr, all_asset_ids)
-            from .templates.themes import get_random_variant
-            variant = get_random_variant(category)
-            frame_params = {
-                "brand_items": brand_items,
-                "headline": variant.get("headline", ""),
-                "sub_headline": variant.get("sub_headline", ""),
-                "labels": variant.get("labels", ""),
-                "tagline": variant.get("tagline", ""),
-            }
+            for i in range(count_for_cat):
+                title, description = await self._ai_generate_content(svc, cat, i)
 
-            frame_id = random.choice(frames) if frames else "grid_paper"
-            from .image_generator import generate_frame_images
-            local_images = await generate_frame_images(
-                frame_id=frame_id, category=category, params=frame_params,
-            )
-            used_layers = {}
+                brand_items = self._load_brand_items_for_generation(mgr, cat_asset_ids)
+                from .templates.themes import get_random_variant
+                variant = get_random_variant(cat)
+                params = {
+                    "brand_items": brand_items,
+                    "headline": variant.get("headline", ""),
+                    "sub_headline": variant.get("sub_headline", ""),
+                    "labels": variant.get("labels", ""),
+                    "tagline": variant.get("tagline", ""),
+                }
 
-            replace_id = None
-            if action == "steady_replace" and plan.get("replace_ids"):
-                replace_ids = plan["replace_ids"]
-                if i < len(replace_ids):
-                    replace_id = replace_ids[i]
+                from .templates.frames import list_frames
+                frames = list_frames()
+                chosen_frame = random.choice(frames) if frames else {"id": "grid_paper"}
+                chosen_frame_id = chosen_frame["id"]
 
-            item = QueueItem(
-                id=str(uuid.uuid4()),
-                status="draft",
-                scheduled_date=today,
-                category=category,
-                title=title,
-                description=description,
-                frame_id=frame_id,
-                brand_asset_ids=all_asset_ids,
-                generated_images=local_images,
-                created_at=_now_iso(),
-                updated_at=_now_iso(),
-                action=action,
-                replace_product_id=replace_id,
-                scheduled_time=scheduled_times[i] if i < len(scheduled_times) else "",
-                composition=used_layers,
-            )
-            self.add_item(item)
-            items.append(item)
-            logger.info(f"Generated queue item {i+1}/{count}: {item.id} composition={used_layers}")
+                from .image_generator import generate_frame_images
+                local_images = await generate_frame_images(
+                    frame_id=chosen_frame_id, category=cat, params=params,
+                )
+                if not local_images:
+                    local_images = []
+                    logger.warning(f"Frame image generation failed for [{cat}] item {i}, frame={chosen_frame_id}")
+
+                replace_id = None
+                if action == "steady_replace" and plan.get("replace_ids"):
+                    replace_ids = plan["replace_ids"]
+                    if time_idx < len(replace_ids):
+                        replace_id = replace_ids[time_idx]
+
+                item = QueueItem(
+                    id=str(uuid.uuid4()),
+                    status="draft",
+                    scheduled_date=today,
+                    category=cat,
+                    title=title,
+                    description=description,
+                    frame_id=chosen_frame_id,
+                    brand_asset_ids=cat_asset_ids,
+                    generated_images=local_images,
+                    created_at=_now_iso(),
+                    updated_at=_now_iso(),
+                    action=action,
+                    replace_product_id=replace_id,
+                    scheduled_time=scheduled_times[time_idx] if time_idx < len(scheduled_times) else "",
+                    composition={},
+                )
+                self.add_item(item)
+                items.append(item)
+                logger.info(f"Generated queue item {time_idx+1}/{total_count} [{cat}]: {item.id}")
+                time_idx += 1
 
         return items
 
-    async def regenerate_images(self, item_id: str) -> QueueItem | None:
-        """重新生成指定队列项的图片。
+    @staticmethod
+    def _split_count(total: int, n_groups: int) -> list[int]:
+        """将 total 尽量均分为 n_groups 份，余数分给靠前的组。"""
+        if n_groups <= 0:
+            return []
+        base, remainder = divmod(total, n_groups)
+        return [base + (1 if i < remainder else 0) for i in range(n_groups)]
 
-        有 composition 字段时使用组合模式（重新随机修饰器），否则沿用 frame_id。
-        """
+    async def regenerate_images(self, item_id: str) -> QueueItem | None:
+        """重新生成指定队列项的图片，随机选择新的 frame 模版。"""
         item = self.get_item(item_id)
         if item is None:
             return None
@@ -421,7 +450,7 @@ class PublishQueue:
 
         from .templates.themes import get_random_variant
         variant = get_random_variant(item.category)
-        frame_params = {
+        params = {
             "brand_items": brand_items,
             "headline": variant.get("headline", ""),
             "sub_headline": variant.get("sub_headline", ""),
@@ -429,22 +458,18 @@ class PublishQueue:
             "tagline": variant.get("tagline", ""),
         }
 
-        updates: dict[str, Any] = {"status": "draft"}
+        from .templates.frames import list_frames
+        frames = list_frames()
+        chosen_frame_id = random.choice(frames)["id"] if frames else "grid_paper"
 
-        if not item.frame_id:
-            frames = self._get_available_frame_ids()
-            item_frame = random.choice(frames) if frames else "grid_paper"
-            updates["frame_id"] = item_frame
-        else:
-            item_frame = item.frame_id
+        updates: dict[str, Any] = {"status": "draft"}
 
         from .image_generator import generate_frame_images
         local_images = await generate_frame_images(
-            frame_id=item_frame,
-            category=item.category,
-            params=frame_params,
+            frame_id=chosen_frame_id, category=item.category, params=params,
         )
         updates["generated_images"] = local_images
+        updates["frame_id"] = chosen_frame_id
         updates["composition"] = {}
 
         return self.update_item(item_id, updates)
@@ -584,7 +609,7 @@ class PublishQueue:
         mgr = BrandAssetManager()
         assets = mgr.list_assets(category=category)
         brand_names = sorted(set(a.get("name", "") for a in assets if a.get("name")))
-        brands_str = "·".join(brand_names[:4]) if brand_names else "圆通·中通·韵达"
+        brands_str = "·".join(brand_names[:4]) if brand_names else DEFAULT_BRANDS.get(category, "圆通·中通·韵达")
 
         prices = PRICE_OPTIONS.get(category, ["3"])
         price = random.choice(prices)

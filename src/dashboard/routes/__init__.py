@@ -15,6 +15,7 @@ from . import quote  # noqa: F401
 from . import cookie  # noqa: F401
 from . import orders  # noqa: F401
 from . import products  # noqa: F401
+from . import slider  # noqa: F401
 # from . import cookie  # noqa: F401
 # from . import quote  # noqa: F401
 # from . import messages  # noqa: F401

@@ -13,6 +13,8 @@ interface ChecksState {
   notifyConfigured: boolean | null;
 }
 
+const WIZARD_CACHE_KEY = 'xianyu_wizard_completed';
+
 interface StepItem {
   key: string;
   label: string;
@@ -27,6 +29,7 @@ interface StepItem {
 
 export default function SetupGuide() {
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === '1');
+  const [wizardDone, setWizardDone] = useState(() => localStorage.getItem(WIZARD_CACHE_KEY) === '1');
   const [checks, setChecks] = useState<ChecksState>({
     pythonBackend: null,
     xgjConfigured: null,
@@ -40,8 +43,27 @@ export default function SetupGuide() {
 
   useEffect(() => {
     if (dismissed) return;
-    runChecks();
+    checkWizardAndRun();
   }, [dismissed]);
+
+  const checkWizardAndRun = async () => {
+    if (!wizardDone) {
+      try {
+        const res = await api.get('/wizard/status');
+        if (res.data?.completed) {
+          setWizardDone(true);
+          localStorage.setItem(WIZARD_CACHE_KEY, '1');
+        } else {
+          setLoading(false);
+          return;
+        }
+      } catch {
+        setLoading(false);
+        return;
+      }
+    }
+    runChecks();
+  };
 
   const runChecks = async () => {
     setLoading(true);
@@ -104,6 +126,7 @@ export default function SetupGuide() {
   };
 
   if (dismissed) return null;
+  if (!wizardDone) return null;
 
   const allDone = checks.pythonBackend && checks.xgjConfigured && checks.aiConfigured && checks.cookieSet && checks.notifyConfigured;
 

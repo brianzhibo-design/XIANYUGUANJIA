@@ -14,14 +14,51 @@ import os
 import platform
 import random
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from src.core.logger import get_logger
 
 logger = get_logger()
 
+_SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "slider_screenshots")
+_SCREENSHOT_MAX_AGE_DAYS = 7
+_SCREENSHOT_MAX_PER_TRIGGER = 4
+
 _GOOFISH_IM_URL = "https://www.goofish.com/im"
 _GOOFISH_DOMAINS = [".goofish.com", ".taobao.com", ".tmall.com"]
+
+async def _take_screenshot(page: Any, label: str) -> str | None:
+    """Take a screenshot and save to data/slider_screenshots/. Returns the path."""
+    try:
+        os.makedirs(_SCREENSHOT_DIR, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{ts}_{label}.png"
+        filepath = os.path.join(_SCREENSHOT_DIR, filename)
+        await page.screenshot(path=filepath, full_page=False)
+        logger.info(f"Slider screenshot saved: {filename}")
+        return filepath
+    except Exception as exc:
+        logger.debug(f"Screenshot failed: {exc}")
+        return None
+
+
+def cleanup_old_screenshots(max_age_days: int = _SCREENSHOT_MAX_AGE_DAYS) -> int:
+    """Remove screenshots older than max_age_days."""
+    if not os.path.isdir(_SCREENSHOT_DIR):
+        return 0
+    cutoff = time.time() - max_age_days * 86400
+    removed = 0
+    for f in os.listdir(_SCREENSHOT_DIR):
+        fp = os.path.join(_SCREENSHOT_DIR, f)
+        if os.path.isfile(fp) and os.path.getmtime(fp) < cutoff:
+            try:
+                os.remove(fp)
+                removed += 1
+            except OSError:
+                pass
+    return removed
+
 
 NC_SLIDER_SELECTORS = [
     "#nc_1_n1z",
@@ -94,7 +131,7 @@ def _get_slider_config(config: dict[str, Any] | None) -> dict[str, Any]:
     return {
         "enabled": bool(slider_cfg.get("enabled", False)),
         "max_attempts": int(slider_cfg.get("max_attempts", 2)),
-        "cooldown_seconds": int(slider_cfg.get("cooldown_seconds", 300)),
+        "cooldown_seconds": int(slider_cfg.get("cooldown_seconds", 90)),
         "headless": bool(slider_cfg.get("headless", False)),
         "fingerprint_browser": {
             "enabled": bool(fp_cfg.get("enabled", False)),
@@ -104,59 +141,88 @@ def _get_slider_config(config: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def _cubic_bezier(t: float, p0: float, p1: float, p2: float, p3: float) -> float:
+    """Evaluate a cubic Bezier curve at parameter t."""
+    u = 1 - t
+    return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3
+
+
 def generate_human_trajectory(distance: int) -> list[tuple[int, int, int]]:
     """Generate human-like mouse trajectory for slider drag.
 
     Returns list of (dx, dy, dt_ms) relative movements.
 
-    Key characteristics matching Alibaba's detection:
-    - Total duration 1400-1800ms
-    - ease-out-expo speed curve (fast start, slow end)
-    - Random vertical jitter +/- 1-3px
-    - Occasional micro-retreat (1-2px backward)
-    - Initial pause after mouse down (100-300ms)
+    Uses cubic Bezier curve for natural acceleration/deceleration,
+    with overshoot-and-correct at the end to mimic real human behavior.
     """
     if distance <= 0:
         return []
 
-    total_duration_ms = random.randint(1400, 1800)
-    num_steps = max(20, distance // 3)
+    total_duration_ms = random.randint(400, 900)
+    num_steps = max(12, distance // 8)
+
+    overshoot_px = random.randint(3, max(6, distance // 30))
+    overshoot_target = distance + overshoot_px
+
+    cp1_x = random.uniform(0.15, 0.35)
+    cp2_x = random.uniform(0.85, 0.95)
 
     steps: list[tuple[int, int, int]] = []
-    steps.append((0, 0, random.randint(100, 300)))
+    steps.append((0, 0, random.randint(20, 60)))
 
     prev_x = 0
-    for i in range(1, num_steps + 1):
-        progress = i / num_steps
-        eased = 1 - math.pow(2, -10 * progress) if progress < 1 else 1
-        target_x = int(eased * distance)
+    main_steps = int(num_steps * 0.85)
+    for i in range(1, main_steps + 1):
+        progress = i / main_steps
+        eased = _cubic_bezier(progress, 0.0, cp1_x, cp2_x, 1.0)
+        target_x = int(eased * overshoot_target)
 
-        if random.random() < 0.08 and i > 3:
+        noise = random.gauss(0, 0.8)
+        target_x = max(prev_x, target_x + int(noise))
+
+        if random.random() < 0.06 and i > 3 and i < main_steps - 3:
             target_x = max(prev_x - random.randint(1, 2), 0)
 
         dx = target_x - prev_x
-        if dx == 0 and i < num_steps:
+        if dx == 0 and i < main_steps:
             continue
 
-        dy = random.choice([-1, 0, 0, 0, 1]) if random.random() < 0.4 else 0
-        if i > num_steps * 0.7:
-            dy = random.choice([-1, 0, 0, 0, 0, 0, 1])
+        dy = 0
+        if random.random() < 0.35:
+            dy = random.choice([-2, -1, -1, 0, 1, 1, 2])
+        if i > main_steps * 0.7:
+            dy = random.choice([-1, 0, 0, 0, 0, 0, 1]) if random.random() < 0.2 else 0
 
-        dt = max(5, int(total_duration_ms / num_steps))
-        if i > num_steps * 0.8:
-            dt = int(dt * random.uniform(1.5, 2.5))
-        elif i < num_steps * 0.2:
-            dt = int(dt * random.uniform(0.5, 0.8))
-
+        dt = max(3, int(total_duration_ms / num_steps))
+        if i > main_steps * 0.8:
+            dt = int(dt * random.uniform(1.5, 3.0))
+        elif i < main_steps * 0.15:
+            dt = int(dt * random.uniform(0.3, 0.5))
         dt += random.randint(-3, 3)
-        steps.append((dx, dy, max(3, dt)))
+
+        steps.append((dx, dy, max(2, dt)))
         prev_x = target_x
 
-    final_dx = distance - prev_x
-    if final_dx != 0:
-        steps.append((final_dx, 0, random.randint(30, 80)))
+    steps.append((0, 0, random.randint(15, 50)))
 
-    steps.append((0, 0, random.randint(100, 250)))
+    correction_remaining = prev_x - distance
+    correction_steps = random.randint(3, 5)
+    for j in range(correction_steps):
+        portion = correction_remaining // (correction_steps - j) if correction_steps - j > 0 else correction_remaining
+        if portion == 0:
+            break
+        dx = -portion
+        dy = random.choice([-1, 0, 0, 1]) if random.random() < 0.3 else 0
+        dt = random.randint(15, 40)
+        steps.append((dx, dy, dt))
+        correction_remaining -= portion
+
+    real_pos = sum(s[0] for s in steps)
+    final_adjust = distance - real_pos
+    if final_adjust != 0:
+        steps.append((final_adjust, 0, random.randint(10, 30)))
+
+    steps.append((0, 0, random.randint(30, 80)))
     return steps
 
 
@@ -255,8 +321,7 @@ async def _wait_for_nc_inside_baxia(
                     el = await f.query_selector(sel)
                     if el and await el.is_visible():
                         logger.info(
-                            "Baxia dialog: found NC button via '%s' (wait_round=%d)",
-                            sel, wait_round,
+                            f"Baxia dialog: found NC button via '{sel}' (wait_round={wait_round})"
                         )
                         return f, el, "nc"
                 except Exception:
@@ -268,8 +333,7 @@ async def _wait_for_nc_inside_baxia(
                 iframe_name = await iframe_el.get_attribute("name") or ""
                 iframe_src = await iframe_el.get_attribute("src") or ""
                 logger.info(
-                    "Baxia dialog: found iframe name='%s' src='%s' (wait_round=%d)",
-                    iframe_name, iframe_src[:100], wait_round,
+                    f"Baxia dialog: found iframe name='{iframe_name}' src='{iframe_src[:100]}' (wait_round={wait_round})"
                 )
                 for f in page.frames:
                     if f.name == iframe_name or (iframe_src and iframe_src in (f.url or "")):
@@ -278,8 +342,7 @@ async def _wait_for_nc_inside_baxia(
                                 el = await f.query_selector(sel)
                                 if el and await el.is_visible():
                                     logger.info(
-                                        "Baxia iframe: found NC button via '%s'",
-                                        sel,
+                                        f"Baxia iframe: found NC button via '{sel}'"
                                     )
                                     return f, el, "nc"
                             except Exception:
@@ -323,11 +386,24 @@ async def _check_nc_success(frame: Any, page: Any = None) -> bool:
     return False
 
 
-async def _solve_nc_slider(page: Any, frame: Any, slider_el: Any) -> bool:
-    """Attempt to solve NC slider (drag to right)."""
+async def _solve_nc_slider(page: Any, frame: Any, slider_el: Any) -> dict[str, Any]:
+    """Attempt to solve NC slider (drag to right).
+
+    Returns dict with keys: solved (bool), track_width, drag_distance,
+    fail_reason, screenshot_path.
+    """
+    result: dict[str, Any] = {
+        "solved": False,
+        "track_width": None,
+        "drag_distance": None,
+        "fail_reason": None,
+        "screenshot_path": None,
+    }
+
     box = await slider_el.bounding_box()
     if not box:
-        return False
+        result["fail_reason"] = "no_bounding_box"
+        return result
 
     track_width = await _find_track_width(frame)
     if not track_width:
@@ -344,15 +420,18 @@ async def _solve_nc_slider(page: Any, frame: Any, slider_el: Any) -> bool:
     if drag_distance <= 10:
         drag_distance = 260
 
+    result["track_width"] = track_width
+    result["drag_distance"] = drag_distance
+
     start_x = int(box["x"] + box["width"] / 2)
     start_y = int(box["y"] + box["height"] / 2)
 
     trajectory = generate_human_trajectory(drag_distance)
 
     await page.mouse.move(start_x, start_y)
-    await asyncio.sleep(random.uniform(0.2, 0.5))
-    await page.mouse.down()
     await asyncio.sleep(random.uniform(0.05, 0.15))
+    await page.mouse.down()
+    await asyncio.sleep(random.uniform(0.02, 0.06))
 
     current_x, current_y = start_x, start_y
     for dx, dy, dt_ms in trajectory:
@@ -361,7 +440,7 @@ async def _solve_nc_slider(page: Any, frame: Any, slider_el: Any) -> bool:
         await page.mouse.move(current_x, current_y)
         await asyncio.sleep(dt_ms / 1000.0)
 
-    await asyncio.sleep(random.uniform(0.05, 0.2))
+    await asyncio.sleep(random.uniform(0.01, 0.05))
     await page.mouse.up()
 
     for _ in range(10):
@@ -372,13 +451,21 @@ async def _solve_nc_slider(page: Any, frame: Any, slider_el: Any) -> bool:
                 if err_el and await err_el.is_visible():
                     err_text = await err_el.inner_text()
                     if any(kw in (err_text or "") for kw in ["出错", "请重试", "失败"]):
-                        return False
+                        result["fail_reason"] = f"error_text:{err_text}"
+                        result["screenshot_path"] = await _take_screenshot(page, "nc_error")
+                        return result
             except Exception:
                 pass
         if await _check_nc_success(frame, page=page):
-            return True
+            result["solved"] = True
+            return result
 
-    return await _check_nc_success(frame, page=page)
+    if await _check_nc_success(frame, page=page):
+        result["solved"] = True
+    else:
+        result["fail_reason"] = "no_success_marker"
+        result["screenshot_path"] = await _take_screenshot(page, "nc_failed")
+    return result
 
 
 async def _dump_baxia_dom(page: Any, frame: Any) -> None:
@@ -407,35 +494,32 @@ async def _dump_baxia_dom(page: Any, frame: Any) -> None:
                     }""",
                     baxia,
                 )
-                logger.info("Baxia DOM dump (%d elements):", len(html_snippet))
+                logger.info(f"Baxia DOM dump ({len(html_snippet)} elements):")
                 for item in html_snippet:
                     if item.get("visible"):
-                        logger.info(
-                            "  <%s id='%s' class='%s'>",
-                            item.get("tag", "?"),
-                            item.get("id", ""),
-                            str(item.get("cls", ""))[:80],
-                        )
+                        tag = item.get("tag", "?")
+                        el_id = item.get("id", "")
+                        el_cls = str(item.get("cls", ""))[:80]
+                        logger.info(f"  <{tag} id='{el_id}' class='{el_cls}'>")
                 return
             except Exception:
                 continue
 
         imgs = await frame.query_selector_all("img")
-        logger.info("Frame img elements (%d):", len(imgs))
+        logger.info(f"Frame img elements ({len(imgs)}):")
         for img in imgs[:15]:
             src = await img.get_attribute("src") or ""
             cls = await img.get_attribute("class") or ""
             el_id = await img.get_attribute("id") or ""
-            logger.info("  img id='%s' class='%s' src='%s'", el_id, cls, src[:80])
+            logger.info(f"  img id='{el_id}' class='{cls}' src='{src[:80]}'")
     except Exception as exc:
-        logger.info("DOM dump failed: %s", exc)
+        logger.info(f"DOM dump failed: {exc}")
 
 
-async def _try_nc_fallback_inside_puzzle(page: Any, frame: Any) -> bool:
+async def _try_nc_fallback_inside_puzzle(page: Any, frame: Any) -> dict[str, Any]:
     """When puzzle detection found bg but no slice, try NC-style drag as fallback.
 
-    The baxia-dialog may contain an NC slider (drag-to-right) that was
-    misclassified as a puzzle because the container matched first.
+    Returns dict matching _solve_nc_slider return format.
     """
     logger.info("Puzzle fallback: searching for NC-style slider inside dialog...")
 
@@ -457,7 +541,7 @@ async def _try_nc_fallback_inside_puzzle(page: Any, frame: Any) -> bool:
                     box = await el.bounding_box()
                     if not box or box["width"] < 10 or box["height"] < 10:
                         continue
-                    logger.info("Puzzle fallback: found NC button via '%s', trying drag", sel)
+                    logger.info(f"Puzzle fallback: found NC button via '{sel}', trying drag")
                     return await _solve_nc_slider(page, f, el)
             except Exception:
                 continue
@@ -489,13 +573,15 @@ async def _try_nc_fallback_inside_puzzle(page: Any, frame: Any) -> bool:
                 return results;
             }""")
             if draggables:
-                logger.info("Puzzle fallback: found %d candidate draggable elements:", len(draggables))
+                logger.info(f"Puzzle fallback: found {len(draggables)} candidate draggable elements:")
                 for d in draggables[:5]:
-                    logger.info(
-                        "  <%s id='%s' class='%s' cursor='%s' %dx%d>",
-                        d.get("tag"), d.get("id"), str(d.get("cls", ""))[:60],
-                        d.get("cursor"), d.get("w", 0), d.get("h", 0),
-                    )
+                    d_tag = d.get("tag")
+                    d_id = d.get("id")
+                    d_cls = str(d.get("cls", ""))[:60]
+                    d_cur = d.get("cursor")
+                    d_w = d.get("w", 0)
+                    d_h = d.get("h", 0)
+                    logger.info(f"  <{d_tag} id='{d_id}' class='{d_cls}' cursor='{d_cur}' {d_w}x{d_h}>")
 
                 best = draggables[0]
                 for d in draggables:
@@ -513,13 +599,13 @@ async def _try_nc_fallback_inside_puzzle(page: Any, frame: Any) -> bool:
                 if sel_str:
                     el = await f.query_selector(sel_str)
                     if el:
-                        logger.info("Puzzle fallback: trying drag on '%s'", sel_str)
+                        logger.info(f"Puzzle fallback: trying drag on '{sel_str}'")
                         return await _solve_nc_slider(page, f, el)
     except Exception as exc:
-        logger.info("Puzzle fallback evaluate failed: %s", exc)
+        logger.info(f"Puzzle fallback evaluate failed: {exc}")
 
     logger.info("Puzzle fallback: no draggable element found")
-    return False
+    return {"solved": False, "fail_reason": "no_draggable_element", "screenshot_path": await _take_screenshot(page, "puzzle_fallback_none")}
 
 
 _PUZZLE_BG_SELECTORS = [
@@ -541,11 +627,30 @@ _PUZZLE_SLICE_SELECTORS = [
     "img[id*='slice']",
     "img[class*='slice']",
     ".yoda-image-slice",
+    "img[id*='jigsaw']",
+    "img[class*='jigsaw']",
+    ".baxia-dialog img[data-type='slice']",
+    ".baxia-dialog img:not([class*='bg'])",
+    "canvas[class*='slice']",
+    ".captcha-slider-puzzle img",
 ]
 
 
-async def _solve_puzzle_slider(page: Any, frame: Any, slider_el: Any) -> bool:
-    """Attempt to solve puzzle slider using opencv gap detection."""
+async def _solve_puzzle_slider(page: Any, frame: Any, slider_el: Any) -> dict[str, Any]:
+    """Attempt to solve puzzle slider using opencv gap detection.
+
+    Returns dict with keys: solved, puzzle_bg_found, puzzle_slice_found,
+    puzzle_gap_x, puzzle_match_score, fail_reason, screenshot_path.
+    """
+    result: dict[str, Any] = {
+        "solved": False,
+        "puzzle_bg_found": False,
+        "puzzle_slice_found": False,
+        "puzzle_gap_x": None,
+        "puzzle_match_score": None,
+        "fail_reason": None,
+        "screenshot_path": None,
+    }
     try:
         all_frames = [frame] + [f for f in page.frames if f != frame]
 
@@ -567,18 +672,26 @@ async def _solve_puzzle_slider(page: Any, frame: Any, slider_el: Any) -> bool:
             if bg_el:
                 break
 
-        for f in all_frames:
-            for sel in _PUZZLE_SLICE_SELECTORS:
-                try:
-                    el = await f.query_selector(sel)
-                    if el and await el.is_visible():
-                        sl_el = el
-                        logger.info(f"Puzzle: found slice element via '{sel}'")
-                        break
-                except Exception:
-                    continue
+        for attempt in range(3):
+            if attempt > 0:
+                await asyncio.sleep(1.0)
+            for f in all_frames:
+                for sel in _PUZZLE_SLICE_SELECTORS:
+                    try:
+                        el = await f.query_selector(sel)
+                        if el and await el.is_visible():
+                            sl_el = el
+                            logger.info(f"Puzzle: found slice element via '{sel}' (attempt={attempt})")
+                            break
+                    except Exception:
+                        continue
+                if sl_el:
+                    break
             if sl_el:
                 break
+
+        result["puzzle_bg_found"] = bg_el is not None
+        result["puzzle_slice_found"] = sl_el is not None
 
         if not bg_el or not sl_el:
             logger.info(
@@ -586,13 +699,20 @@ async def _solve_puzzle_slider(page: Any, frame: Any, slider_el: Any) -> bool:
                 f"slice={'found' if sl_el else 'MISSING'}). "
                 "Trying fallback..."
             )
+            result["screenshot_path"] = await _take_screenshot(page, "puzzle_missing_elements")
             await _dump_baxia_dom(page, target_frame)
 
             if bg_el and not sl_el:
+                result["fail_reason"] = "slice_missing"
                 nc_result = await _try_nc_fallback_inside_puzzle(page, target_frame)
-                return nc_result
+                result["solved"] = nc_result.get("solved", False)
+                result["screenshot_path"] = nc_result.get("screenshot_path") or result["screenshot_path"]
+                if not result["solved"]:
+                    result["fail_reason"] = nc_result.get("fail_reason") or "slice_missing_fallback_failed"
+                return result
 
-            return False
+            result["fail_reason"] = "bg_and_slice_missing"
+            return result
 
         bg_url = await bg_el.get_attribute("src") if bg_el else None
         sl_url = await sl_el.get_attribute("src") if sl_el else None
@@ -602,7 +722,8 @@ async def _solve_puzzle_slider(page: Any, frame: Any, slider_el: Any) -> bool:
             bg_bytes = await bg_el.screenshot() if bg_el else None
             sl_bytes = await sl_el.screenshot() if sl_el else None
             if not bg_bytes or not sl_bytes:
-                return False
+                result["fail_reason"] = "image_capture_failed"
+                return result
         else:
             import httpx
             async with httpx.AsyncClient(timeout=10) as client:
@@ -614,15 +735,19 @@ async def _solve_puzzle_slider(page: Any, frame: Any, slider_el: Any) -> bool:
         logger.info(f"Puzzle: bg image {len(bg_bytes)} bytes, slice image {len(sl_bytes)} bytes")
 
         gap_x = find_puzzle_gap_opencv(bg_bytes, sl_bytes)
+        result["puzzle_gap_x"] = gap_x
         if gap_x is None:
             logger.info("Puzzle slider: opencv gap detection failed")
-            return False
+            result["fail_reason"] = "opencv_gap_detection_failed"
+            result["screenshot_path"] = await _take_screenshot(page, "puzzle_opencv_fail")
+            return result
 
         logger.info(f"Puzzle: gap detected at x={gap_x}")
 
         slider_box = await slider_el.bounding_box()
         if not slider_box:
-            return False
+            result["fail_reason"] = "slider_no_bounding_box"
+            return result
 
         bg_box = await bg_el.bounding_box()
         if bg_box:
@@ -639,8 +764,9 @@ async def _solve_puzzle_slider(page: Any, frame: Any, slider_el: Any) -> bool:
         trajectory = generate_human_trajectory(drag_distance)
 
         await page.mouse.move(start_x, start_y)
-        await asyncio.sleep(random.uniform(0.1, 0.3))
+        await asyncio.sleep(random.uniform(0.05, 0.15))
         await page.mouse.down()
+        await asyncio.sleep(random.uniform(0.02, 0.06))
 
         current_x, current_y = start_x, start_y
         for dx, dy, dt_ms in trajectory:
@@ -649,18 +775,26 @@ async def _solve_puzzle_slider(page: Any, frame: Any, slider_el: Any) -> bool:
             await page.mouse.move(current_x, current_y)
             await asyncio.sleep(dt_ms / 1000.0)
 
+        await asyncio.sleep(random.uniform(0.01, 0.05))
         await page.mouse.up()
 
         for _ in range(10):
             await asyncio.sleep(0.3)
             if await _check_nc_success(target_frame, page=page):
-                return True
+                result["solved"] = True
+                return result
 
-        return await _check_nc_success(target_frame, page=page)
+        if await _check_nc_success(target_frame, page=page):
+            result["solved"] = True
+        else:
+            result["fail_reason"] = "verification_not_passed"
+            result["screenshot_path"] = await _take_screenshot(page, "puzzle_failed")
+        return result
 
     except Exception as exc:
         logger.info(f"Puzzle slider solve error: {exc}")
-        return False
+        result["fail_reason"] = f"exception:{exc}"
+        return result
 
 
 def _extract_goofish_cookies(all_cookies: list[dict[str, Any]]) -> str | None:
@@ -828,13 +962,16 @@ async def try_slider_recovery(
 ) -> dict[str, Any] | None:
     """Slider recovery with three-tier browser strategy.
 
-    1. Connect to existing Chrome via CDP (best: real cookies, real session)
-    2. Launch with user's Chrome Profile (good: real cookies, new window)
-    3. Launch fresh browser with injected cookies (fallback: incomplete cookies)
-
-    Returns {"cookie": str} on success, None on failure.
+    Returns {"cookie": str, "attempts": [...]} on success, None on failure.
+    Each attempt in "attempts" contains: attempt_num, slider_type,
+    result, fail_reason, screenshot_path, and type-specific details.
     """
     _log = logger or get_logger()
+    recovery_start = time.time()
+    attempts_log: list[dict[str, Any]] = []
+    browser_strategy = "none"
+
+    cleanup_old_screenshots()
 
     if not _has_display():
         _log.info("Slider recovery: no display available, skipping browser launch")
@@ -861,31 +998,34 @@ async def try_slider_recovery(
     browser = None
     context = None
     is_cdp = False
+    browser_connect_start = time.time()
     try:
         pw = await async_playwright().start()
 
-        # Strategy 0: connect via fingerprint browser (BitBrowser)
         fp_cfg = slider_cfg.get("fingerprint_browser", {})
         if fp_cfg.get("enabled"):
             fp_result = await _try_connect_fingerprint_browser(pw, fp_cfg, _log)
             if fp_result:
                 browser, context, is_cdp = fp_result
+                browser_strategy = "fingerprint"
 
         if not context:
-            # Strategy 1: connect to existing Chrome via CDP
             cdp_result = await _try_connect_cdp(pw, _log)
             if cdp_result:
                 browser, context, is_cdp = cdp_result
+                browser_strategy = "cdp"
             else:
-                # Strategy 2: launch with user's Chrome profile
                 profile_result = await _try_launch_with_profile(pw, headless, _log)
                 if profile_result:
                     browser, context, is_cdp = profile_result
+                    browser_strategy = "profile"
                 else:
-                    # Strategy 3: fresh browser with injected cookies
                     fresh_result = await _try_launch_fresh(pw, headless, cookie_text, _log)
                     if fresh_result:
                         browser, context, is_cdp = fresh_result
+                        browser_strategy = "fresh"
+
+        browser_connect_ms = int((time.time() - browser_connect_start) * 1000)
 
         if not context:
             _log.info("Slider recovery: all browser strategies failed")
@@ -902,19 +1042,34 @@ async def try_slider_recovery(
                         await p.reload(wait_until="domcontentloaded", timeout=15000)
                     except Exception as reload_exc:
                         _log.info(f"Slider recovery: IM tab reload error (non-fatal): {reload_exc}")
+                    if stealth_async is not None:
+                        try:
+                            await stealth_async(p)
+                        except Exception:
+                            pass
                     break
             if not page:
                 for p in pages:
                     if "goofish.com" in (p.url or ""):
                         page = p
-                        _log.info(f"Slider recovery: navigating existing tab to IM page")
+                        _log.info("Slider recovery: navigating existing tab to IM page")
                         try:
                             await page.goto(_GOOFISH_IM_URL, wait_until="domcontentloaded", timeout=30000)
                         except Exception as nav_exc:
                             _log.info(f"Slider recovery: navigation error: {nav_exc}")
+                        if stealth_async is not None:
+                            try:
+                                await stealth_async(page)
+                            except Exception:
+                                pass
                         break
             if not page:
                 page = await context.new_page()
+                if stealth_async is not None:
+                    try:
+                        await stealth_async(page)
+                    except Exception:
+                        pass
                 _log.info(f"Slider recovery: navigating new tab to {_GOOFISH_IM_URL}")
                 try:
                     await page.goto(_GOOFISH_IM_URL, wait_until="domcontentloaded", timeout=30000)
@@ -937,6 +1092,16 @@ async def try_slider_recovery(
 
         if auto_solve:
             for attempt in range(max_attempts):
+                attempt_start = time.time()
+                attempt_data: dict[str, Any] = {
+                    "attempt_num": attempt + 1,
+                    "slider_type": None,
+                    "result": "failed",
+                    "fail_reason": None,
+                    "screenshot_path": None,
+                    "browser_strategy": browser_strategy,
+                    "browser_connect_ms": browser_connect_ms,
+                }
                 _log.info(f"Slider auto-solve attempt {attempt + 1}/{max_attempts}")
                 await asyncio.sleep(2)
 
@@ -952,7 +1117,12 @@ async def try_slider_recovery(
                             }
                             if "_m_h5_tk" in cookie_keys:
                                 _log.info("Slider recovery: no slider found, complete cookies detected")
-                                return {"cookie": cookie_str}
+                                attempt_data.update(result="cookies_complete", slider_type="none")
+                                attempts_log.append(attempt_data)
+                                return {"cookie": cookie_str, "attempts": attempts_log,
+                                        "browser_strategy": browser_strategy,
+                                        "browser_connect_ms": browser_connect_ms,
+                                        "total_duration_ms": int((time.time() - recovery_start) * 1000)}
 
                             _log.info(
                                 "Slider recovery: no slider, cookies missing _m_h5_tk. "
@@ -975,26 +1145,57 @@ async def try_slider_recovery(
                                 cookie_str = _extract_goofish_cookies(all_cookies) or cookie_str
                                 if attempt < max_attempts - 1:
                                     _log.info("Slider recovery: no slider after reload, trying next attempt...")
+                                    attempt_data.update(result="no_slider", slider_type="none",
+                                                        fail_reason="no_slider_after_reload")
+                                    attempts_log.append(attempt_data)
                                     continue
                                 _log.info("Slider recovery: no slider found, returning partial cookies")
-                                return {"cookie": cookie_str}
+                                attempt_data.update(result="cookies_complete", slider_type="none")
+                                attempts_log.append(attempt_data)
+                                return {"cookie": cookie_str, "attempts": attempts_log,
+                                        "browser_strategy": browser_strategy,
+                                        "browser_connect_ms": browser_connect_ms,
+                                        "total_duration_ms": int((time.time() - recovery_start) * 1000)}
                     else:
                         _log.info("Slider recovery: no slider element and no login cookies on page")
+                        attempt_data.update(result="no_slider", slider_type="none",
+                                            fail_reason="no_slider_no_login",
+                                            screenshot_path=await _take_screenshot(page, "no_slider_no_login"))
+                        attempts_log.append(attempt_data)
                         if attempt < max_attempts - 1:
                             continue
                         break
 
+                if not slider_info:
+                    continue
+
                 frame, slider_el, slider_type = slider_info
                 _log.info(f"Slider detected: type={slider_type}")
+                attempt_data["slider_type"] = slider_type
 
-                solved = False
+                solve_result: dict[str, Any] = {"solved": False}
                 if slider_type == "nc":
-                    solved = await _solve_nc_slider(page, frame, slider_el)
+                    solve_result = await _solve_nc_slider(page, frame, slider_el)
+                    attempt_data.update(
+                        nc_track_width=solve_result.get("track_width"),
+                        nc_drag_distance=solve_result.get("drag_distance"),
+                    )
                 elif slider_type == "puzzle":
-                    solved = await _solve_puzzle_slider(page, frame, slider_el)
+                    solve_result = await _solve_puzzle_slider(page, frame, slider_el)
+                    attempt_data.update(
+                        puzzle_bg_found=solve_result.get("puzzle_bg_found"),
+                        puzzle_slice_found=solve_result.get("puzzle_slice_found"),
+                        puzzle_gap_x=solve_result.get("puzzle_gap_x"),
+                        puzzle_match_score=solve_result.get("puzzle_match_score"),
+                    )
 
-                if solved:
+                attempt_data["fail_reason"] = solve_result.get("fail_reason")
+                attempt_data["screenshot_path"] = solve_result.get("screenshot_path")
+
+                if solve_result.get("solved"):
                     _log.info("Slider verification passed!")
+                    attempt_data["result"] = "passed"
+                    attempts_log.append(attempt_data)
                     try:
                         await page.wait_for_load_state("networkidle", timeout=10000)
                     except Exception:
@@ -1004,7 +1205,10 @@ async def try_slider_recovery(
                     all_cookies = await context.cookies()
                     cookie_str = _extract_goofish_cookies(all_cookies)
                     if cookie_str and _has_login_cookies(all_cookies):
-                        return {"cookie": cookie_str}
+                        return {"cookie": cookie_str, "attempts": attempts_log,
+                                "browser_strategy": browser_strategy,
+                                "browser_connect_ms": browser_connect_ms,
+                                "total_duration_ms": int((time.time() - recovery_start) * 1000)}
                     _log.info("Slider solved but cookies incomplete, waiting for page reload...")
                     await asyncio.sleep(5)
                     try:
@@ -1015,9 +1219,14 @@ async def try_slider_recovery(
                     all_cookies = await context.cookies()
                     cookie_str = _extract_goofish_cookies(all_cookies)
                     if cookie_str:
-                        return {"cookie": cookie_str}
+                        return {"cookie": cookie_str, "attempts": attempts_log,
+                                "browser_strategy": browser_strategy,
+                                "browser_connect_ms": browser_connect_ms,
+                                "total_duration_ms": int((time.time() - recovery_start) * 1000)}
                 else:
                     _log.info(f"Slider auto-solve attempt {attempt + 1} failed")
+                    attempt_data["result"] = "failed"
+                    attempts_log.append(attempt_data)
                     if attempt < max_attempts - 1:
                         _log.info(f"Waiting {cooldown}s before next attempt...")
                         await asyncio.sleep(cooldown)
@@ -1033,14 +1242,24 @@ async def try_slider_recovery(
                     cookie_str = _extract_goofish_cookies(all_cookies)
                     if cookie_str:
                         _log.info("Slider recovery: manual verification detected")
-                        return {"cookie": cookie_str}
+                        attempts_log.append({"attempt_num": 0, "slider_type": "manual",
+                                             "result": "passed", "fail_reason": None})
+                        return {"cookie": cookie_str, "attempts": attempts_log,
+                                "browser_strategy": browser_strategy,
+                                "browser_connect_ms": browser_connect_ms,
+                                "total_duration_ms": int((time.time() - recovery_start) * 1000)}
                 await asyncio.sleep(3)
 
-        return None
+        return {"cookie": None, "attempts": attempts_log,
+                "browser_strategy": browser_strategy,
+                "browser_connect_ms": browser_connect_ms,
+                "total_duration_ms": int((time.time() - recovery_start) * 1000)}
 
     except Exception as exc:
         _log.info(f"Slider recovery error: {exc}")
-        return None
+        return {"cookie": None, "attempts": attempts_log, "error": str(exc),
+                "browser_strategy": browser_strategy,
+                "total_duration_ms": int((time.time() - recovery_start) * 1000)}
     finally:
         if not is_cdp:
             if browser:

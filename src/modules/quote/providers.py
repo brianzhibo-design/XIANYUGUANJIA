@@ -183,6 +183,10 @@ class CostTableMarkupQuoteProvider(IQuoteProvider):
         if extra_fee > 0:
             surcharges["续重"] = round(extra_fee, 2)
 
+        max_dim = float(request.max_dimension_cm or 0.0)
+        oversize_threshold = 150.0 if row.service_type == "freight" else 120.0
+        oversize_warning = max_dim > oversize_threshold if max_dim > 0 else False
+
         return QuoteResult(
             provider="cost_table_markup",
             base_fee=round(xianyu_first, 2),
@@ -217,6 +221,9 @@ class CostTableMarkupQuoteProvider(IQuoteProvider):
                 "volume_divisor": divisor if divisor > 0 else None,
                 "source_file": row.source_file,
                 "source_sheet": row.source_sheet,
+                "oversize_warning": oversize_warning,
+                "max_dimension_cm": round(max_dim, 1) if max_dim > 0 else None,
+                "oversize_threshold_cm": oversize_threshold if oversize_warning else None,
             },
         )
 

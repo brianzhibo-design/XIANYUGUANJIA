@@ -21,6 +21,7 @@ class ManualModeResult:
     state: ManualModeState
     toggled: bool = False
     timeout_recovered: bool = False
+    smart_recovered: bool = False
 
 
 class ManualModeStore:
@@ -31,11 +32,13 @@ class ManualModeStore:
         db_path: str | Path,
         *,
         toggle_keyword: str = "。",
-        timeout_seconds: int = 3600,
+        timeout_seconds: int = 600,
+        resume_after_seconds: int = 300,
     ) -> None:
         self.db_path = Path(db_path)
         self.toggle_keyword = toggle_keyword
         self.timeout_seconds = max(0, int(timeout_seconds))
+        self.resume_after_seconds = max(0, int(resume_after_seconds))
         self._ensure_schema()
 
     def _connect(self) -> sqlite3.Connection:
@@ -54,10 +57,21 @@ class ManualModeStore:
                     session_id TEXT PRIMARY KEY,
                     enabled INTEGER NOT NULL,
                     updated_at REAL NOT NULL,
-                    expires_at REAL
+                    expires_at REAL,
+                    last_seller_msg_at REAL,
+                    last_buyer_msg_at REAL
                 )
                 """
             )
+            # Migrate: add columns if missing (for existing DBs)
+            try:
+                conn.execute("SELECT last_seller_msg_at FROM message_manual_mode LIMIT 0")
+            except sqlite3.OperationalError:
+                conn.execute("ALTER TABLE message_manual_mode ADD COLUMN last_seller_msg_at REAL")
+            try:
+                conn.execute("SELECT last_buyer_msg_at FROM message_manual_mode LIMIT 0")
+            except sqlite3.OperationalError:
+                conn.execute("ALTER TABLE message_manual_mode ADD COLUMN last_buyer_msg_at REAL")
             conn.commit()
 
     def _now(self, now: float | None = None) -> float:
@@ -83,7 +97,9 @@ class ManualModeStore:
     def _get_raw(self, session_id: str) -> sqlite3.Row | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT session_id, enabled, updated_at, expires_at FROM message_manual_mode WHERE session_id = ?",
+                "SELECT session_id, enabled, updated_at, expires_at, "
+                "last_seller_msg_at, last_buyer_msg_at "
+                "FROM message_manual_mode WHERE session_id = ?",
                 (session_id,),
             ).fetchone()
         return row
@@ -102,6 +118,14 @@ class ManualModeStore:
             state = self._upsert(session_id, False, now_ts)
             return ManualModeResult(state=state, timeout_recovered=True)
 
+        if enabled and self.resume_after_seconds > 0:
+            last_seller = row["last_seller_msg_at"]
+            last_buyer = row["last_buyer_msg_at"]
+            if last_buyer is not None and last_seller is not None:
+                if float(last_buyer) > float(last_seller) and (now_ts - float(last_buyer)) >= self.resume_after_seconds:
+                    state = self._upsert(session_id, False, now_ts)
+                    return ManualModeResult(state=state, smart_recovered=True)
+
         state = ManualModeState(
             session_id=row["session_id"],
             enabled=enabled,
@@ -114,6 +138,36 @@ class ManualModeStore:
         now_ts = self._now(now)
         return self._upsert(session_id, enabled, now_ts)
 
+    def record_seller_activity(self, session_id: str, *, now: float | None = None) -> None:
+        """Record seller message timestamp for smart resume logic."""
+        now_ts = self._now(now)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO message_manual_mode(session_id, enabled, updated_at, last_seller_msg_at)
+                VALUES (?, 0, ?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    last_seller_msg_at=excluded.last_seller_msg_at
+                """,
+                (session_id, now_ts, now_ts),
+            )
+            conn.commit()
+
+    def record_buyer_activity(self, session_id: str, *, now: float | None = None) -> None:
+        """Record buyer message timestamp for smart resume logic."""
+        now_ts = self._now(now)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO message_manual_mode(session_id, enabled, updated_at, last_buyer_msg_at)
+                VALUES (?, 0, ?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    last_buyer_msg_at=excluded.last_buyer_msg_at
+                """,
+                (session_id, now_ts, now_ts),
+            )
+            conn.commit()
+
     def toggle(self, session_id: str, *, now: float | None = None) -> ManualModeState:
         current = self.get_state(session_id, now=now).state
         return self.set_state(session_id, not current.enabled, now=now)
@@ -125,7 +179,9 @@ class ManualModeStore:
         now_ts = self._now(now)
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT session_id, enabled, updated_at, expires_at FROM message_manual_mode WHERE enabled = 1"
+                "SELECT session_id, enabled, updated_at, expires_at, "
+                "last_seller_msg_at, last_buyer_msg_at "
+                "FROM message_manual_mode WHERE enabled = 1"
             ).fetchall()
         result: list[ManualModeState] = []
         for row in rows:

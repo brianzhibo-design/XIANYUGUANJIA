@@ -28,8 +28,12 @@ RUN groupadd -r appgrp && useradd -r -g appgrp -d /app appusr
 COPY src/ ./src/
 COPY config/ ./config/
 
-RUN mkdir -p /app/data && chown -R appusr:appgrp /app/data
+RUN mkdir -p /app/data /app/logs && chown -R appusr:appgrp /app/data /app/logs
 
 USER appusr
 EXPOSE 8091
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -sf http://localhost:8091/healthz || exit 1
+
 CMD ["python", "-m", "src.dashboard_server", "--host", "0.0.0.0"]

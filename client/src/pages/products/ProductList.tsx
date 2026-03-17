@@ -80,7 +80,7 @@ interface CategoryDiscount {
 
 const PRODUCT_TABS = [
   { key: 'list', label: '商品列表', visible: () => true },
-  { key: 'routes', label: '路线数据', visible: (cat: string) => cat === 'express' },
+  { key: 'routes', label: '路线数据', visible: (cat: string) => cat === 'express' || cat === 'freight' },
   { key: 'pricing', label: '三层定价', visible: () => true },
 ];
 

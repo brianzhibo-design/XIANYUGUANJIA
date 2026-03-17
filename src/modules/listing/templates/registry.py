@@ -59,12 +59,16 @@ def render_by_composition(
     theme = get_theme(category)
     layers = layers or {}
 
+    def _val(k: str) -> str | None:
+        v = layers.get(k)
+        return v if v else None
+
     try:
         html, used = compose(
-            layout=layers.get("layout"),
-            color_scheme=layers.get("color_scheme"),
-            decoration=layers.get("decoration"),
-            title_style=layers.get("title_style"),
+            layout=_val("layout"),
+            color_scheme=_val("color_scheme"),
+            decoration=_val("decoration"),
+            title_style=_val("title_style"),
             params=params or {},
             theme=theme,
         )

@@ -51,8 +51,7 @@ def hero_center(params: dict[str, Any], theme: dict[str, Any]) -> LayoutOutput:
       border-radius:20px;background:var(--badge-bg,var(--text-accent));
       color:var(--badge-text,#fff);font-size:18px;font-weight:700;">{badge}</div>
 
-  <div class="title-text" style="text-align:center;margin-bottom:16px;
-      color:var(--text-accent,var(--text-light));">{headline}</div>
+  <div class="title-text" style="text-align:center;margin-bottom:16px;">{headline}</div>
 
   <div style="font-size:32px;font-weight:700;color:var(--text-light,#fff);
       text-align:center;margin-bottom:24px;opacity:0.9;">{sub_headline}</div>
@@ -109,7 +108,7 @@ def split_panel(params: dict[str, Any], theme: dict[str, Any]) -> LayoutOutput:
         background:var(--badge-bg,var(--text-accent));
         color:var(--badge-text,#fff);font-size:16px;font-weight:700;">{badge}</div>
 
-    <div class="title-text" style="color:var(--text-accent,var(--text-light));">{headline}</div>
+    <div class="title-text">{headline}</div>
 
     <div style="font-size:28px;font-weight:600;color:var(--text-light,#fff);
         opacity:0.9;line-height:1.4;">{sub_headline}</div>
@@ -162,7 +161,7 @@ def price_rows(params: dict[str, Any], theme: dict[str, Any]) -> LayoutOutput:
         background:var(--badge-bg,var(--text-accent));
         color:var(--badge-text,#fff);font-size:16px;font-weight:700;
         margin-bottom:16px;">{badge}</div>
-    <div class="title-text" style="color:var(--text-accent,var(--text-primary));">{headline}</div>
+    <div class="title-text">{headline}</div>
     <div style="font-size:26px;font-weight:600;color:var(--text-primary);
         opacity:0.8;margin-top:10px;">{sub_headline}</div>
   </div>
@@ -201,8 +200,7 @@ def brand_hero(params: dict[str, Any], theme: dict[str, Any]) -> LayoutOutput:
   <!-- Top bar -->
   <div style="width:100%;padding:40px 60px 20px;display:flex;
       align-items:center;justify-content:space-between;">
-    <div class="title-text" style="color:var(--text-accent,var(--text-light));
-        font-size:56px;">{headline}</div>
+    <div class="title-text title-text--compact">{headline}</div>
     <div style="padding:8px 24px;border-radius:20px;
         background:var(--badge-bg,var(--text-accent));
         color:var(--badge-text,#fff);font-size:16px;font-weight:700;">{badge}</div>
@@ -222,4 +220,5 @@ def brand_hero(params: dict[str, Any], theme: dict[str, Any]) -> LayoutOutput:
       opacity:0.6;letter-spacing:4px;">{tagline}</div>
 </div>'''
 
-    return LayoutOutput(body_html=body)
+    css = ".title-text--compact { font-size: 56px !important; }"
+    return LayoutOutput(body_html=body, required_css=css)

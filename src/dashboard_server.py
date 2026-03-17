@@ -363,6 +363,7 @@ class MimicOps:
         self._last_auto_recover_cookie_fp = ""
         self._last_auto_recover_at = ""
         self._last_auto_recover_result: dict[str, Any] = {}
+        self._last_presales_dead_restart_at: float = 0.0
         self._recover_lock = threading.Lock()
         self._cost_table_repo: Any = None
         self._shared_cookie_checker: Any = None
@@ -3466,10 +3467,10 @@ class MimicOps:
             last_event = active_blocks[-1][1]
         elif stale_blocks and not active_blocks:
             last_block_time = self._extract_log_time(stale_blocks[-1][1])
-            level = "stale"
-            label = "历史风控（已过期）"
+            level = "normal"
+            label = "正常"
             score = 0
-            signals = [f"历史高风险信号 x{len(stale_blocks)}（最后于 {last_block_time}，已超过 {self._RISK_SIGNAL_WINDOW_MINUTES} 分钟）"]
+            signals = [f"历史高风险信号 x{len(stale_blocks)}（最后于 {last_block_time}，已超过 {self._RISK_SIGNAL_WINDOW_MINUTES} 分钟，已过期）"]
             last_event = stale_blocks[-1][1]
         elif len(active_ws400) >= 10 or active_warns:
             level = "warning"
@@ -3485,10 +3486,10 @@ class MimicOps:
             stale_total = len(stale_warns) + len(stale_ws400)
             last_stale = stale_warns[-1] if stale_warns else stale_ws400[-1]
             last_stale_time = self._extract_log_time(last_stale[1])
-            level = "stale"
-            label = "历史风控（已过期）"
+            level = "normal"
+            label = "正常"
             score = 0
-            signals = [f"历史异常信号 x{stale_total}（最后于 {last_stale_time}，已超过 {self._RISK_SIGNAL_WINDOW_MINUTES} 分钟）"]
+            signals = [f"历史异常信号 x{stale_total}（最后于 {last_stale_time}，已超过 {self._RISK_SIGNAL_WINDOW_MINUTES} 分钟，已过期）"]
             last_event = last_stale[1]
 
         last_connected_at = ""
@@ -3617,18 +3618,63 @@ class MimicOps:
             "response_time": response_time_ms,
         }
 
+    _PRESALES_DEAD_RESTART_COOLDOWN = 60.0
+
     def _maybe_auto_recover_presales(
         self,
         *,
         service_status: str,
         token_error: str | None,
         cookie_text: str,
+        presales_alive: bool = True,
     ) -> dict[str, Any]:
         cookie_fp = self._cookie_fingerprint(cookie_text)
         auto_triggered = False
         reason = "monitoring"
         stage = "monitoring"
         result: dict[str, Any] = {}
+
+        if not presales_alive and service_status in ("running", "degraded"):
+            now_ts = time.time()
+            if (now_ts - self._last_presales_dead_restart_at) >= self._PRESALES_DEAD_RESTART_COOLDOWN:
+                with self._recover_lock:
+                    if (now_ts - self._last_presales_dead_restart_at) >= self._PRESALES_DEAD_RESTART_COOLDOWN:
+                        self._last_presales_dead_restart_at = now_ts
+                        result = self.module_console.control(action="recover", target="presales")
+                        auto_triggered = not bool(result.get("error")) if isinstance(result, dict) else False
+                        self._last_auto_recover_at = _now_iso()
+                        self._last_auto_recover_result = result if isinstance(result, dict) else {}
+                        stage = "recover_triggered"
+                        reason = "presales_dead_auto_restart"
+                        logger.info(
+                            "presales 进程已死，自动重启 triggered=%s",
+                            auto_triggered,
+                        )
+                self._last_cookie_fp = cookie_fp
+                self._last_token_error = token_error
+                return {
+                    "stage": stage,
+                    "stage_label": self._recovery_stage_label(stage),
+                    "auto_recover_triggered": auto_triggered,
+                    "reason": reason,
+                    "advice": self._recovery_advice(stage, token_error),
+                    "last_auto_recover_at": self._last_auto_recover_at,
+                    "last_auto_recover_result": self._last_auto_recover_result,
+                }
+            else:
+                stage = "cooldown"
+                reason = "presales_dead_restart_cooldown"
+                self._last_cookie_fp = cookie_fp
+                self._last_token_error = token_error
+                return {
+                    "stage": stage,
+                    "stage_label": self._recovery_stage_label(stage),
+                    "auto_recover_triggered": False,
+                    "reason": reason,
+                    "advice": self._recovery_advice(stage, token_error),
+                    "last_auto_recover_at": self._last_auto_recover_at,
+                    "last_auto_recover_result": self._last_auto_recover_result,
+                }
 
         if service_status in {"stopped", "suspended"}:
             reason = "service_not_running"
@@ -3761,6 +3807,7 @@ class MimicOps:
             service_status=service_status,
             token_error=token_error,
             cookie_text=cookie_text,
+            presales_alive=bool(presales_process.get("alive", False)),
         )
         recovery_stage = str(recovery.get("stage") or "monitoring").strip().lower() or "monitoring"
         next_retry_at: str | None = None
@@ -4658,20 +4705,23 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
     auto_refresh_enabled = os.environ.get("COOKIE_AUTO_REFRESH", "true").lower() in ("true", "1", "yes")
     refresher = None
     if auto_refresh_enabled:
-        from src.core.cookie_grabber import CookieAutoRefresher
+        try:
+            from src.core.cookie_grabber import CookieAutoRefresher
 
-        interval = int(os.environ.get("COOKIE_REFRESH_INTERVAL", "30"))
-        mimic_ops = DashboardHandler.mimic_ops
+            interval = int(os.environ.get("COOKIE_REFRESH_INTERVAL", "30"))
+            mimic_ops = DashboardHandler.mimic_ops
 
-        def _on_refreshed(cookie: str) -> None:
-            try:
-                mimic_ops.update_cookie(cookie, auto_recover=True)
-            except Exception as exc:
-                logger.error(f"Cookie 自动刷新回调失败: {exc}")
+            def _on_refreshed(cookie: str) -> None:
+                try:
+                    mimic_ops.update_cookie(cookie, auto_recover=True)
+                except Exception as exc:
+                    logger.error(f"Cookie 自动刷新回调失败: {exc}")
 
-        refresher = CookieAutoRefresher(interval_minutes=interval, on_refreshed=_on_refreshed)
-        refresher.start()
-        DashboardHandler._cookie_auto_refresher = refresher
+            refresher = CookieAutoRefresher(interval_minutes=interval, on_refreshed=_on_refreshed)
+            refresher.start()
+            DashboardHandler._cookie_auto_refresher = refresher
+        except Exception as exc:
+            logger.error(f"Cookie 自动刷新启动失败: {exc}")
 
     # 自动改价/催单轮询
     price_poller = None
@@ -4726,12 +4776,18 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
 
             try:
                 status_result = module_console.status(window_minutes=5, limit=5)
-                modules = status_result.get("items") or status_result.get("modules") or []
+                modules = status_result.get("modules") or {}
                 presales_running = False
-                for m in (modules if isinstance(modules, list) else []):
-                    if isinstance(m, dict) and m.get("name") == "presales" and m.get("status") == "running":
-                        presales_running = True
-                        break
+                if isinstance(modules, dict):
+                    presales_info = modules.get("presales", {})
+                    if isinstance(presales_info, dict):
+                        proc = presales_info.get("process", {})
+                        presales_running = bool(proc.get("alive", False)) if isinstance(proc, dict) else False
+                elif isinstance(modules, list):
+                    for m in modules:
+                        if isinstance(m, dict) and m.get("name") == "presales" and m.get("status") == "running":
+                            presales_running = True
+                            break
 
                 if not presales_running:
                     logger.warning("Watchdog: presales 模块未运行，尝试自动启动...")
@@ -4786,4 +4842,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import sys
+    sys.modules.setdefault("src.dashboard_server", sys.modules[__name__])
     main()

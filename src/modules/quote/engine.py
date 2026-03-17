@@ -61,6 +61,8 @@ class AutoQuoteEngine:
             markup_rules=cfg.get("markup_rules", {}),
             pricing_profile=str(cfg.get("pricing_profile", "normal")),
             volume_divisor_default=self.volume_divisor_default,
+            markup_categories=cfg.get("markup_categories", {}),
+            xianyu_discount=cfg.get("xianyu_discount", {}),
         )
         self.remote_provider: IQuoteProvider = RemoteQuoteProvider(
             enabled=bool(providers_cfg.get("remote", {}).get("enabled", False)),

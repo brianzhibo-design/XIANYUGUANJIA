@@ -16,8 +16,13 @@ from typing import Any
 
 from src.core.logger import get_logger
 
-from .templates import render_template, list_templates
-from .templates.registry import render_by_frame, render_by_composition, list_frames_metadata
+from .templates import (
+    render_template,
+    list_templates,
+    render_by_frame,
+    render_by_composition,
+    list_frames_metadata,
+)
 
 logger = get_logger()
 

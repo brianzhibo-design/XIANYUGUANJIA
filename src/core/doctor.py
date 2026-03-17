@@ -38,6 +38,10 @@ _SUGGESTIONS = {
         "服务端已内置无需额外部署。请安装 Chrome/Edge CookieCloud 扩展，"
         "然后在管理面板 → 系统配置 → CookieCloud 中填入 UUID 和密码。"
     ),
+    "Dashboard 配置完整性": (
+        "请在管理面板中完成首次配置（AI、CookieCloud、自动回复），"
+        "或从旧设备导入 data/system_config.json。"
+    ),
 }
 
 
@@ -255,12 +259,101 @@ def _extra_checks(skip_quote: bool = False) -> list[dict[str, Any]]:
         except Exception:
             pass
     cc_configured = bool(cc_uuid and cc_pwd)
+    cc_decryptable = False
+    cc_decrypt_msg = ""
+    if cc_configured:
+        import hashlib
+        cc_host = os.getenv("COOKIE_CLOUD_HOST", "").strip()
+        if not cc_host:
+            try:
+                cfg_path = Path("data/system_config.json")
+                if cfg_path.exists():
+                    _sc = json.loads(cfg_path.read_text(encoding="utf-8"))
+                    _cc = _sc.get("cookie_cloud", {}) if isinstance(_sc.get("cookie_cloud"), dict) else {}
+                    cc_host = str(_cc.get("cookie_cloud_host", "")).strip()
+            except Exception:
+                pass
+        if not cc_host:
+            cc_host = "http://localhost:8091/cookie-cloud"
+        try:
+            import urllib.request
+            url = f"{cc_host.rstrip('/')}/get/{cc_uuid}"
+            req = urllib.request.Request(
+                url,
+                data=json.dumps({"password": cc_pwd}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5.0) as resp:
+                body = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            encrypted = body.get("encrypted")
+            if encrypted:
+                from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+                from cryptography.hazmat.primitives import padding as sym_padding
+                import base64
+                key_raw = f"{cc_uuid}-{cc_pwd}"
+                key_hash = hashlib.md5(key_raw.encode("utf-8")).hexdigest()[:16]
+                raw_bytes = base64.b64decode(encrypted)
+                iv, ct = raw_bytes[:16], raw_bytes[16:]
+                cipher = Cipher(algorithms.AES(key_hash.encode()), modes.CBC(iv))
+                decryptor = cipher.decryptor()
+                padded = decryptor.update(ct) + decryptor.finalize()
+                unpadder = sym_padding.PKCS7(128).unpadder()
+                unpadder.update(padded) + unpadder.finalize()
+                cc_decryptable = True
+                cc_decrypt_msg = "已配置，密码验证通过"
+            elif body.get("cookie_data"):
+                cc_decryptable = True
+                cc_decrypt_msg = "已配置，数据可读取（未加密）"
+            else:
+                cc_decrypt_msg = "已配置，但服务返回空数据"
+        except Exception as exc:
+            exc_str = str(exc)
+            if "padding" in exc_str.lower() or "decrypt" in exc_str.lower():
+                cc_decrypt_msg = "已配置，但密码不匹配（Invalid padding）"
+            else:
+                cc_decrypt_msg = f"已配置，但连接失败: {exc_str[:80]}"
+
     _append_check(
         checks,
         name="CookieCloud 自动同步",
         passed=cc_configured,
-        message="已配置（Cookie 秒级自动恢复）" if cc_configured else "未配置（推荐配置以实现 Cookie 自动同步恢复）",
+        message=cc_decrypt_msg if cc_configured else "未配置（推荐配置以实现 Cookie 自动同步恢复）",
         critical=False,
+        suggestion=(
+            "密码不匹配，请在管理面板 → 系统配置 → CookieCloud 中重新配置，"
+            "确保密码与浏览器插件中的一致。"
+        ) if (cc_configured and not cc_decryptable and "密码" in cc_decrypt_msg) else None,
+    )
+
+    # system_config.json 完整性检测
+    _IMPORTANT_SECTIONS = {"ai", "cookie_cloud", "auto_reply"}
+    sys_cfg_path = Path("data/system_config.json")
+    sys_cfg_exists = sys_cfg_path.exists()
+    sys_cfg_sections_present: set[str] = set()
+    if sys_cfg_exists:
+        try:
+            _sys = json.loads(sys_cfg_path.read_text(encoding="utf-8"))
+            if isinstance(_sys, dict):
+                sys_cfg_sections_present = _IMPORTANT_SECTIONS & set(_sys.keys())
+        except Exception:
+            pass
+
+    sys_cfg_ok = sys_cfg_exists and sys_cfg_sections_present == _IMPORTANT_SECTIONS
+    missing_sections = _IMPORTANT_SECTIONS - sys_cfg_sections_present
+    if not sys_cfg_exists:
+        sys_cfg_message = "data/system_config.json 不存在，Dashboard 配置尚未初始化"
+    elif missing_sections:
+        sys_cfg_message = f"缺少配置段: {', '.join(sorted(missing_sections))}"
+    else:
+        sys_cfg_message = f"已配置 {len(sys_cfg_sections_present)} 个关键段"
+    _append_check(
+        checks,
+        name="Dashboard 配置完整性",
+        passed=sys_cfg_ok,
+        message=sys_cfg_message,
+        critical=False,
+        suggestion="请在管理面板中完成首次配置（AI、CookieCloud、自动回复），或从旧设备导入 data/system_config.json。",
     )
 
     if skip_quote:

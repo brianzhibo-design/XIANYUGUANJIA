@@ -24,6 +24,7 @@ class QuoteRequest:
     courier: str = "auto"
     item_type: str = "general"
     time_window: str = "normal"
+    max_dimension_cm: float = 0.0
 
     def cache_key(self) -> str:
         weight_bucket = round(self.weight * 2) / 2
@@ -137,6 +138,17 @@ class QuoteResult:
             additional_units = 0.0
         first_price_value = f"{self.base_fee:.2f}"
         remaining_price_value = f"{self.surcharges.get('续重', 0.0):.2f}"
+
+        oversize_tip = ""
+        if explain.get("oversize_warning"):
+            max_dim = explain.get("max_dimension_cm", 0)
+            threshold = explain.get("oversize_threshold_cm", 120)
+            svc_label = "快运" if explain.get("service_type") == "freight" else "快递"
+            oversize_tip = (
+                f"\n超长提醒：您的包裹最长边约{max_dim:.0f}cm，超出{svc_label}标准（{threshold:.0f}cm），"
+                "物流方可能根据实际情况收取超长费，届时小橙序会自动通知补差价~"
+            )
+
         tpl = str(template or DEFAULT_QUOTE_REPLY_TEMPLATE)
         try:
             rendered = tpl.format(
@@ -162,12 +174,12 @@ class QuoteResult:
                 eta_days=eta_days,
                 validity_minutes=int(validity_minutes),
                 volume_formula=volume_formula,
+                oversize_tip=oversize_tip,
             )
             return self._strip_validity_clause(rendered)
         except Exception:
-            # 模板异常时保底返回标准文案，避免中断自动回复链路
             fallback = (
                 f"您好，{origin} 到 {destination}，预估报价 ¥{self.total_fee:.2f}（{price_breakdown}）。"
-                f"预计时效约 {eta_days}。"
+                f"预计时效约 {eta_days}。{oversize_tip}"
             )
             return self._strip_validity_clause(fallback)

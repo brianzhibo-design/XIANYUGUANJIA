@@ -159,108 +159,96 @@ graph LR
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
-| **前端** | React 18 / Vite / TailwindCSS | 响应式管理面板，支持 PWA |
-| **Python 后端** | Python 3.10+ / asyncio | 核心引擎：WebSocket、AI、API 代理、配置管理 |
-| **数据库** | SQLite / PostgreSQL | 开发用 SQLite，生产用 PostgreSQL |
-| **消息队列** | 内存队列 + SQLite | 轻量级，无需额外依赖 |
-| **AI 服务** | OpenAI 兼容 API | 支持 DeepSeek、阿里百炼、智谱等 |
-| **通知** | HTTP Webhook | 飞书、企业微信、钉钉等 |
+| **前端** | React 18 / Vite / TailwindCSS / TypeScript | 响应式管理面板 |
+| **后端** | Python 3.10+ / asyncio | WebSocket 消息、AI 回复、报价引擎、配置管理 |
+| **数据库** | SQLite | 零配置，内嵌运行，WAL 模式优化并发 |
+| **消息通道** | WebSocket 直连闲鱼 | 毫秒级接收，内存队列 + SQLite 持久化 |
+| **AI 服务** | OpenAI 兼容 API | 支持 DeepSeek、通义千问、智谱、火山方舟等 |
+| **通知** | HTTP Webhook | 飞书、企业微信 |
 
 ---
 
 ## 🚀 快速开始
 
-### 环境要求
+### 三项准备
 
-- Python 3.10+
-- Node.js 18+
-- Chrome 或 Edge 浏览器（Cookie 自动获取需要）
-- 闲鱼账号 Cookie
-- AI 服务 API Key
+| 必备项 | 说明 | 获取方式 |
+|--------|------|---------|
+| **闲鱼 Cookie** | 登录凭证 | 浏览器 F12 复制，或启动后在管理面板自动获取 |
+| **AI API Key** | 自动回复 | 推荐 [DeepSeek](https://platform.deepseek.com)（便宜好用） |
+| **闲管家凭证** | 订单/发货 | [闲管家开放平台](https://open.goofish.pro) 注册获取 |
 
 ### 方式一：交互式快速启动（推荐新用户）
 
 ```bash
-# 1. 克隆项目
 git clone https://github.com/G3niusYukki/xianyu-openclaw.git
 cd xianyu-openclaw
 
-# 2. 交互式启动（含引导 + 状态检查）
-# macOS / Linux
+# macOS / Linux（自动安装依赖 + 配置引导 + 启动）
 bash quick-start.sh
 
 # Windows
 quick-start.bat
 ```
 
-带交互引导的启动脚本，自动完成：环境检查 → 依赖安装 → 配置校验 → 服务启动 → 首次使用引导。
+脚本自动完成：环境检查 → 依赖安装 → 配置创建 → 服务启动 → 首次使用引导。国内网络自动切换镜像源。
 
-### 方式二：精简一键启动
+### 方式二：Docker 部署（推荐生产）
 
 ```bash
-# macOS / Linux
-./start.sh
+git clone https://github.com/G3niusYukki/xianyu-openclaw.git
+cd xianyu-openclaw
+cp .env.example .env
+# 编辑 .env，填入 Cookie、AI Key、闲管家凭证（只需 3 项）
 
-# Windows
-start.bat
+docker compose up -d                          # 国际网络
+MIRROR=china docker compose up -d --build     # 国内网络
 ```
 
-功能同上但无交互引导，适合已配置好的环境直接启动。
-
-### 方式三：手动安装
+### 方式三：一键启动（已有环境）
 
 ```bash
-# 1. 克隆项目
+./start.sh     # macOS / Linux
+start.bat      # Windows
+```
+
+### 方式四：手动安装
+
+```bash
 git clone https://github.com/G3niusYukki/xianyu-openclaw.git
 cd xianyu-openclaw
 
-# 2. 安装 Python 依赖
-python3 -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# 3. 安装 Playwright Chromium 浏览器（Cookie 自动获取和消息服务需要）
 playwright install chromium
-
-# 4. 安装前端依赖（Vite 需要 Node.js）
 cd client && npm install && cd ..
 
-# 5. 配置环境变量
 cp .env.example .env
-# 编辑 .env，填入 Cookie 和 AI Key
+# 编辑 .env 填入 3 项必填配置
 
-# 6. 启动服务（需要2个终端窗口）
-
-# 终端1 - Python 后端
-python -m src.dashboard_server --port 8091
-
-# 终端2 - React 前端
-cd client && npx vite --host
+# 启动（需要 2 个终端）
+python -m src.dashboard_server --port 8091   # 终端 1
+cd client && npx vite --host                 # 终端 2
 ```
 
-访问地址：
-- **前端面板**: http://localhost:5173
-- **Python API**: http://localhost:8091
+### 访问地址
 
-> **注意**：前端代理配置指向 Python 后端 8091 端口，必须先启动 Python 服务，否则前端页面无法正常工作。
+- **管理面板**: http://localhost:5173
+- **后端 API**: http://localhost:8091
 
-### 方式三：Docker 一键部署
-
-```bash
-cp .env.example .env
-# 编辑 .env 填入配置
-docker compose up -d
-```
+> 详细部署方案、生产加固和运维指南见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ---
 
 ## 📖 使用指南
 
-### 首次配置
+### 首次配置（3 分钟上手）
 
-1. **系统配置** → 填入 AI 服务商信息（支持6家提供商引导）
-2. **店铺管理** → 粘贴 Cookie，点击验证
-3. **告警通知** → 配置飞书/企业微信 Webhook
-4. **启动监控** → Cookie 自动刷新和消息监听将自动运行
+1. **账户管理** → 粘贴 Cookie 或点击「自动获取」
+2. **系统配置 → AI** → 选择服务商、填入 API Key
+3. **系统配置 → CookieCloud** → 填入浏览器扩展的 UUID 和密码（推荐）
+4. **消息 → 对话沙盒** → 测试自动回复效果
+5. 确认无误后开启自动回复
 
 ### 核心工作流
 
@@ -280,24 +268,23 @@ docker compose up -d
 
 ### 环境变量 (.env)
 
-```bash
-# 闲鱼 Cookie（必需）
-XIANYU_COOKIE_1=your_cookie_here
+只需 3 项必填即可运行，其余均有默认值：
 
-# AI 配置（必需）
-AI_PROVIDER=deepseek
-AI_API_KEY=sk-...
+```bash
+# 必填
+XIANYU_COOKIE_1=你的闲鱼Cookie
+AI_API_KEY=你的AI密钥
+XGJ_APP_KEY=闲管家AppKey
+XGJ_APP_SECRET=闲管家AppSecret
+
+# 可选（有默认值）
+AI_PROVIDER=deepseek              # deepseek / openai / qwen / zhipu
 AI_BASE_URL=https://api.deepseek.com/v1
 AI_MODEL=deepseek-chat
-
-# Cookie 自动刷新（可选）
-COOKIE_AUTO_REFRESH=true
-COOKIE_REFRESH_INTERVAL=30
-
-# 端口配置（可选）
-FRONTEND_PORT=5173
-PYTHON_PORT=8091
+MESSAGES_ENABLED=true
 ```
+
+> 完整配置项和详细说明见 `.env.example`
 
 ### CookieCloud 配置（可选，推荐）
 
@@ -602,26 +589,28 @@ By connecting directly to Xianyu's message channel via WebSocket and combining A
 git clone https://github.com/G3niusYukki/xianyu-openclaw.git
 cd xianyu-openclaw
 
-# Interactive quick start (recommended for new users)
-# macOS / Linux
-bash quick-start.sh
-# Windows: quick-start.bat
+# Option 1: Interactive setup (recommended)
+bash quick-start.sh            # macOS / Linux
+quick-start.bat                # Windows
 
-# Or one-click start (no guide):
-# ./start.sh  or  start.bat
+# Option 2: Docker (recommended for production)
+cp .env.example .env           # Edit .env with Cookie + AI Key + XGJ credentials
+docker compose up -d
 
-# Or manual install:
-python3 -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-playwright install chromium    # Required for cookie auto-grab
+# Option 3: Manual
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt && playwright install chromium
 cd client && npm install && cd ..
-cp .env.example .env
-# Edit .env with your Cookie and AI Key
+cp .env.example .env           # Edit .env
+python -m src.dashboard_server --port 8091 &
+cd client && npx vite --host
 ```
 
 Access:
-- Frontend: http://localhost:5173
-- Python API: http://localhost:8091
+- Dashboard: http://localhost:5173
+- API: http://localhost:8091
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production deployment guide.
 
 ---
 

@@ -40,11 +40,15 @@ def compose(
     params = params or {}
     theme = theme or {}
 
+    color_scheme_keys = list(MODIFIER_REGISTRY["color_scheme"].keys())
+    decoration_keys = list(MODIFIER_REGISTRY["decoration"].keys())
+    title_style_keys = list(MODIFIER_REGISTRY["title_style"].keys())
+
     chosen = {
         "layout": layout or random.choice(list(LAYOUT_REGISTRY.keys())),
-        "color_scheme": color_scheme or random.choice(list(MODIFIER_REGISTRY["color_scheme"].keys())),
-        "decoration": decoration or random.choice(list(MODIFIER_REGISTRY["decoration"].keys())),
-        "title_style": title_style or random.choice(list(MODIFIER_REGISTRY["title_style"].keys())),
+        "color_scheme": color_scheme or random.choice(color_scheme_keys),
+        "decoration": decoration or random.choice(decoration_keys),
+        "title_style": title_style or random.choice(title_style_keys),
     }
 
     layout_entry = get_layout(chosen["layout"])
@@ -56,7 +60,16 @@ def compose(
 
     modifiers: list[ModifierOutput] = []
     for kind in ("color_scheme", "decoration", "title_style"):
-        mod_entry = get_modifier(kind, chosen[kind])
+        mod_id = chosen[kind]
+        mod_entry = get_modifier(kind, mod_id)
+        if mod_entry is None and mod_id:
+            mod_id = random.choice(
+                color_scheme_keys if kind == "color_scheme"
+                else decoration_keys if kind == "decoration"
+                else title_style_keys
+            )
+            chosen[kind] = mod_id
+            mod_entry = get_modifier(kind, mod_id)
         if mod_entry is None:
             continue
         modifiers.append(mod_entry["render"](params, theme))
@@ -74,6 +87,11 @@ def compose(
 
     if layout_out.required_css:
         merged_css_parts.append(layout_out.required_css)
+
+    if not merged_vars or "--bg-primary" not in merged_vars:
+        mod_entry = get_modifier("color_scheme", "red_gold")
+        if mod_entry:
+            merged_vars.update(mod_entry["render"](params, theme).css_vars)
 
     vars_css = ""
     if merged_vars:

@@ -153,7 +153,7 @@ def handle_xgj_retry_price(ctx: RouteContext) -> None:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/xgj/retry-ship
+# POST /api/xgj/retry-ship  &  POST /api/orders/retry (alias)
 # ---------------------------------------------------------------------------
 
 
@@ -162,6 +162,12 @@ def handle_xgj_retry_ship(ctx: RouteContext) -> None:
     body = ctx.json_body()
     payload = ctx.mimic_ops.retry_xianguanjia_delivery(body)
     ctx.send_json(payload, status=200 if payload.get("success") else 400)
+
+
+@post("/api/orders/retry")
+def handle_orders_retry(ctx: RouteContext) -> None:
+    """前端兼容别名 — 委托到 /api/xgj/retry-ship 处理。"""
+    handle_xgj_retry_ship(ctx)
 
 
 # ---------------------------------------------------------------------------

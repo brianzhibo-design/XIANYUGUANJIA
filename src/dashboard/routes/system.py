@@ -14,6 +14,7 @@ from typing import Any
 from src.dashboard.router import RouteContext, get, post
 
 from src.dashboard.config_service import read_system_config as _read_system_config
+from src.dashboard.config_service import write_system_config as _write_system_config
 
 
 def _now_iso() -> str:
@@ -295,3 +296,103 @@ def handle_reset_database(ctx: RouteContext) -> None:
     db_type = str(body.get("type") or "all")
     payload = ctx.mimic_ops.reset_database(db_type=db_type)
     ctx.send_json(payload, status=200 if payload.get("success") else 400)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/accounts
+# ---------------------------------------------------------------------------
+
+
+@get("/api/accounts")
+def handle_accounts(ctx: RouteContext) -> None:
+    """返回账户列表 — 前端 AccountList 页面使用。"""
+    cfg = _read_system_config()
+    xgj = cfg.get("xianguanjia", {})
+    configured = bool(
+        xgj.get("app_key")
+        and xgj.get("app_secret")
+        and "****" not in str(xgj.get("app_key", ""))
+    )
+    accounts = [
+        {
+            "id": "default",
+            "name": "默认店铺",
+            "enabled": True,
+            "configured": configured,
+        }
+    ]
+    ctx.send_json({"ok": True, "accounts": accounts})
+
+
+# ---------------------------------------------------------------------------
+# GET /api/version
+# ---------------------------------------------------------------------------
+
+
+@get("/api/version")
+def handle_version(ctx: RouteContext) -> None:
+    try:
+        from src import __version__
+    except Exception:
+        __version__ = "unknown"
+    ctx.send_json({
+        "version": __version__,
+        "releases_url": "https://github.com/openclawlab/xianyu-openclaw/releases",
+    })
+
+
+_latest_version_cache: dict[str, Any] = {}
+_latest_version_ts: float = 0.0
+_LATEST_VERSION_TTL = 3600.0
+
+
+@get("/api/version/latest")
+def handle_version_latest(ctx: RouteContext) -> None:
+    """Proxy GitHub releases API with 1-hour cache to avoid rate limits and China access issues."""
+    global _latest_version_cache, _latest_version_ts
+
+    if _latest_version_cache and (_time_mod.time() - _latest_version_ts) < _LATEST_VERSION_TTL:
+        ctx.send_json(_latest_version_cache)
+        return
+
+    try:
+        import httpx
+        with httpx.Client(timeout=10.0) as hc:
+            resp = hc.get(
+                "https://api.github.com/repos/openclawlab/xianyu-openclaw/releases/latest",
+                headers={"Accept": "application/vnd.github.v3+json"},
+            )
+        if resp.status_code == 200:
+            tag = resp.json().get("tag_name", "")
+            latest = tag.lstrip("v") if tag else None
+            result: dict[str, Any] = {"latest": latest, "tag": tag}
+            _latest_version_cache = result
+            _latest_version_ts = _time_mod.time()
+            ctx.send_json(result)
+        else:
+            ctx.send_json({"latest": None, "error": f"GitHub API returned {resp.status_code}"})
+    except Exception as exc:
+        ctx.send_json({"latest": None, "error": str(exc)})
+
+
+# ---------------------------------------------------------------------------
+# GET /api/wizard/status, POST /api/wizard/complete
+# ---------------------------------------------------------------------------
+
+
+@get("/api/wizard/status")
+def handle_wizard_status(ctx: RouteContext) -> None:
+    cfg = _read_system_config()
+    ctx.send_json({
+        "completed": bool(cfg.get("wizard_completed")),
+        "completed_at": cfg.get("wizard_completed_at", ""),
+    })
+
+
+@post("/api/wizard/complete")
+def handle_wizard_complete(ctx: RouteContext) -> None:
+    cfg = _read_system_config()
+    cfg["wizard_completed"] = True
+    cfg["wizard_completed_at"] = _now_iso()
+    _write_system_config(cfg)
+    ctx.send_json({"ok": True})

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 
 _SUFFIXES = ("特别行政区", "自治区", "自治州", "地区", "省", "市", "盟", "区", "县")
+
+_logger = logging.getLogger(__name__)
 
 
 class GeoResolver:
@@ -21,6 +24,12 @@ class GeoResolver:
 
     def _load(self) -> None:
         if not self.mapping_file.exists():
+            _logger.warning(
+                "GeoResolver: city_province.json not found at %s — "
+                "all city/province lookups will return empty results. "
+                "Please ensure data/geo/city_province.json is present.",
+                self.mapping_file,
+            )
             self._city_to_province = {}
             self._province_aliases = {}
             return
@@ -75,6 +84,13 @@ class GeoResolver:
         if normalized in self._province_aliases:
             return self._province_aliases[normalized]
         return self._city_to_province.get(normalized, "")
+
+    def is_province_level(self, name: str | None) -> bool:
+        """判断地址是否仅为省级（非市级）。"""
+        normalized = self.normalize(name)
+        if not normalized:
+            return False
+        return normalized in self._province_aliases and normalized not in self._city_to_province
 
     def expand_city_province_candidates(self, name: str | None) -> list[str]:
         normalized = self.normalize(name)

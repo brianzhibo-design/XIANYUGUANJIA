@@ -1,7 +1,9 @@
 """闲管家开放平台 API 适配层。
 
-已废弃 — 请使用 src.integrations.xianguanjia.open_platform_client.OpenPlatformClient。
-本文件存在签名 bug（无逗号分隔、毫秒时间戳、sort_keys=True），保留仅为向后兼容。
+.. deprecated::
+    已废弃 — 请使用 ``src.integrations.xianguanjia.open_platform_client.OpenPlatformClient``。
+    本文件存在签名 bug（无逗号分隔、毫秒时间戳、sort_keys=True），保留仅为向后兼容，
+    将在后续版本中移除。
 """
 
 from __future__ import annotations
@@ -9,18 +11,10 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-import warnings as _warnings
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
-
-_warnings.warn(
-    "orders.xianguanjia.XianGuanJiaClient is deprecated. "
-    "Use integrations.xianguanjia.open_platform_client.OpenPlatformClient instead.",
-    DeprecationWarning,
-    stacklevel=2,
-)
 
 
 def _md5_hex(value: str | bytes) -> str:
@@ -67,7 +61,10 @@ class XianGuanJiaAPIError(Exception):
 
 
 class XianGuanJiaClient:
-    """闲管家开放平台最小客户端。"""
+    """闲管家开放平台最小客户端。
+
+    .. deprecated:: 使用 ``OpenPlatformClient`` 替代。
+    """
 
     def __init__(
         self,
@@ -79,6 +76,13 @@ class XianGuanJiaClient:
         merchant_id: str | None = None,
         merchant_query_key: str = "merchantId",
     ) -> None:
+        import warnings
+        warnings.warn(
+            "XianGuanJiaClient is deprecated. "
+            "Use integrations.xianguanjia.open_platform_client.OpenPlatformClient instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.app_key = str(app_key).strip()
         self.app_secret = str(app_secret).strip()
         self.base_url = base_url.rstrip("/")

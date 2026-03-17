@@ -24,10 +24,9 @@ def _run_async(coro: Any) -> Any:
 
 @get("/api/listing/templates")
 def handle_listing_templates(ctx: RouteContext) -> None:
-    from src.modules.listing.templates import list_templates
-    from src.modules.listing.templates.frames import list_frames
+    from src.modules.listing.templates import list_templates, list_frames_metadata
 
-    ctx.send_json({"ok": True, "templates": list_templates(), "frames": list_frames()})
+    ctx.send_json({"ok": True, "templates": list_templates(), "frames": list_frames_metadata()})
 
 
 # ---------------------------------------------------------------------------
@@ -37,9 +36,9 @@ def handle_listing_templates(ctx: RouteContext) -> None:
 
 @get("/api/listing/frames")
 def handle_listing_frames(ctx: RouteContext) -> None:
-    from src.modules.listing.templates.frames import list_frames
+    from src.modules.listing.templates import list_frames_metadata
 
-    ctx.send_json({"ok": True, "frames": list_frames()})
+    ctx.send_json({"ok": True, "frames": list_frames_metadata()})
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +48,7 @@ def handle_listing_frames(ctx: RouteContext) -> None:
 
 @get("/api/listing/thumbnails")
 def handle_listing_thumbnails(ctx: RouteContext) -> None:
-    from src.modules.listing.templates.frames import list_frames as _lf
+    from src.modules.listing.templates import list_frames_metadata as _lf
 
     cat = ctx.query_str("category", "express").strip()
     thumb_map = {}
@@ -490,7 +489,12 @@ def handle_publish_queue_generate(ctx: RouteContext) -> None:
 
     body = ctx.json_body()
     q = PublishQueue(project_root=ctx.mimic_ops.project_root)
-    category = body.get("category", "express")
+
+    categories = body.get("categories")
+    if not categories:
+        cat = body.get("category")
+        categories = [cat] if cat else None
+
     ap_cfg = _read_system_config().get("auto_publish", {})
     user_schedule = {}
     for k in (
@@ -500,7 +504,7 @@ def handle_publish_queue_generate(ctx: RouteContext) -> None:
         if k in ap_cfg:
             user_schedule[k] = ap_cfg[k]
     items = _run_async(
-        q.generate_daily_queue(category=category, user_schedule=user_schedule if user_schedule else None)
+        q.generate_daily_queue(categories=categories, user_schedule=user_schedule if user_schedule else None)
     )
     ctx.send_json({"ok": True, "items": [asdict(it) for it in items]})
 

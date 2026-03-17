@@ -384,6 +384,12 @@ def get_template(key: str) -> dict[str, Any] | None:
 
 
 def render_template(key: str, params: dict[str, Any] | None = None) -> str | None:
+    """渲染模板。支持旧品类 key 和新的 'frame_id:category' 格式。"""
+    if ":" in key:
+        frame_id, _, category = key.partition(":")
+        from .registry import render_by_frame
+        return render_by_frame(frame_id, category, params)
+
     tpl = TEMPLATES.get(key)
     if not tpl:
         tpl = TEMPLATES.get("exchange")

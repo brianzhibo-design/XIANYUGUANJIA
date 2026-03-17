@@ -59,8 +59,8 @@ export interface QueueItem {
 export const getPublishQueue = (date?: string): Promise<AxiosResponse<{ ok: boolean; items: QueueItem[] }>> =>
   api.get('/publish-queue', { params: date ? { date } : {} });
 
-export const generateDailyQueue = (category: string): Promise<AxiosResponse<{ ok: boolean; items: QueueItem[] }>> =>
-  api.post('/publish-queue/generate', { category });
+export const generateDailyQueue = (categories?: string[]): Promise<AxiosResponse<{ ok: boolean; items: QueueItem[] }>> =>
+  api.post('/publish-queue/generate', categories ? { categories } : {});
 
 export const updateQueueItem = (id: string, updates: Record<string, any>): Promise<AxiosResponse<{ ok: boolean; item: QueueItem }>> =>
   api.put(`/publish-queue/${id}`, updates);
@@ -116,30 +116,3 @@ export const previewFrame = (frameId: string, category: string, brandAssetIds?: 
   return api.get('/listing/preview-frame', { params });
 };
 
-export interface LayerOption {
-  id: string;
-  name: string;
-  desc: string;
-}
-
-export interface CompositionLayers {
-  layout: LayerOption[];
-  color_scheme: LayerOption[];
-  decoration: LayerOption[];
-  title_style: LayerOption[];
-}
-
-export const getCompositionLayers = (): Promise<AxiosResponse<{ ok: boolean } & CompositionLayers>> =>
-  api.get('/composition/layers');
-
-export const previewComposition = (
-  category: string,
-  layers: Record<string, string>,
-  brandAssetIds?: string[],
-): Promise<AxiosResponse<{ ok: boolean; image_url: string; composition: Record<string, string> }>> => {
-  const params: Record<string, string> = { category, ...layers };
-  if (brandAssetIds && brandAssetIds.length > 0) {
-    params.brand_asset_ids = brandAssetIds.join(',');
-  }
-  return api.get('/listing/preview-composition', { params });
-};
