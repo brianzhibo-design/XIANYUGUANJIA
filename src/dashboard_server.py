@@ -4794,8 +4794,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except Exception as e:  # pragma: no cover - safety net
             self._send_json(_error_payload(str(e), code="INTERNAL_ERROR"), status=500)
 
+    _QUIET_PATHS = frozenset({
+        "/api/update/status", "/api/dashboard/summary",
+        "/api/system/status", "/healthz",
+    })
+
     def log_message(self, format: str, *args: Any) -> None:
-        return
+        msg = format % args if args else format
+        if any(p in msg for p in self._QUIET_PATHS) and "200" in msg:
+            return
+        logger.debug(msg)
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = None) -> None:
@@ -4937,6 +4945,10 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
     wd_thread = threading.Thread(target=_watchdog_loop, daemon=True, name="watchdog")
     wd_thread.start()
 
+    from src.dashboard.router import all_routes
+    routes = all_routes()
+    total = sum(len(v) for v in routes.values())
+    logger.info("已注册 %d 个 API 路由", total)
     logger.info("Dashboard running: http://%s:%s", host, port)
     logger.info("Using database: %s", resolved_db)
     server.serve_forever()
