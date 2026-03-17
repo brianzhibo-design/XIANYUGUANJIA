@@ -1487,6 +1487,7 @@ class GoofishWsTransport:
 
                     im_refresh_interval = 15 * 60
                     if (now - self._last_im_refresh_at) >= im_refresh_interval:
+                        self._maybe_reload_cookie(reason="im_ttl_check")
                         ttl = self._m_h5_tk_seconds_until_expiry()
                         if ttl is not None and ttl < 900:
                             self.logger.info(f"_m_h5_tk TTL={ttl:.0f}s < 900s, proactive IM refresh")
