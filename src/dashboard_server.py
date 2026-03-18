@@ -20,7 +20,7 @@ from src.core.config import get_config
 from src.dashboard.module_console import ModuleConsole
 from src.dashboard.repository import DashboardRepository, LiveDashboardDataSource
 from src.dashboard.router import RouteContext, dispatch_delete, dispatch_get, dispatch_post, dispatch_put
-from src.dashboard.mimic_ops import MimicOps, _error_payload, _test_xgj_connection, _sync_system_config_to_yaml, _run_async
+from src.dashboard.mimic_ops import MimicOps, _error_payload
 
 import hashlib
 import re
