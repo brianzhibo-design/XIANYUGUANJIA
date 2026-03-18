@@ -357,6 +357,7 @@ class GoofishWsTransport:
         self._last_heartbeat_ack = 0.0
         self._connect_failures = 0
         self._rgv587_consecutive = 0
+        self._slider_just_recovered = False
         self._active_refresh_401_streak = 0
         self._last_disconnect_reason = ""
         self._cookie_changed = threading.Event()
@@ -1513,6 +1514,7 @@ class GoofishWsTransport:
                 self._ready.set()
                 self._connect_failures = 0
                 self._rgv587_consecutive = 0
+                self._slider_just_recovered = False
                 self._active_refresh_401_streak = 0
                 self.logger.info("Connected to Goofish WebSocket transport")
 
@@ -1624,37 +1626,52 @@ class GoofishWsTransport:
                         self.logger.warning(
                             f"RGV587 风控检测 ({self._rgv587_consecutive}), "
                             f"slider_attempts={self._slider_recovery_attempts}/{self._SLIDER_MAX_ATTEMPTS_PER_CYCLE}, "
+                            f"slider_just_recovered={self._slider_just_recovered}, "
                             f"退避 {rgv_backoff:.0f}s..."
                         )
 
-                        # Step 1: 闲管家 IM
-                        if self._rgv587_consecutive <= 2 and await self._try_goofish_im_refresh(urgent=True):
+                        # 滑块刚成功但 RGV587 仍持续 → 滑块无法解除此次封控，跳过所有自动恢复直接进等待模式
+                        if self._slider_just_recovered:
+                            self._slider_just_recovered = False
+                            self._slider_recovery_attempts = self._SLIDER_MAX_ATTEMPTS_PER_CYCLE
+                            self.logger.warning(
+                                "滑块验证已通过但 RGV587 仍持续，滑块无法解除此次封控，"
+                                "切换到 CookieCloud/手动更新等待模式"
+                            )
+                            # fall through to _wait_for_cookie_update_forever below
+
+                        # Step 1: 首次 RGV587 给 1 次 IM 机会（处理瞬时风控）
+                        elif self._rgv587_consecutive <= 1:
+                            await self._try_goofish_im_refresh(urgent=True)
                             self._connect_failures = 0
-                            self.logger.info(f"闲管家IM Cookie刷新成功，退避 {rgv_backoff:.0f}s 后重试 WS 连接")
+                            self.logger.info(f"首次RGV587，IM刷新后退避 {rgv_backoff:.0f}s 后重试 WS 连接")
                             await asyncio.sleep(rgv_backoff)
                             continue
 
-                        # Step 2: BitBrowser CDP 直读 cookie (前置补充，不阻断滑块)
-                        if _fp_enabled:
-                            cdp_refreshed = await self._try_bitbrowser_cookie_refresh()
-                            if cdp_refreshed:
-                                self._connect_failures = 0
-                                self.logger.info("BitBrowser CDP Cookie已合并，继续尝试滑块恢复...")
+                        # Step 2: CookieCloud 快速通道（浏览器扩展同步的 cookie 通常最完整）
+                        elif await self._try_cookiecloud_poll() is True:
+                            self._connect_failures = 0
+                            self._rgv587_consecutive = 0
+                            self._slider_just_recovered = False
+                            self.logger.info("CookieCloud 提供了新 Cookie，立即重试 WS 连接")
+                            continue
 
-                        # Step 3: 滑块验证
-                        can_try_slider = (
-                            slider_enabled and self._slider_recovery_attempts < self._SLIDER_MAX_ATTEMPTS_PER_CYCLE
-                        )
+                        # Step 3: BitBrowser CDP 直读 cookie (前置补充，不阻断滑块)
+                        elif slider_enabled and self._slider_recovery_attempts < self._SLIDER_MAX_ATTEMPTS_PER_CYCLE:
+                            if _fp_enabled:
+                                cdp_refreshed = await self._try_bitbrowser_cookie_refresh()
+                                if cdp_refreshed:
+                                    self._connect_failures = 0
+                                    self.logger.info("BitBrowser CDP Cookie已合并，继续尝试滑块恢复...")
 
-                        if can_try_slider:
+                            # Step 4: 滑块验证
                             self._send_risk_control_notification()
                             self._slider_recovery_attempts += 1
                             recovered = await self._try_slider_recovery(trigger_source="rgv587")
                             if recovered:
                                 self._connect_failures = 0
-                                self._rgv587_consecutive = 0
-                                self._slider_recovery_attempts = 0
-                                self.logger.info("滑块验证恢复成功，立即重试 WS 连接")
+                                self._slider_just_recovered = True
+                                self.logger.info("滑块验证通过，标记待验证，立即重试 WS 连接")
                                 continue
                             self.logger.warning(
                                 f"滑块自动恢复失败 ({self._slider_recovery_attempts}/{self._SLIDER_MAX_ATTEMPTS_PER_CYCLE})，"
@@ -1683,6 +1700,7 @@ class GoofishWsTransport:
                         if await self._wait_for_cookie_update_forever(reason="rgv587"):
                             self._connect_failures = 0
                             self._rgv587_consecutive = 0
+                            self._slider_just_recovered = False
                             self._slider_recovery_attempts = 0
                             self.logger.info("检测到 Cookie 更新，立即重试 WS 连接")
                             continue
