@@ -160,7 +160,7 @@ def handle_intent_rules(ctx: RouteContext) -> None:
 def handle_manual_mode_get(ctx: RouteContext) -> None:
     from src.modules.messages.manual_mode import ManualModeStore
 
-    timeout = int(get_config().get_section("messages", {}).get("manual_mode_timeout", 3600))
+    timeout = int(get_config().get_section("messages", {}).get("manual_mode_timeout", 600))
     store = ManualModeStore(os.path.join("data", "manual_mode.db"), timeout_seconds=timeout)
     sessions = store.list_active()
     ctx.send_json(
@@ -242,7 +242,7 @@ def handle_manual_mode_post(ctx: RouteContext) -> None:
     enabled = body.get("enabled", True)
     from src.modules.messages.manual_mode import ManualModeStore
 
-    timeout = int(get_config().get_section("messages", {}).get("manual_mode_timeout", 3600))
+    timeout = int(get_config().get_section("messages", {}).get("manual_mode_timeout", 600))
     store = ManualModeStore(os.path.join("data", "manual_mode.db"), timeout_seconds=timeout)
     state = store.set_state(sid, bool(enabled))
     ctx.send_json(

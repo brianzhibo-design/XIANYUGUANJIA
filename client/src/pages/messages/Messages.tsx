@@ -438,7 +438,9 @@ export default function Messages() {
                 <p className="font-medium">人工介入模式说明</p>
                 <ul className="list-disc list-inside text-amber-800 space-y-0.5">
                   <li>当卖家在闲鱼手动发送消息后，该会话自动暂停自动回复</li>
-                  <li>超时自动恢复：{manualTimeout > 0 ? `${Math.round(manualTimeout / 60)} 分钟后自动恢复` : '不会自动恢复，需手动关闭'}</li>
+                  <li>卖家持续发消息会自动延长超时，确保人工对话不被打断</li>
+                  <li>超时自动恢复：{manualTimeout > 0 ? `卖家停止发消息 ${Math.round(manualTimeout / 60)} 分钟后自动恢复` : '不会自动恢复，需手动关闭'}</li>
+                  <li>智能恢复：若卖家停止回复，买家等待超过 5 分钟后也会自动恢复</li>
                   <li>也可在下方手动关闭人工模式，恢复自动回复</li>
                 </ul>
               </div>

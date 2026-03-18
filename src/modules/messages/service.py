@@ -180,6 +180,9 @@ class MessagesService:
         }
         self.transport_mode = self._normalized_transport_mode(self.config.get("transport", "dom"))
         self.ws_config = self.config.get("ws", {}) if isinstance(self.config.get("ws"), dict) else {}
+        for _key in ("manual_mode_timeout", "manual_mode_resume_seconds"):
+            if _key not in self.ws_config and _key in self.config:
+                self.ws_config[_key] = self.config[_key]
         self._ws_transport: Any | None = None
         self._ws_unavailable_reason = ""
         self._reply_templates_path = self._resolve_reply_templates_path()

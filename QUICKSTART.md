@@ -216,7 +216,7 @@ Cookie 有效期 7-30 天。过期后通过管理面板在线更新。
 
 - **触发方式**：卖家在闲鱼对话中手动发消息
 - **恢复方式**：
-  - 超时自动恢复（默认 1 小时，在 `config.yaml` 中配置 `manual_mode_timeout`）
+  - 超时自动恢复（默认 10 分钟，在 `config.yaml` 中配置 `manual_mode_timeout`）
   - 在管理面板「消息中心 → 人工模式」手动恢复
 - **配置项**：`messages.manual_mode_timeout`，单位秒，设为 `0` 表示不自动恢复
 - **管理 API**：

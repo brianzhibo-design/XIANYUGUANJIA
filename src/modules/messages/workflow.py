@@ -234,7 +234,9 @@ class WorkflowStore:
     def set_manual_takeover(self, session_id: str, enabled: bool) -> bool:
         now = self._now()
         with self._connect() as conn:
-            row = conn.execute("SELECT 1 FROM session_tasks WHERE session_id=?", (session_id,)).fetchone()
+            row = conn.execute(
+                "SELECT state FROM session_tasks WHERE session_id=?", (session_id,)
+            ).fetchone()
             if row is None:
                 conn.execute(
                     """
@@ -243,15 +245,18 @@ class WorkflowStore:
                     """,
                     (session_id, WorkflowState.NEW.value, now, now),
                 )
+                prev_state = WorkflowState.NEW.value
+            else:
+                prev_state = str(row["state"])
+
+            if enabled:
+                new_state = WorkflowState.MANUAL.value
+            else:
+                new_state = prev_state if prev_state != WorkflowState.MANUAL.value else WorkflowState.REPLIED.value
 
             cur = conn.execute(
                 "UPDATE session_tasks SET manual_takeover=?, state=?, updated_at=? WHERE session_id=?",
-                (
-                    1 if enabled else 0,
-                    WorkflowState.MANUAL.value if enabled else WorkflowState.REPLIED.value,
-                    now,
-                    session_id,
-                ),
+                (1 if enabled else 0, new_state, now, session_id),
             )
             changed = cur.rowcount > 0
 
@@ -748,14 +753,19 @@ class WorkflowWorker:
         self.logger = get_logger()
 
         app_config = get_config()
-        workflow_cfg = app_config.get_section("messages", {}).get("workflow", {})
+        messages_cfg = app_config.get_section("messages", {})
+        workflow_cfg = messages_cfg.get("workflow", {})
         self.config = {**workflow_cfg, **(config or {})}
 
         db_path = self.config.get("db_path")
         self.store = store or WorkflowStore(db_path=db_path)
 
-        manual_timeout = int(self.config.get("manual_mode_timeout", 600))
-        manual_resume = int(self.config.get("manual_mode_resume_seconds", 300))
+        manual_timeout = int(
+            self.config.get("manual_mode_timeout", messages_cfg.get("manual_mode_timeout", 600))
+        )
+        manual_resume = int(
+            self.config.get("manual_mode_resume_seconds", messages_cfg.get("manual_mode_resume_seconds", 300))
+        )
         from src.modules.messages.manual_mode import ManualModeStore
 
         self._manual_mode_store = ManualModeStore(

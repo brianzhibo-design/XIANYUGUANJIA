@@ -9,6 +9,8 @@ Phase 3: 自动检测并求解滑块验证码（NC 滑块 / 拼图滑块）
 from __future__ import annotations
 
 import asyncio
+import glob
+import json
 import os
 import platform
 import random
@@ -21,6 +23,7 @@ from src.core.logger import get_logger
 logger = get_logger()
 
 _SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "slider_screenshots")
+_TRAJECTORY_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "slider_trajectories")
 _SCREENSHOT_MAX_AGE_DAYS = 7
 _SCREENSHOT_MAX_PER_TRIGGER = 4
 
@@ -76,6 +79,7 @@ NC_SLIDER_SELECTORS = [
     ".nc_wrapper span",
     "#nc_2_n1z",
     "#nc_3_n1z",
+    "span[aria-label='滑块']",
 ]
 
 NC_TRACK_SELECTORS = [
@@ -88,7 +92,23 @@ NC_TRACK_SELECTORS = [
     "#nc_2__scale_text",
     "#nc_3__scale_text",
     "[class*='nc_scale']",
+    "div.nc_scale",
 ]
+
+CAPTCHA_IFRAME_XPATHS = [
+    "xpath://iframe[@id='baxia-dialog-content']",
+    "xpath://iframe[contains(@src,'action=captcha') and not(contains(@style,'none'))]",
+]
+
+POPUP_DISMISS_XPATHS = [
+    "xpath://div[@aria-label='关闭' or @aria-label='Close']",
+    "xpath://div[@role='button' and text()='跳过']",
+]
+
+POST_CAPTCHA_XPATHS = {
+    "login_iframe": "xpath://iframe[@id='alibaba-login-box']",
+    "quick_enter": "xpath://button[text()='快速进入']",
+}
 
 PUZZLE_SELECTORS = [
     ".yoda-image-slice",
@@ -152,77 +172,136 @@ def generate_human_trajectory(distance: int) -> list[tuple[int, int, int]]:
 
     Returns list of (dx, dy, dt_ms) relative movements.
 
-    Uses cubic Bezier curve for natural acceleration/deceleration,
-    with overshoot-and-correct at the end to mimic real human behavior.
+    Three-phase speed profile matching proven slider automation patterns:
+    Phase 1 (~30%): slow cautious start, acceleration 0.3→1.8 px/step
+    Phase 2 (~40%): steady cruising, ~2.0 px/step
+    Phase 3 (~30%): confident acceleration, 2.5→7.0 px/step
     """
     if distance <= 0:
         return []
 
-    total_duration_ms = random.randint(400, 900)
-    num_steps = max(12, distance // 8)
+    num_steps = max(20, distance // 3)
+    base_dt = random.randint(7, 9)
 
-    overshoot_px = random.randint(3, max(6, distance // 30))
-    overshoot_target = distance + overshoot_px
+    phase1_end = int(num_steps * random.uniform(0.25, 0.35))
+    phase3_start = num_steps - int(num_steps * random.uniform(0.25, 0.35))
 
-    cp1_x = random.uniform(0.15, 0.35)
-    cp2_x = random.uniform(0.85, 0.95)
+    raw_speeds: list[float] = []
+    for i in range(num_steps):
+        if i < phase1_end:
+            t = i / max(1, phase1_end)
+            raw_speeds.append(_cubic_bezier(t, 0.3, 0.5, 1.0, 1.8))
+        elif i < phase3_start:
+            raw_speeds.append(2.0 + random.uniform(-0.3, 0.3))
+        else:
+            t = (i - phase3_start) / max(1, num_steps - phase3_start)
+            raw_speeds.append(_cubic_bezier(t, 2.5, 3.0, 4.5, 7.0))
+
+    speed_sum = sum(raw_speeds) or 1.0
+    scale = distance / speed_sum
+
+    y_drift_up = random.uniform(2, 6)
+    y_drift_down = random.uniform(2, 6)
+    prev_y_float = 0.0
 
     steps: list[tuple[int, int, int]] = []
-    steps.append((0, 0, random.randint(20, 60)))
-
     prev_x = 0
-    main_steps = int(num_steps * 0.85)
-    for i in range(1, main_steps + 1):
-        progress = i / main_steps
-        eased = _cubic_bezier(progress, 0.0, cp1_x, cp2_x, 1.0)
-        target_x = int(eased * overshoot_target)
+    cumulative = 0.0
 
-        noise = random.gauss(0, 0.8)
-        target_x = max(prev_x, target_x + int(noise))
-
-        if random.random() < 0.06 and i > 3 and i < main_steps - 3:
-            target_x = max(prev_x - random.randint(1, 2), 0)
-
+    for i, spd in enumerate(raw_speeds):
+        cumulative += spd * scale
+        target_x = min(distance, round(cumulative))
         dx = target_x - prev_x
-        if dx == 0 and i < main_steps:
-            continue
-
-        dy = 0
-        if random.random() < 0.35:
-            dy = random.choice([-2, -1, -1, 0, 1, 1, 2])
-        if i > main_steps * 0.7:
-            dy = random.choice([-1, 0, 0, 0, 0, 0, 1]) if random.random() < 0.2 else 0
-
-        dt = max(3, int(total_duration_ms / num_steps))
-        if i > main_steps * 0.8:
-            dt = int(dt * random.uniform(1.5, 3.0))
-        elif i < main_steps * 0.15:
-            dt = int(dt * random.uniform(0.3, 0.5))
-        dt += random.randint(-3, 3)
-
-        steps.append((dx, dy, max(2, dt)))
         prev_x = target_x
 
-    steps.append((0, 0, random.randint(15, 50)))
+        progress = i / num_steps
+        if progress < 0.4:
+            target_y = y_drift_up * (progress / 0.4)
+        elif progress < 0.7:
+            target_y = y_drift_up * (1 - (progress - 0.4) / 0.3) - y_drift_down * ((progress - 0.4) / 0.3)
+        else:
+            target_y = -y_drift_down * (1 - (progress - 0.7) / 0.3)
+        target_y += random.gauss(0, 0.4)
+        dy = round(target_y) - round(prev_y_float)
+        prev_y_float = target_y
 
-    correction_remaining = prev_x - distance
-    correction_steps = random.randint(3, 5)
-    for j in range(correction_steps):
-        portion = correction_remaining // (correction_steps - j) if correction_steps - j > 0 else correction_remaining
-        if portion == 0:
-            break
-        dx = -portion
-        dy = random.choice([-1, 0, 0, 1]) if random.random() < 0.3 else 0
-        dt = random.randint(15, 40)
+        dt = base_dt + random.randint(-2, 2)
+
+        if dx == 0 and dy == 0:
+            continue
+        steps.append((max(0, dx), dy, max(2, dt)))
+
+    actual = sum(s[0] for s in steps)
+    diff = distance - actual
+    if diff != 0:
+        steps.append((diff, 0, base_dt))
+
+    return steps
+
+
+_trajectory_cache: list[dict[str, Any]] | None = None
+
+
+def load_recorded_trajectories() -> list[dict[str, Any]]:
+    """从 data/slider_trajectories/ 加载所有录制轨迹 JSON。结果缓存。"""
+    global _trajectory_cache
+    if _trajectory_cache is not None:
+        return _trajectory_cache
+
+    trajectories: list[dict[str, Any]] = []
+    pattern = os.path.join(_TRAJECTORY_DIR, "traj_*.json")
+    for fp in glob.glob(pattern):
+        try:
+            with open(fp, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            steps = data.get("steps", [])
+            if len(steps) >= 3:
+                trajectories.append(data)
+        except Exception:
+            continue
+
+    _trajectory_cache = trajectories
+    if trajectories:
+        logger.debug("Loaded %d recorded trajectories", len(trajectories))
+    return trajectories
+
+
+def replay_trajectory(distance: int) -> list[tuple[int, int, int]]:
+    """选一条录制轨迹，缩放到目标距离，加入微量扰动。无录制时退回生成轨迹。
+
+    Returns list of (dx, dy, dt_ms) relative movements.
+    """
+    recordings = load_recorded_trajectories()
+    if not recordings:
+        return generate_human_trajectory(distance)
+
+    rec = random.choice(recordings)
+    raw_steps: list[list[int]] = rec["steps"]
+    orig_dist = rec.get("original_distance", 1)
+    if orig_dist == 0:
+        orig_dist = sum(s[0] for s in raw_steps) or 1
+
+    scale = distance / orig_dist if orig_dist else 1.0
+
+    steps: list[tuple[int, int, int]] = []
+    cumulative_x = 0.0
+    prev_int_x = 0
+
+    for sx, sy, st in raw_steps:
+        cumulative_x += sx * scale
+        target_int_x = round(cumulative_x)
+        dx = target_int_x - prev_int_x
+        prev_int_x = target_int_x
+
+        dy = sy + random.choice([-1, 0, 0, 0, 1]) if random.random() < 0.2 else sy
+        dt = max(1, st + random.randint(-3, 3))
         steps.append((dx, dy, dt))
-        correction_remaining -= portion
 
-    real_pos = sum(s[0] for s in steps)
-    final_adjust = distance - real_pos
-    if final_adjust != 0:
-        steps.append((final_adjust, 0, random.randint(10, 30)))
+    actual = sum(s[0] for s in steps)
+    diff = distance - actual
+    if diff != 0:
+        steps.append((diff, 0, random.randint(8, 25)))
 
-    steps.append((0, 0, random.randint(30, 80)))
     return steps
 
 
@@ -813,6 +892,57 @@ def _has_login_cookies(cookies: list[dict[str, Any]]) -> bool:
 
 
 
+def _dismiss_popups_dp(tab: Any, _log: Any) -> None:
+    """关闭遮挡滑块的弹窗（关闭按钮、跳过按钮等）。"""
+    dismiss_selectors = [
+        "xpath://div[@aria-label='关闭' or @aria-label='Close']",
+        "xpath://div[@role='button' and text()='跳过']",
+        "xpath://button[@aria-label='关闭']",
+    ]
+    for sel in dismiss_selectors:
+        try:
+            el = tab.ele(sel, timeout=1)
+            if el:
+                el.click()
+                _log.info(f"Dismissed popup via '{sel}'")
+                time.sleep(0.5)
+        except Exception:
+            continue
+
+
+def _handle_post_captcha_dp(tab: Any, _log: Any) -> None:
+    """验证成功后处理 alibaba-login-box iframe 中的'快速进入'按钮。"""
+    try:
+        login_iframe = tab.ele("xpath://iframe[@id='alibaba-login-box']", timeout=3)
+        if not login_iframe:
+            return
+        _log.info("Found alibaba-login-box iframe, looking for '快速进入'...")
+        quick_btn = tab.ele("xpath://button[text()='快速进入']", timeout=3)
+        if quick_btn:
+            quick_btn.click()
+            _log.info("Clicked '快速进入' button")
+            time.sleep(2)
+    except Exception as exc:
+        _log.debug(f"Post-captcha handling: {exc}")
+
+
+def _find_captcha_iframe_dp(tab: Any, _log: Any) -> Any:
+    """在 DrissionPage 中定位验证码 iframe。"""
+    iframe_xpaths = [
+        "xpath://iframe[@id='baxia-dialog-content']",
+        "xpath://iframe[contains(@src,'action=captcha')]",
+    ]
+    for xpath in iframe_xpaths:
+        try:
+            iframe_el = tab.ele(xpath, timeout=2)
+            if iframe_el:
+                _log.info(f"Found captcha iframe via '{xpath}'")
+                return iframe_el
+        except Exception:
+            continue
+    return None
+
+
 def _try_slider_drissionpage(
     fp_cfg: dict[str, Any],
     cookie_text: str,
@@ -902,6 +1032,8 @@ def _try_slider_drissionpage(
 
         time.sleep(3)
 
+        _dismiss_popups_dp(tab, _log)
+
         for attempt in range(max_attempts):
             attempt_data: dict[str, Any] = {
                 "attempt_num": attempt + 1,
@@ -919,26 +1051,41 @@ def _try_slider_drissionpage(
             slider_el = None
             slider_type = None
 
-            for sel in ["#nc_1_n1z", ".btn_slide", "#aliyunCaptcha-sliding-btn", ".slide-btn"]:
-                try:
-                    el = tab.ele(sel, timeout=2)
-                    if el:
-                        slider_el = el
-                        slider_type = "nc"
-                        break
-                except Exception:
-                    continue
+            captcha_iframe = _find_captcha_iframe_dp(tab, _log)
+            search_targets = [captcha_iframe, tab] if captcha_iframe else [tab]
 
-            if not slider_el:
-                for sel in [".yoda-image-slice", "#alicaptcha-puzzle", ".baxia-dialog"]:
+            nc_selectors = [
+                "#nc_1_n1z", ".btn_slide", "#aliyunCaptcha-sliding-btn",
+                ".slide-btn", "span[aria-label='滑块']",
+                "xpath://span[@aria-label='滑块']",
+            ]
+            for target in search_targets:
+                for sel in nc_selectors:
                     try:
-                        el = tab.ele(sel, timeout=2)
+                        el = target.ele(sel, timeout=2)
                         if el:
                             slider_el = el
-                            slider_type = "puzzle"
+                            slider_type = "nc"
                             break
                     except Exception:
                         continue
+                if slider_el:
+                    break
+
+            if not slider_el:
+                puzzle_selectors = [".yoda-image-slice", "#alicaptcha-puzzle", ".baxia-dialog"]
+                for target in search_targets:
+                    for sel in puzzle_selectors:
+                        try:
+                            el = target.ele(sel, timeout=2)
+                            if el:
+                                slider_el = el
+                                slider_type = "puzzle"
+                                break
+                        except Exception:
+                            continue
+                    if slider_el:
+                        break
 
             if not slider_el:
                 attempt_data["fail_reason"] = "no_slider_found"
@@ -958,7 +1105,13 @@ def _try_slider_drissionpage(
             if slider_type == "nc":
                 try:
                     track_el = None
-                    for tsel in ["#nc_1__scale_text", ".nc_scale", "#aliyunCaptcha-sliding-track", ".slide-track"]:
+                    track_selectors = [
+                        "#nc_1__scale_text", ".nc_scale",
+                        "#aliyunCaptcha-sliding-track", ".slide-track",
+                        "div.nc_scale",
+                        "xpath://span[@aria-label='滑块']/ancestor::div[@class='nc_scale'][1]",
+                    ]
+                    for tsel in track_selectors:
                         try:
                             track_el = tab.ele(tsel, timeout=1)
                             if track_el:
@@ -981,9 +1134,25 @@ def _try_slider_drissionpage(
                     attempt_data["nc_track_width"] = track_width
                     attempt_data["nc_drag_distance"] = drag_distance
 
-                    duration = random.uniform(0.5, 1.2)
-                    slider_el.drag(drag_distance, 0, duration=duration)
-                    time.sleep(random.uniform(0.1, 0.3))
+                    trajectory = replay_trajectory(drag_distance)
+                    traj_source = "recorded" if load_recorded_trajectories() else "generated"
+                    _log.info(
+                        f"DrissionPage NC drag: distance={drag_distance}, "
+                        f"trajectory={traj_source}, steps={len(trajectory)}"
+                    )
+
+                    ac = tab.actions
+                    ac.move_to(slider_el, duration=random.uniform(0.3, 0.8))
+                    time.sleep(random.uniform(0.5, 1.5))
+                    ac.hold()
+                    time.sleep(random.uniform(0.05, 0.15))
+
+                    for dx, dy, dt_ms in trajectory:
+                        dur = max(0.02, dt_ms / 1000.0)
+                        ac.move(dx, dy, duration=dur)
+
+                    time.sleep(random.uniform(0.3, 0.8))
+                    ac.release()
 
                 except Exception as exc:
                     attempt_data["fail_reason"] = f"drag_error:{exc}"
@@ -1017,8 +1186,18 @@ def _try_slider_drissionpage(
                 if success:
                     attempt_data["result"] = "success"
                     _log.info(f"DrissionPage NC slider solved on attempt {attempt + 1}")
+                    _handle_post_captcha_dp(tab, _log)
                 else:
                     attempt_data["fail_reason"] = "no_success_marker"
+                    _log.info(f"DrissionPage: checking error indicator...")
+                    try:
+                        err_el = tab.ele("xpath://div[@class='errloading']", timeout=1)
+                        if err_el:
+                            err_text = err_el.text or ""
+                            attempt_data["fail_reason"] = f"errloading:{err_text}"
+                            _log.info(f"DrissionPage: error indicator found: {err_text}")
+                    except Exception:
+                        pass
                     try:
                         ss_path = os.path.join(_SCREENSHOT_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_dp_nc_fail.png")
                         tab.get_screenshot(path=ss_path)
@@ -1068,11 +1247,7 @@ def _try_slider_drissionpage(
             "total_duration_ms": int((time.time() - recovery_start) * 1000),
         }
     finally:
-        if browser is not None:
-            try:
-                browser.disconnect()
-            except Exception:
-                pass
+        pass
 
 
 async def try_slider_recovery(
