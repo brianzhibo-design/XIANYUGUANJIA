@@ -2088,20 +2088,19 @@ class MimicOps:
             courier_details: dict[str, int] = {}
             parse_errors: list[str] = []
 
-            for fp in sorted(set(files)):
-                try:
-                    repo = CostTableRepository(table_dir=fp)
-                    repo.get_stats(max_files=1)
-                    records = getattr(repo, "_records", [])
-                    route_count += len(records)
-                    for rec in records:
-                        courier = str(getattr(rec, "courier", "") or "").strip()
-                        if not courier:
-                            continue
-                        courier_set.add(courier)
-                        courier_details[courier] = int(courier_details.get(courier, 0) or 0) + 1
-                except Exception as exc:
-                    parse_errors.append(f"{fp.name}: {exc}")
+            try:
+                repo = CostTableRepository(table_dir=quote_dir)
+                repo._reload_if_needed()
+                records = repo._records
+                route_count += len(records)
+                for rec in records:
+                    courier = str(getattr(rec, "courier", "") or "").strip()
+                    if not courier:
+                        continue
+                    courier_set.add(courier)
+                    courier_details[courier] = int(courier_details.get(courier, 0) or 0) + 1
+            except Exception as exc:
+                parse_errors.append(f"quote_costs: {exc}")
 
             last_updated = "-"
             if latest_mtime > 0:
