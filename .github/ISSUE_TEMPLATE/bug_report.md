@@ -23,11 +23,10 @@ What should have happened.
 ## Logs
 
 ```
-Paste relevant logs here (docker compose logs)
+Paste relevant logs here (终端输出 / bash service.sh status)
 ```
 
 ## Environment
 
 - OS: [e.g. macOS 15, Ubuntu 24.04]
-- Docker version: [e.g. 27.0]
-- xianyu-openclaw version: [e.g. v4.0.0]
+- xianyu-guanjia version: [e.g. v4.0.0]

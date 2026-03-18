@@ -20,7 +20,6 @@ from src.core.config_models import (
     ConfigModel,
     DatabaseConfig,
     MediaConfig,
-    OpenClawConfig,
     Provider,
 )
 
@@ -37,25 +36,25 @@ class TestConfig:
     def test_config_load_from_yaml(self, temp_config_file):
         """测试从YAML加载配置"""
         config = Config(str(temp_config_file))
-        assert config.get("app.name") == "xianyu-openclaw"
-        assert config.get("openclaw.port") == 9222
+        assert config.get("app.name") == "xianyu-guanjia"
+        assert config.get("browser_runtime.port") == 9222
 
     def test_config_get_section(self, config):
         """测试获取配置段落"""
         app_config = config.get_section("app")
-        assert app_config["name"] == "xianyu-openclaw"
+        assert app_config["name"] == "xianyu-guanjia"
         assert app_config["version"] == "8.0.0"
 
     def test_config_get_value(self, config):
         """测试获取配置值"""
-        assert config.get("app.name") == "xianyu-openclaw"
-        assert config.get("openclaw.port") == 9222
+        assert config.get("app.name") == "xianyu-guanjia"
+        assert config.get("browser_runtime.port") == 9222
         assert config.get("nonexistent.key", "default") == "default"
 
     def test_config_reload(self, temp_config_file, temp_dir):
         """测试重新加载配置"""
         config = Config(str(temp_config_file))
-        assert config.get("app.name") == "xianyu-openclaw"
+        assert config.get("app.name") == "xianyu-guanjia"
 
         # 修改配置文件
         config_content = """
@@ -71,7 +70,7 @@ app:
     def test_config_missing_file(self, temp_dir):
         """测试配置文件不存在"""
         config = Config(str(temp_dir / "nonexistent.yaml"))
-        assert config.get("app.name") == "xianyu-openclaw"  # 使用默认值
+        assert config.get("app.name") == "xianyu-guanjia"  # 使用默认值
 
 
 class TestConfigModels:
@@ -171,7 +170,7 @@ class TestConfigModels:
                 "debug": True,
                 "log_level": "DEBUG"
             },
-            "openclaw": {
+            "browser_runtime": {
                 "host": "localhost",
                 "port": 9222
             },
@@ -197,7 +196,7 @@ class TestConfigModels:
 
         config = ConfigModel.from_dict(config_data)
         assert config.app.name == "test_app"
-        assert config.openclaw.port == 9222
+        assert config.browser_runtime.port == 9222
         assert config.ai.provider == Provider.DEEPSEEK
         assert len(config.accounts) == 1
         assert config.default_account == "account_1"
@@ -254,7 +253,6 @@ class TestConfigModels:
         config = ConfigModel()
         config_dict = config.to_dict()
         assert "app" in config_dict
-        assert "openclaw" in config_dict
         assert "browser_runtime" in config_dict
         assert "ai" in config_dict
         assert "accounts" in config_dict

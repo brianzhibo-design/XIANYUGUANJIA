@@ -27,27 +27,36 @@ def _domain_matches(domain: str, patterns: tuple[str, ...] = _COOKIE_DOMAINS) ->
 
 
 async def get_cdp_ws_url(api_url: str, browser_id: str) -> str | None:
-    """调用 BitBrowser /browser/open 获取 CDP WebSocket URL。"""
+    """调用 BitBrowser /browser/open 获取 CDP WebSocket URL。
+
+    内置重试：BitBrowser 有内置互斥锁，连续调用会返回"浏览器正在打开中"。
+    """
     if not api_url or not browser_id:
         return None
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                f"{api_url.rstrip('/')}/browser/open",
-                json={"id": browser_id},
-            )
-            data = resp.json()
-            if not data.get("success"):
+    open_url = f"{api_url.rstrip('/')}/browser/open"
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(open_url, json={"id": browser_id})
+                data = resp.json()
+                if data.get("success"):
+                    ws_url = data.get("data", {}).get("ws")
+                    if ws_url:
+                        return ws_url
+                    logger.debug("BitBrowser returned no ws URL")
+                    return None
+                msg = str(data.get("msg", ""))
+                if "正在打开" in msg or "opening" in msg.lower():
+                    logger.debug("BitBrowser still opening, retry %d/3", attempt + 1)
+                    await asyncio.sleep(3)
+                    continue
                 logger.debug("BitBrowser open failed: %s", data)
                 return None
-            ws_url = data.get("data", {}).get("ws")
-            if not ws_url:
-                logger.debug("BitBrowser returned no ws URL")
-                return None
-            return ws_url
-    except Exception as exc:
-        logger.debug("BitBrowser API error: %s", exc)
-        return None
+        except Exception as exc:
+            logger.debug("BitBrowser API error: %s", exc)
+            return None
+    logger.debug("BitBrowser open: retries exhausted")
+    return None
 
 
 async def read_cookies_via_cdp(

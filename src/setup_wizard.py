@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import getpass
-import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -169,32 +168,6 @@ def _build_env_content(values: dict[str, str], content_key: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _ensure_docker_ready() -> bool:
-    if shutil.which("docker") is None:
-        print("未检测到 docker，请先安装 Docker Desktop。")
-        return False
-
-    result = subprocess.run(["docker", "compose", "version"], capture_output=True, text=True)
-    if result.returncode != 0:
-        print("检测到 docker 但 docker compose 不可用，请确认 Docker Desktop 已启动。")
-        return False
-
-    return True
-
-
-def _run_post_start_checks() -> None:
-    print("\n正在检查容器状态...")
-    subprocess.run(["docker", "compose", "ps"], check=False)
-    logs = subprocess.run(["docker", "compose", "logs", "--tail=80"], capture_output=True, text=True, check=False)
-    text = logs.stdout + logs.stderr
-
-    if "At least one AI provider API key env var is required" in text:
-        print("\n[检查结果] 缺少可识别 API Key。请确认 AI Provider Key 已填写。")
-        return
-
-    print("\n启动完成。")
-
-
 def run_setup() -> int:
     root = Path.cwd()
     env_path = root / ".env"
@@ -280,9 +253,8 @@ def run_setup() -> int:
     # e. 可选启动
     print("\n启动方式:")
     print("  1) 本地: ./start.sh")
-    print("  2) Docker: docker compose up -d")
-    print("  3) 稍后手动启动")
-    start_choice = _prompt("请选择 [1/2/3]", default="1")
+    print("  2) 稍后手动启动")
+    start_choice = _prompt("请选择 [1/2]", default="1")
     if start_choice == "1":
         start_sh = root / "start.sh"
         if start_sh.exists():
@@ -293,17 +265,8 @@ def run_setup() -> int:
                 return result.returncode
         else:
             print(f"未找到 {start_sh}，请手动执行启动命令。")
-    elif start_choice == "2":
-        if not _ensure_docker_ready():
-            return 1
-        print("\n正在执行: docker compose up -d")
-        result = subprocess.run(["docker", "compose", "up", "-d"], cwd=root)
-        if result.returncode != 0:
-            print("容器启动失败，请执行 `docker compose logs -f` 查看日志。")
-            return result.returncode
-        _run_post_start_checks()
     else:
-        print("\n你可以稍后手动执行: ./start.sh 或 docker compose up -d")
+        print("\n你可以稍后手动执行: ./start.sh")
 
     return 0
 

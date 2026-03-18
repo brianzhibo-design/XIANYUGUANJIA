@@ -3,6 +3,6 @@ revision = 3
 requires-python = ">=3.12"
 
 [[package]]
-name = "xianyu-openclaw"
+name = "xianyu-guanjia"
 version = "1.0.0"
 source = { virtual = "." }

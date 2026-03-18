@@ -22,47 +22,14 @@ def test_prompt_and_choose(monkeypatch):
     assert cp.id == sw.CONTENT_PROVIDERS[0].id
 
 
-def test_env_read_and_docker_checks(monkeypatch, tmp_path):
+def test_env_read(monkeypatch, tmp_path):
     env = tmp_path / ".env"
     env.write_text("A=1\nB=\n", encoding="utf-8")
     out = sw._read_existing_env(env)
     assert out["A"] == "1"
     assert sw._read_existing_env(tmp_path / "none") == {}
 
-    monkeypatch.setattr("shutil.which", lambda x: None)
-    assert sw._ensure_docker_ready() is False
 
-    monkeypatch.setattr("shutil.which", lambda x: "/usr/bin/docker")
-
-    class R:
-        def __init__(self, code):
-            self.returncode = code
-
-    monkeypatch.setattr("subprocess.run", lambda *a, **k: R(1))
-    assert sw._ensure_docker_ready() is False
-
-    monkeypatch.setattr("subprocess.run", lambda *a, **k: R(0))
-    assert sw._ensure_docker_ready() is True
-
-
-def test_post_start_checks(monkeypatch):
-    called = []
-
-    class R:
-        def __init__(self, out="", err=""):
-            self.stdout = out
-            self.stderr = err
-            self.returncode = 0
-
-    def fake_run(args, **kwargs):
-        called.append(args)
-        if args[:3] == ["docker", "compose", "logs"]:
-            return R("At least one AI provider API key env var is required")
-        return R()
-
-    monkeypatch.setattr("subprocess.run", fake_run)
-    sw._run_post_start_checks()
-    assert called
 
 
 def test_run_setup_paths(monkeypatch, tmp_path):
@@ -84,7 +51,7 @@ def test_run_setup_paths(monkeypatch, tmp_path):
         if "XIANYU_COOKIE_2" in text:
             return ""
         if "请选择" in text:
-            return "3"
+            return "2"  # 稍后手动启动
         return ""
 
     monkeypatch.setattr(sw, "_prompt", prompt_no_start)
@@ -92,22 +59,15 @@ def test_run_setup_paths(monkeypatch, tmp_path):
     assert rc == 0
     assert (tmp_path / ".env").exists()
 
-    def prompt_docker(text, default=None, required=False, secret=False):
+    # 测试选项 1 本地启动：若 start.sh 不存在，应提示并返回 0
+    def prompt_local_start(text, default=None, required=False, secret=False):
         if "请选择" in text:
-            return "2"
+            return "1"
         return prompt_no_start(text, default, required, secret)
 
-    monkeypatch.setattr(sw, "_prompt", prompt_docker)
-    monkeypatch.setattr(sw, "_ensure_docker_ready", lambda: False)
-    assert sw.run_setup() == 1
-
-    class R:
-        def __init__(self, code):
-            self.returncode = code
-
-    monkeypatch.setattr(sw, "_ensure_docker_ready", lambda: True)
-    monkeypatch.setattr("subprocess.run", lambda *a, **k: R(2))
-    assert sw.run_setup() == 2
+    monkeypatch.setattr(sw, "_prompt", prompt_local_start)
+    rc = sw.run_setup()
+    assert rc == 0
 
 
 def test_setup_main_exit(monkeypatch):
@@ -117,19 +77,3 @@ def test_setup_main_exit(monkeypatch):
     assert e.value.code == 7
 
 
-def test_run_post_start_checks_success_prints_actions(monkeypatch, capsys):
-    class R:
-        def __init__(self, out="", err="", code=0):
-            self.stdout = out
-            self.stderr = err
-            self.returncode = code
-
-    def fake_run(args, **kwargs):
-        if args[:3] == ["docker", "compose", "logs"]:
-            return R("all good")
-        return R()
-
-    monkeypatch.setattr("subprocess.run", fake_run)
-    sw._run_post_start_checks()
-    out = capsys.readouterr().out
-    assert "启动完成" in out

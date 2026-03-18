@@ -309,20 +309,7 @@ class Monitor:
 
     async def _action_reconnect_browser(self, alert: Alert) -> None:
         """重新连接浏览器"""
-        self.logger.info("Attempting to reconnect browser...")
-        try:
-            from src.core.browser_client import BrowserClient
-
-            client = BrowserClient()
-            connected = await client.connect()
-
-            if connected:
-                self.logger.info("Browser reconnected successfully")
-            else:
-                self.logger.error("Failed to reconnect browser")
-
-        except Exception as e:
-            self.logger.error(f"Browser reconnection error: {e}")
+        self.logger.info("浏览器通过 BitBrowser 管理，如需重连请在 BitBrowser 面板操作")
 
     async def _action_wait_and_retry(self, alert: Alert) -> None:
         """等待后重试"""
@@ -430,23 +417,18 @@ class HealthChecker:
         self.check_interval = 300
 
     async def check_browser_connection(self) -> bool:
-        """检查浏览器连接"""
+        """检查浏览器驱动可用性（DrissionPage）"""
         try:
-            from src.core.browser_client import BrowserClient
-
-            client = BrowserClient()
-            connected = await client.connect()
-
-            if not connected:
-                await self.monitor.raise_alert(
-                    alert_type="browser_connection",
-                    title="Browser connection failed",
-                    message="Cannot connect to legacy browser runtime",
-                    source="health_check",
-                )
-
-            return connected
-
+            import importlib
+            if importlib.util.find_spec("DrissionPage"):
+                return True
+            await self.monitor.raise_alert(
+                alert_type="browser_connection",
+                title="Browser driver unavailable",
+                message="DrissionPage 未安装，请执行: pip install DrissionPage",
+                source="health_check",
+            )
+            return False
         except Exception as e:
             await self.monitor.raise_alert(
                 alert_type="browser_connection",

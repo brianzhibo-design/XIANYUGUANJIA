@@ -26,15 +26,12 @@ class Provider(str, Enum):
 
 
 class BrowserRuntimeConfig(BaseModel):
-    """浏览器运行时配置模型（兼容 legacy gateway 端口配置）"""
+    """浏览器运行时配置模型"""
 
     host: str = "localhost"
     port: int = Field(default=9222, ge=1, le=65535, description="浏览器运行时端口")
     timeout: int = Field(default=30, ge=1, le=300, description="连接超时时间（秒）")
     retry_times: int = Field(default=3, ge=0, le=10, description="重试次数")
-
-
-OpenClawConfig = BrowserRuntimeConfig
 
 
 class AIConfig(BaseModel):
@@ -227,7 +224,7 @@ class QuoteConfig(BaseModel):
 class AppConfig(BaseModel):
     """应用配置模型"""
 
-    name: str = Field(default="xianyu-openclaw", description="应用名称")
+    name: str = Field(default="xianyu-guanjia", description="应用名称")
     version: str = Field(default="8.0.0", description="版本号")
     debug: bool = Field(default=False, description="调试模式")
     log_level: str = Field(default="INFO", description="日志级别")
@@ -274,21 +271,11 @@ class ConfigModel(BaseModel):
     def validate_default_account(cls, v: str | None) -> str | None:
         return v
 
-    @property
-    def openclaw(self) -> BrowserRuntimeConfig:
-        """兼容旧字段名。"""
-        return self.browser_runtime
-
     def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
-        data = self.model_dump()
-        data["openclaw"] = dict(data["browser_runtime"])
-        return data
+        return self.model_dump()
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ConfigModel:
         """从字典创建配置"""
-        normalized = dict(data)
-        if "browser_runtime" not in normalized and "openclaw" in normalized:
-            normalized["browser_runtime"] = normalized["openclaw"]
-        return cls(**normalized)
+        return cls(**dict(data))

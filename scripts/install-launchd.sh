@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LABEL="com.xianyu-openclaw"
+LABEL="com.xianyu-guanjia"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PLIST_TEMPLATE="$SCRIPT_DIR/macos/${LABEL}.plist"
@@ -22,8 +22,8 @@ if [ -z "$PYTHON3" ]; then
     exit 1
 fi
 
-# 卸载旧的 Label（兼容旧版 com.openclaw.xianyu）
-for old_label in "com.openclaw.xianyu" "$LABEL"; do
+# 卸载旧的 Label（兼容旧版 com.openclaw.xianyu、com.xianyu-openclaw）
+for old_label in "com.openclaw.xianyu" "com.xianyu-openclaw" "$LABEL"; do
     old_plist="$HOME/Library/LaunchAgents/${old_label}.plist"
     if launchctl list "$old_label" &>/dev/null; then
         echo "Unloading existing $old_label..."

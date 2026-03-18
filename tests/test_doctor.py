@@ -11,16 +11,16 @@ def test_doctor_report_not_ready_when_critical_check_fails(monkeypatch) -> None:
     monkeypatch.setattr(
         "src.core.doctor.run_all_checks",
         lambda skip_browser=False: [  # noqa: ARG005
-            StartupCheckResult("Legacy Browser Gateway", False, "无法连接", critical=True),
+            StartupCheckResult("Lite 浏览器驱动", False, "未安装 DrissionPage", critical=True),
         ],
     )
     monkeypatch.setattr("src.core.doctor._extra_checks", lambda skip_quote=False: [])  # noqa: ARG005
 
-    report = run_doctor(skip_gateway=False, skip_quote=True)
+    report = run_doctor(skip_quote=True)
 
     assert report["ready"] is False
     assert report["summary"]["critical_failed"] == 1
-    assert any("docker compose up -d" in step for step in report["next_steps"])
+    assert any("DrissionPage" in step or "pip install" in step for step in report["next_steps"])
 
 
 def test_doctor_report_ready_with_warning_only(monkeypatch) -> None:
@@ -44,7 +44,7 @@ def test_doctor_report_ready_with_warning_only(monkeypatch) -> None:
         ],
     )
 
-    report = run_doctor(skip_gateway=True, skip_quote=True)
+    report = run_doctor(skip_quote=True)
 
     assert report["ready"] is True
     assert report["summary"]["critical_failed"] == 0

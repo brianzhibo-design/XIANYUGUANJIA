@@ -4093,7 +4093,7 @@ class MimicOps:
 
         recover = self.service_recover("presales")
         actions.append("recover_presales")
-        check = self.module_console.check(skip_gateway=True)
+        check = self.module_console.check()
         status_after = self.service_status()
 
         can_work = bool(status_after.get("xianyu_connected", False)) and not bool(

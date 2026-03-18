@@ -830,33 +830,38 @@ def _try_slider_drissionpage(
     try:
         from DrissionPage import Chromium
     except ImportError:
-        _log.debug("DrissionPage not installed, skipping")
+        _log.warning("DrissionPage not installed, slider recovery unavailable. Run: pip install DrissionPage")
         return None
 
     api_url = fp_cfg.get("api_url", "")
     browser_id = fp_cfg.get("browser_id", "")
     if not api_url or not browser_id:
-        _log.debug("DrissionPage: fingerprint_browser config incomplete")
+        _log.warning("DrissionPage: fingerprint_browser config incomplete (api_url=%s, browser_id=%s)", api_url, bool(browser_id))
         return None
 
     import httpx as _httpx
 
-    try:
-        resp = _httpx.post(
-            f"{api_url.rstrip('/')}/browser/open",
-            json={"id": browser_id},
-            timeout=10,
-        )
-        data = resp.json()
-        if not data.get("success"):
+    ws_url = None
+    _bb_open_url = f"{api_url.rstrip('/')}/browser/open"
+    for _open_try in range(3):
+        try:
+            resp = _httpx.post(_bb_open_url, json={"id": browser_id}, timeout=10)
+            data = resp.json()
+            if data.get("success"):
+                ws_url = data.get("data", {}).get("ws")
+                break
+            msg = str(data.get("msg", ""))
+            if "正在打开" in msg or "opening" in msg.lower():
+                _log.info("DrissionPage: BitBrowser still opening, retry %d/3...", _open_try + 1)
+                time.sleep(3)
+                continue
             _log.info(f"DrissionPage: BitBrowser open failed: {data}")
             return None
-        ws_url = data.get("data", {}).get("ws")
-        if not ws_url:
-            _log.info("DrissionPage: no ws URL from BitBrowser")
+        except Exception as exc:
+            _log.info(f"DrissionPage: BitBrowser API error: {exc}")
             return None
-    except Exception as exc:
-        _log.info(f"DrissionPage: BitBrowser API error: {exc}")
+    if not ws_url:
+        _log.info("DrissionPage: no ws URL from BitBrowser after retries")
         return None
 
     browser = None

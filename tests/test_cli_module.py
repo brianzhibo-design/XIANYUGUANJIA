@@ -123,7 +123,7 @@ async def test_cmd_module_check_all_aggregates_results(monkeypatch) -> None:
     monkeypatch.setattr("src.cli._module_check_summary", fake_summary)
     monkeypatch.setattr("src.cli._json_out", lambda data: outputs.append(data))
 
-    args = argparse.Namespace(action="check", target="all", skip_gateway=False, strict=False)
+    args = argparse.Namespace(action="check", target="all", strict=False)
     await cmd_module(args)
 
     assert len(outputs) == 1
@@ -155,7 +155,7 @@ async def test_cmd_module_check_all_strict_exits_on_failure(monkeypatch) -> None
     )
     monkeypatch.setattr("src.cli._json_out", lambda data: None)
 
-    args = argparse.Namespace(action="check", target="all", skip_gateway=False, strict=True)
+    args = argparse.Namespace(action="check", target="all", strict=True)
     with pytest.raises(SystemExit) as exc_info:
         await cmd_module(args)
 

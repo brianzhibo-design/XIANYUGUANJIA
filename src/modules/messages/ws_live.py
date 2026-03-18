@@ -527,8 +527,13 @@ class GoofishWsTransport:
             if (now - im_last_poll) >= im_poll_interval:
                 im_last_poll = now
                 if await self._try_goofish_im_refresh(urgent=True):
-                    self.logger.info("Cookie wait: 闲管家IM刷新成功")
-                    return True
+                    if is_rgv587 and not self.cookies.get("unb"):
+                        self.logger.warning(
+                            "Cookie wait: 闲管家IM刷新成功但仍缺少unb，不触发重连（需通过滑块验证获取）"
+                        )
+                    else:
+                        self.logger.info("Cookie wait: 闲管家IM刷新成功")
+                        return True
 
             if fp_enabled and (now - bb_last_poll) >= bb_poll_interval:
                 bb_last_poll = now
@@ -755,19 +760,19 @@ class GoofishWsTransport:
 
             ws_url = await get_cdp_ws_url(fp_cfg["api_url"], fp_cfg["browser_id"])
             if not ws_url:
-                self.logger.debug("BitBrowser cookie refresh: no CDP URL")
+                self.logger.info("BitBrowser cookie refresh: no CDP URL (BitBrowser API unreachable?)")
                 return False
 
             cookie_str = await read_cookies_via_cdp(ws_url)
             if not cookie_str:
-                self.logger.debug("BitBrowser cookie refresh: no cookies read")
+                self.logger.info("BitBrowser cookie refresh: no cookies read from CDP")
                 return False
 
         _required = {"sgcookie", "unb", "cookie2", "_m_h5_tk"}
         cookie_keys = {p.split("=")[0].strip() for p in cookie_str.split(";") if "=" in p}
         missing = _required - cookie_keys
         if missing:
-            self.logger.debug(f"BitBrowser cookie refresh: incomplete (missing: {missing})")
+            self.logger.warning(f"BitBrowser cookie refresh: incomplete (missing: {missing}), got {len(cookie_keys)} fields")
             return False
 
         changed = self._apply_cookie_text(cookie_str, reason="bitbrowser_cdp")

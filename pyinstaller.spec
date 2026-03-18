@@ -1,12 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 """
-PyInstaller spec for 闲鱼 OpenClaw Windows 一键部署工具.
+PyInstaller spec for 闲鱼管家 Windows 一键部署工具.
 
 Build command:
     pyinstaller pyinstaller.spec
 
-Output: dist/xianyu-openclaw-launcher/ (onedir mode)
+Output: dist/xianyu-guanjia-launcher/ (onedir mode)
 """
 
 import importlib
@@ -82,7 +82,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='xianyu-openclaw-launcher',
+    name='xianyu-guanjia-launcher',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -104,5 +104,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='xianyu-openclaw-launcher',
+    name='xianyu-guanjia-launcher',
 )

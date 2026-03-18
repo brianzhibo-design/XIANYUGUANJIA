@@ -1,5 +1,5 @@
 [project]
-name = "xianyu-openclaw"
+name = "xianyu-guanjia"
 version = "1.0.0"
 
 [tool.black]
@@ -45,10 +45,6 @@ strict_equality = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
-
-[[tool.mypy.overrides]]
-module = "src.core.openclaw_controller.*"
-ignore_errors = true
 
 [tool.ruff]
 line-length = 100

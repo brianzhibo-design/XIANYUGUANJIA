@@ -107,7 +107,6 @@ INCLUDE_CLIENT=(
   client/package.json
   client/package-lock.json
   client/nginx.conf
-  client/Dockerfile
   client/vite.config.js
   client/tsconfig.json
   client/tsconfig.node.json
@@ -119,8 +118,6 @@ INCLUDE_CLIENT=(
 INCLUDE_ROOT_FILES=(
   requirements.txt
   requirements-windows.txt
-  docker-compose.yml
-  Dockerfile.python
   .env.example
   start.sh
   start.bat

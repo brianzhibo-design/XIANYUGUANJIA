@@ -160,40 +160,30 @@ RGV587 风控触发
 **macOS:**
 
 ```bash
-tar xzf xianyu-openclaw-v8.0.0-macos-arm64.tar.gz
-cd xianyu-openclaw-v8.0.0
+tar xzf xianyu-guanjia-v8.0.0-macos-arm64.tar.gz
+cd xianyu-guanjia-v8.0.0
 bash quick-start.sh
 ```
 
 **Windows:**
 
 ```
-1. 解压 xianyu-openclaw-v8.0.0-windows-x64.zip
+1. 解压 xianyu-guanjia-v8.0.0-windows-x64.zip
 2. 双击 quick-start.bat
 ```
 
 首次启动自动弹出 **SetupWizard 设置向导**，按步骤完成配置即可。
 
-### 方式二：Docker 部署（推荐生产环境）
+### 方式二：一键启动脚本（已有环境）
 
 ```bash
-cp .env.example .env
-# 编辑 .env，只需填入 3 项必填配置（Cookie、AI Key、闲管家凭证）
-
-docker compose up -d                          # 国际网络
-MIRROR=china docker compose up -d --build     # 国内网络（自动切换镜像源）
-```
-
-### 方式三：一键启动脚本（已有环境）
-
-```bash
-./start.sh     # macOS / Linux — 自动检测端口、安装依赖、启动服务
-start.bat      # Windows
+bash service.sh start     # macOS / Linux — 自动检测端口、安装依赖、启动服务
+start.bat                 # Windows
 ```
 
 脚本自动完成：环境检查 → 端口清理 → 依赖安装 → 配置创建 → 服务启动。
 
-### 方式四：手动安装（开发者）
+### 方式三：手动安装（开发者）
 
 ```bash
 # 1. 创建虚拟环境
@@ -350,15 +340,6 @@ CookieCloud 是浏览器扩展，可将 Cookie 实时同步到服务端。风控
 4. 在终端中直接运行 `bash start.sh` 查看详细错误
 </details>
 
-<details>
-<summary><b>Docker 部署后无法访问面板</b></summary>
-
-**解决**：
-1. 确认容器正常运行：`docker compose ps`
-2. 检查端口映射：`docker compose logs`
-3. 国内网络构建失败时使用：`MIRROR=china docker compose up -d --build`
-</details>
-
 ---
 
 ## 技术架构
@@ -414,7 +395,7 @@ CookieCloud 是浏览器扩展，可将 Cookie 实时同步到服务端。风控
 | **AI 服务** | OpenAI 兼容 API | DeepSeek / 通义千问 / 智谱 / 火山方舟 / OpenAI |
 | **浏览器自动化** | DrissionPage + OpenCV | Cookie 刷新、滑块自动验证 |
 | **通知** | HTTP Webhook | 飞书 / 企业微信 |
-| **部署** | Docker / 离线安装包 / 脚本 | 全平台一键部署 |
+| **部署** | 离线安装包 / 脚本 | 全平台一键部署 |
 
 ---
 
@@ -514,7 +495,7 @@ XIANYUGUANJIA/
 │
 ├── tests/                            # 测试套件
 ├── data/                             # 运行时数据 (SQLite/日志/备份)
-├── docker-compose.yml                # Docker 编排
+├── service.sh                        # 服务控制（start/stop/restart/status）
 ├── start.sh / start.bat              # 一键启动
 ├── quick-start.sh / quick-start.bat  # 首次安装引导
 ├── supervisor.sh                     # 进程守护

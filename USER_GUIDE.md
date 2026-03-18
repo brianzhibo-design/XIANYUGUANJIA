@@ -46,7 +46,7 @@
 
 ### 3.1 下载本工具
 
-1. 打开 https://github.com/G3niusYukki/xianyu-openclaw
+1. 打开 https://github.com/G3niusYukki/xianyu-guanjia
 2. 点击绿色的 "Code" 按钮
 3. 点击 "Download ZIP"
 4. 解压到你想放的位置
@@ -54,8 +54,8 @@
 或者用命令行：
 
 ```bash
-git clone https://github.com/G3niusYukki/xianyu-openclaw.git
-cd xianyu-openclaw
+git clone https://github.com/G3niusYukki/xianyu-guanjia.git
+cd xianyu-guanjia
 ```
 
 ### 3.2 安装运行环境
@@ -206,12 +206,12 @@ start.bat
 | Python 看板 | http://localhost:8091 | 趋势图、商品表现、操作日志 |
 | 后端健康检查 | http://localhost:3001/health | Node.js 后端状态 |
 
-### Docker 模式（可选）
+### 服务脚本模式（可选）
 
-如果你更喜欢 Docker，也可以用 Docker Compose 一键启动：
+也可使用一键启动脚本：
 
 ```bash
-docker compose up -d
+bash service.sh start
 ```
 
 ### 关闭
@@ -219,8 +219,8 @@ docker compose up -d
 ```bash
 # 本地模式：在运行 start.sh / start.bat 的终端按 Ctrl+C 停止
 
-# Docker 模式
-docker compose down
+# 服务脚本模式
+bash service.sh stop
 ```
 
 ---
@@ -270,7 +270,7 @@ pip install -r requirements.txt
 cd client && npm install && cd ..
 ```
 
-然后重新启动服务即可。Docker 模式用 `docker compose up -d --build` 重建。
+然后重新启动服务即可。
 
 ---
 
@@ -303,8 +303,8 @@ cd client && npm install && cd ..
 ```bash
 # 本地模式：直接在运行终端查看输出
 
-# Docker 模式
-docker compose logs -f
+# 服务脚本模式
+bash service.sh status
 ```
 
 ---

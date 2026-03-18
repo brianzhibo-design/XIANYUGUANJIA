@@ -18,7 +18,6 @@ from dotenv import load_dotenv
 from src.core.logger import get_logger
 
 logger = get_logger()
-LEGACY_GATEWAY_CHECK_NAME = "Legacy Browser Gateway"
 
 
 class StartupCheckResult:
@@ -33,7 +32,7 @@ def resolve_runtime_mode() -> str:
     # Ensure `.env` values are visible before runtime resolution.
     load_dotenv(override=False)
     env_runtime = (
-        str(os.getenv("APP_RUNTIME") or os.getenv("BROWSER_RUNTIME_MODE") or os.getenv("OPENCLAW_RUNTIME", ""))
+        str(os.getenv("APP_RUNTIME") or os.getenv("BROWSER_RUNTIME_MODE") or "")
         .strip()
         .lower()
     )
@@ -65,28 +64,6 @@ def check_python_version() -> StartupCheckResult:
         ok,
         f"Python {v.major}.{v.minor}.{v.micro}" + ("" if ok else " (需要 3.10+)"),
     )
-
-
-def check_gateway_reachable() -> StartupCheckResult:
-    try:
-        import httpx
-
-        host = os.getenv("BROWSER_RUNTIME_HOST") or os.getenv("OPENCLAW_GATEWAY_HOST", "127.0.0.1")
-        port = int(os.getenv("BROWSER_RUNTIME_PORT") or os.getenv("OPENCLAW_GATEWAY_PORT", "18789"))
-        browser_port = port + 2
-        url = f"http://{host}:{browser_port}/"
-        resp = httpx.get(url, timeout=5)
-        if resp.status_code == 200:
-            return StartupCheckResult(LEGACY_GATEWAY_CHECK_NAME, True, f"可连接 ({host}:{browser_port})")
-        return StartupCheckResult(LEGACY_GATEWAY_CHECK_NAME, False, f"响应异常 (HTTP {resp.status_code})")
-    except httpx.ConnectError:
-        return StartupCheckResult(
-            LEGACY_GATEWAY_CHECK_NAME,
-            False,
-            "无法连接。请确认 legacy browser gateway 正在运行 (docker compose ps)",
-        )
-    except Exception as e:
-        return StartupCheckResult(LEGACY_GATEWAY_CHECK_NAME, False, f"检查失败: {e}")
 
 
 def check_database_writable() -> StartupCheckResult:
@@ -262,7 +239,6 @@ def check_quote_mock_guard() -> StartupCheckResult:
 
 def run_all_checks(skip_browser: bool = False) -> list[StartupCheckResult]:
     """运行所有启动检查"""
-    runtime = resolve_runtime_mode()
     results = [
         check_runtime_mode(),
         check_python_version(),
@@ -274,30 +250,7 @@ def run_all_checks(skip_browser: bool = False) -> list[StartupCheckResult]:
         check_quote_mock_guard(),
     ]
 
-    if skip_browser:
-        return results
-
-    if runtime == "pro":
-        results.append(check_gateway_reachable())
-        return results
-
-    if runtime == "lite":
-        results.append(check_lite_browser_dependency())
-        return results
-
-    # auto 模式：优先探测 legacy gateway，失败则检查 lite 依赖。
-    gateway = check_gateway_reachable()
-    if gateway.passed:
-        results.append(gateway)
-    else:
-        results.append(
-            StartupCheckResult(
-                LEGACY_GATEWAY_CHECK_NAME,
-                False,
-                f"{gateway.message}（auto 模式将尝试 lite 回退）",
-                critical=False,
-            )
-        )
+    if not skip_browser:
         results.append(check_lite_browser_dependency())
 
     return results

@@ -3,16 +3,16 @@
 
 # 应用配置
 app:
-  name: "xianyu-openclaw"
+  name: "xianyu-guanjia"
   version: "4.5.0"
   debug: false
   log_level: "INFO"
   data_dir: "data"
   logs_dir: "logs"
-  runtime: "auto" # auto | lite | pro
+  runtime: "lite"
 
-# 浏览器自动化配置 (通过 OpenClaw Gateway Browser API)
-openclaw:
+# 浏览器运行时配置
+browser_runtime:
   timeout: 30
   retry_times: 3
 

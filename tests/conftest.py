@@ -40,12 +40,12 @@ def temp_config_file(temp_dir):
     config_file = temp_dir / "config.yaml"
     config_content = """
 app:
-  name: "xianyu-openclaw"
+  name: "xianyu-guanjia"
   version: "8.0.0"
   debug: true
   log_level: "DEBUG"
 
-openclaw:
+browser_runtime:
   host: "localhost"
   port: 9222
   timeout: 30

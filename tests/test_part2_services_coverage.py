@@ -199,10 +199,6 @@ async def test_monitor_health_scheduler_and_analytics(temp_dir, monkeypatch: pyt
 
     hc = HealthChecker()
 
-    class _BC:
-        async def connect(self):
-            return False
-
     class _AS:
         def get_accounts(self):
             return [{"id": "a1"}]
@@ -212,7 +208,6 @@ async def test_monitor_health_scheduler_and_analytics(temp_dir, monkeypatch: pyt
 
     import src.modules.accounts.monitor as monitor_mod
 
-    monkeypatch.setattr(monitor_mod, "BrowserClient", _BC, raising=False)
     monkeypatch.setattr(monitor_mod, "AccountsService", _AS, raising=False)
 
     res = await hc.run_health_check()

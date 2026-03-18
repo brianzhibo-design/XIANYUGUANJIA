@@ -42,7 +42,7 @@ def _json_out(data: Any) -> None:
 
 
 _MODULE_TARGETS = ("presales", "operations", "aftersales")
-_EXPECTED_PROJECT_ROOT = "/Users/peterzhang/xianyu-openclaw"
+_EXPECTED_PROJECT_ROOT = ""  # 无固定预期路径，doctor strict 时 project_root_match 恒为 True
 
 _BENCH_QUOTE_MESSAGES = [
     "安徽到上海 1kg 圆通多少钱",
@@ -211,28 +211,20 @@ def _module_check_summary(target: str, doctor_report: dict[str, Any]) -> dict[st
     required_checks = [check_map[name] for name in required_names if name in check_map]
     blockers = [item for item in required_checks if not bool(item.get("passed", False))]
 
-    gateway_item = check_map.get("Legacy Browser Gateway") or check_map.get("OpenClaw Gateway")
     lite_item = check_map.get("Lite 浏览器驱动")
 
     if uses_ws_only:
         pass
     elif runtime == "pro":
-        if gateway_item is not None:
-            required_checks.append(gateway_item)
-            if not bool(gateway_item.get("passed", False)):
-                blockers.append(gateway_item)
+        pass
     elif runtime == "lite":
         if lite_item is not None:
             required_checks.append(lite_item)
             if not bool(lite_item.get("passed", False)):
                 blockers.append(lite_item)
     else:
-        # auto: gateway/lite 任一可用即通过，二者都不可用才阻塞。
-        browser_ready = bool(gateway_item and gateway_item.get("passed", False)) or bool(
-            lite_item and lite_item.get("passed", False)
-        )
-        if gateway_item is not None:
-            required_checks.append(gateway_item)
+        # auto: lite 驱动可用即通过，否则阻塞。
+        browser_ready = bool(lite_item and lite_item.get("passed", False))
         if lite_item is not None:
             required_checks.append(lite_item)
         if not browser_ready:
@@ -241,10 +233,9 @@ def _module_check_summary(target: str, doctor_report: dict[str, Any]) -> dict[st
                     "name": "浏览器运行时",
                     "passed": False,
                     "critical": True,
-                    "message": "auto 模式下 legacy browser gateway 与 Lite 驱动均不可用",
+                    "message": "auto 模式下 Lite 驱动不可用",
                     "suggestion": (
-                        "启动 legacy gateway（docker compose up -d）或安装 DrissionPage"
-                        "（pip install DrissionPage）。"
+                        "请执行 ./start.sh 或安装 DrissionPage（pip install DrissionPage）。"
                     ),
                     "meta": {"runtime": runtime},
                 }
@@ -266,7 +257,7 @@ _MODULE_RUNTIME_DIR = Path("data/module_runtime")
 
 
 def _resolve_python_exec() -> str:
-    configured = str(os.getenv("OPENCLAW_PYTHON_EXEC", "")).strip() or str(os.getenv("PYTHON_EXEC", "")).strip()
+    configured = str(os.getenv("PYTHON_EXEC", "")).strip()
     if configured:
         candidate = Path(configured).expanduser()
         if not candidate.is_absolute():
@@ -947,10 +938,10 @@ async def cmd_ai(args: argparse.Namespace) -> None:
 async def cmd_doctor(args: argparse.Namespace) -> None:
     from src.core.doctor import run_doctor
 
-    report = run_doctor(skip_gateway=bool(args.skip_gateway), skip_quote=bool(args.skip_quote))
+    report = run_doctor(skip_quote=bool(args.skip_quote))
     strict = bool(args.strict)
     project_root = str(Path.cwd().resolve())
-    project_root_match = project_root == _EXPECTED_PROJECT_ROOT
+    project_root_match = (not _EXPECTED_PROJECT_ROOT) or (project_root == _EXPECTED_PROJECT_ROOT)
     strict_ready = (
         bool(report.get("ready", False))
         and report.get("summary", {}).get("warning_failed", 0) == 0
@@ -1328,10 +1319,7 @@ async def cmd_module(args: argparse.Namespace) -> None:
         }
 
     if action == "check":
-        report = run_doctor(
-            skip_gateway=bool(args.skip_gateway),
-            skip_quote=(target not in {"presales", "all"}),
-        )
+        report = run_doctor(skip_quote=(target not in {"presales", "all"}))
 
         if target == "all":
             modules = {name: _module_check_summary(target=name, doctor_report=report) for name in _MODULE_TARGETS}
@@ -1888,7 +1876,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     # doctor
     p = sub.add_parser("doctor", help="运行系统自检并输出修复建议")
-    p.add_argument("--skip-gateway", action="store_true", help="跳过 Legacy Gateway 连通性检查")
     p.add_argument("--skip-quote", action="store_true", help="跳过自动报价成本源检查")
     p.add_argument("--strict", action="store_true", help="警告也按失败处理（返回非0）")
 
@@ -1919,7 +1906,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--strict", action="store_true", help="check 未通过时返回非0")
     p.add_argument("--mode", choices=["once", "daemon"], default="once", help="start 运行模式")
     p.add_argument("--background", action="store_true", help="start 时后台运行（仅 daemon）")
-    p.add_argument("--skip-gateway", action="store_true", help="check 时跳过网关连通性")
     p.add_argument("--window-minutes", type=int, default=1440, help="status 时 SLA 统计窗口（分钟）")
     p.add_argument("--workflow-db", default=None, help="presales workflow 数据库路径")
     p.add_argument("--orders-db", default="data/orders.db", help="aftersales 订单数据库路径")

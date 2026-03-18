@@ -47,7 +47,6 @@ require_one_of() {
   fi
 }
 
-require_non_empty "OPENCLAW_GATEWAY_TOKEN"
 require_non_empty "AUTH_PASSWORD"
 require_non_empty "XIANYU_COOKIE_1"
 require_one_of "ANTHROPIC_API_KEY" "OPENAI_API_KEY" "MOONSHOT_API_KEY" "MINIMAX_API_KEY" "ZAI_API_KEY" "CUSTOM_GATEWAY_API_KEY"

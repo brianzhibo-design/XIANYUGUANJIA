@@ -350,20 +350,6 @@ class TestConfig:
                 mock_dotenv.assert_called_once_with("config/.env", override=False)
 
 
-class TestBrowserClient:
-    """Cover uncovered line 506 in browser_client.py."""
-
-    async def test_set_cookies_skips_invalid_name(self):
-        from src.core.browser_client import BrowserClient
-        client = BrowserClient.__new__(BrowserClient)
-        client._client = AsyncMock()
-        client._profile_id = "test"
-        client._profile_params = MagicMock(return_value={})
-        client.logger = MagicMock()
-        await client.set_cookies_for_domain("good=v1; invalid name=v2; =v3", ".test.com")
-        client._client.post.assert_called_once()
-
-
 class TestCompliance:
     """Cover uncovered line 156 in compliance.py."""
 

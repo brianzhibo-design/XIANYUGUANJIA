@@ -124,11 +124,8 @@ class ModuleConsole:
             timeout_seconds=90,
         )
 
-    def check(self, skip_gateway: bool = False) -> dict[str, Any]:
-        args: list[str] = []
-        if bool(skip_gateway):
-            args.append("--skip-gateway")
-        return self._run_module_cli(action="check", target="all", extra_args=args, timeout_seconds=120)
+    def check(self) -> dict[str, Any]:
+        return self._run_module_cli(action="check", target="all", extra_args=[], timeout_seconds=120)
 
     def control(self, action: str, target: str) -> dict[str, Any]:
         act = str(action or "").strip().lower()

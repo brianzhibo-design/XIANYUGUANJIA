@@ -1,6 +1,6 @@
 # 部署指南
 
-> 闲鱼管家 (OpenClaw) 生产部署完整方案
+> 闲鱼管家 (xianyu-guanjia) 生产部署完整方案
 
 ---
 
@@ -9,9 +9,8 @@
 | 方式 | 适用场景 | 难度 | 依赖 |
 |------|---------|------|------|
 | **交互式快速启动** | 首次体验、个人电脑 | ⭐ | Python 3.10+ / Node.js 18+ |
-| **一键启动** | 已配好环境的快速启动 | ⭐ | Python 3.10+ / Node.js 18+ |
-| **Docker Compose** | 生产部署（推荐） | ⭐⭐ | Docker 20.10+ / Docker Compose 2.0+ |
-| **进程守护模式** | 无 Docker 的生产环境 | ⭐⭐ | Python 3.10+ / Node.js 18+ |
+| **服务控制脚本** | 已配好环境的快速启动 | ⭐ | Python 3.10+ / Node.js 18+ |
+| **进程守护模式** | 生产环境 7×24 运行 | ⭐⭐ | Python 3.10+ / Node.js 18+ |
 | **macOS 后台服务** | Mac 开机自启 | ⭐ | macOS + Python 3.10+ |
 
 ---
@@ -40,8 +39,8 @@
 ## 方式一：交互式快速启动（推荐新用户）
 
 ```bash
-git clone https://github.com/G3niusYukki/xianyu-openclaw.git
-cd xianyu-openclaw
+git clone https://github.com/brianzhibo-design/XIANYUGUANJIA.git
+cd XIANYUGUANJIA
 
 # macOS / Linux
 bash quick-start.sh
@@ -52,7 +51,7 @@ quick-start.bat
 
 脚本会自动完成 7 步引导：
 1. 检测并安装 Python、Node.js
-2. 安装项目依赖（Python + 前端 + Playwright）
+2. 安装项目依赖（Python + 前端 + DrissionPage）
 3. 创建配置文件
 4. 启动后端 + 前端服务
 5. CookieCloud / BitBrowser 配置引导
@@ -63,81 +62,11 @@ quick-start.bat
 
 ---
 
-## 方式二：Docker Compose 部署（推荐生产）
-
-### 1. 准备
-
-```bash
-git clone https://github.com/G3niusYukki/xianyu-openclaw.git
-cd xianyu-openclaw
-cp .env.example .env
-```
-
-### 2. 编辑配置
-
-打开 `.env`，至少填写 3 项：
-
-```bash
-XIANYU_COOKIE_1=你的闲鱼Cookie
-AI_API_KEY=你的AI密钥
-XGJ_APP_KEY=你的闲管家AppKey
-XGJ_APP_SECRET=你的闲管家AppSecret
-```
-
-### 3. 构建启动
-
-```bash
-# 国际网络
-docker compose up -d
-
-# 国内网络（自动使用阿里云镜像）
-MIRROR=china docker compose up -d --build
-```
-
-### 4. 验证
-
-```bash
-# 查看服务状态
-docker compose ps
-
-# 查看日志
-docker compose logs -f
-
-# 健康检查
-curl http://localhost:8091/healthz
-```
-
-### 5. 访问
-
-- **管理面板**: http://localhost:5173 (或你配置的 FRONTEND_PORT)
-- **后端 API**: http://localhost:8091
-
-### 常用运维命令
-
-```bash
-# 重启服务
-docker compose restart
-
-# 更新版本
-git pull && docker compose up -d --build
-
-# 查看资源占用
-docker stats
-
-# 进入容器调试
-docker exec -it xianyu-python-backend bash
-
-# 完全清理重建
-docker compose down -v && docker compose up -d --build
-```
-
----
-
-## 方式三：一键启动（无 Docker）
+## 方式二：服务控制脚本（已有环境）
 
 ```bash
 # macOS / Linux
-./start.sh
+bash service.sh start
 
 # Windows
 start.bat
@@ -147,7 +76,7 @@ start.bat
 
 ---
 
-## 方式四：进程守护模式（无 Docker 生产环境）
+## 方式三：进程守护模式（生产环境）
 
 ```bash
 ./supervisor.sh [--interval 15]
@@ -161,7 +90,7 @@ start.bat
 
 ---
 
-## 方式五：macOS 后台服务
+## 方式四：macOS 后台服务
 
 ```bash
 # 安装（开机自启）
@@ -190,7 +119,7 @@ bash scripts/uninstall-launchd.sh
 
 - [ ] 配置飞书/企微告警 Webhook
 - [ ] 设置 `APP_ENV=production`
-- [ ] 使用进程守护或 Docker restart 策略保证高可用
+- [ ] 使用进程守护或 `supervisor.sh` 保证高可用
 - [ ] 配置定期数据备份
 - [ ] 如对外暴露，在前面加 Nginx 反向代理 + HTTPS
 
@@ -199,13 +128,13 @@ bash scripts/uninstall-launchd.sh
 - [ ] 不要在公网直接暴露 8091/5173 端口，使用反向代理
 - [ ] 设置独立的 `ENCRYPTION_KEY` 环境变量
 - [ ] 生产环境确认 `quote.providers.remote.allow_mock=false`
-- [ ] 使用非 root 用户运行（Docker 已默认 appusr）
+- [ ] 使用非 root 用户运行
 
 ---
 
 ## 反向代理配置（Nginx + HTTPS）
 
-如需对外访问或配置域名，建议在 Docker 前加一层 Nginx：
+如需对外访问或配置域名，建议在本地服务前加一层 Nginx：
 
 ```nginx
 server {
@@ -271,7 +200,7 @@ tar -xzf backup-20260317.tar.gz
 
 ```bash
 # 每天凌晨 2 点备份
-0 2 * * * cd /path/to/xianyu-openclaw && tar -czf data/backups/backup-$(date +\%Y\%m\%d).tar.gz data/agent.db data/system_config.json data/workflow.db .env
+0 2 * * * cd /path/to/xianyu-guanjia && tar -czf data/backups/backup-$(date +\%Y\%m\%d).tar.gz data/agent.db data/system_config.json data/workflow.db .env
 ```
 
 ---
@@ -279,13 +208,8 @@ tar -xzf backup-20260317.tar.gz
 ## 更新升级
 
 ```bash
-# Docker
 git pull origin main
-docker compose up -d --build
-
-# 本地
-git pull origin main
-./start.sh   # 自动检测并更新依赖
+bash service.sh restart   # 自动检测并更新依赖后重启
 ```
 
 ---
@@ -299,8 +223,8 @@ git pull origin main
 lsof -ti:8091 -ti:5173 | xargs kill -9   # macOS/Linux
 netstat -ano | findstr "8091 5173"          # Windows
 
-# Docker 日志
-docker compose logs --tail 50 python-backend
+# 查看服务状态
+bash service.sh status
 ```
 
 ### Cookie 失效
@@ -313,10 +237,10 @@ docker compose logs --tail 50 python-backend
 
 ```bash
 # 完整诊断
-python -m src.cli doctor
+python -m src.cli doctor --strict
 
-# 跳过 Gateway 和报价检查（快速诊断）
-python -m src.cli doctor --skip-gateway --skip-quote
+# 跳过报价检查（快速诊断）
+python -m src.cli doctor --skip-quote
 ```
 
 ### AI 回复异常
@@ -335,12 +259,11 @@ python -m src.cli doctor --skip-gateway --skip-quote
 └───────────────┬─────────────────────┘
                 │
     ┌───────────┴───────────┐
-    │  React 前端 (nginx)   │  ← Docker: react-frontend
-    │  静态 SPA + API 代理  │
+    │  React 前端 (Vite)    │  静态 SPA + API 代理
     └───────────┬───────────┘
                 │ /api/ → proxy
     ┌───────────┴───────────┐
-    │  Python 后端 (:8091)  │  ← Docker: python-backend
+    │  Python 后端 (:8091)  │
     │  ┌─────┐ ┌─────┐     │
     │  │ WS  │ │ AI  │     │     WebSocket → 闲鱼消息
     │  │监听 │ │回复 │     │     HTTP → 闲管家 API
@@ -358,4 +281,4 @@ python -m src.cli doctor --skip-gateway --skip-quote
 
 - [README.md](../README.md) — 项目概览和功能介绍
 - [SECURITY.md](../SECURITY.md) — 安全最佳实践
-- [GitHub Issues](https://github.com/G3niusYukki/xianyu-openclaw/issues) — 问题反馈
+- [GitHub Issues](https://github.com/brianzhibo-design/XIANYUGUANJIA/issues) — 问题反馈

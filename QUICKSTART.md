@@ -27,14 +27,14 @@ quick-start.bat
 
 脚本会自动完成：环境检查 → 依赖安装 → 配置校验 → 服务启动 → 首次使用引导。
 
-> 还有精简版一键启动脚本 `start.sh` / `start.bat`，功能相同但无交互引导。
+> 还有服务控制脚本 `bash service.sh start` / `start.bat`，可直接启动无交互引导。
 
 ---
 
 ## 项目文件结构
 
 ```
-xianyu-openclaw/
+xianyu-guanjia/
 ├── quick-start.sh / .bat  # 交互式快速启动（带引导）
 ├── start.sh / start.bat   # 精简版一键启动
 ├── setup.sh               # 仅安装依赖（不启动服务）
@@ -51,7 +51,7 @@ xianyu-openclaw/
 │   ├── core/              # 核心模块
 │   │   ├── config.py      #   配置加载
 │   │   ├── config_models.py#  配置模型定义
-│   │   ├── browser_client.py# 浏览器客户端（Cookie 获取）
+│   │   ├── drissionpage_client.py# 浏览器客户端（Cookie 获取）
 │   │   ├── cookie_grabber.py# Cookie 自动获取
 │   │   ├── crypto.py      #   加密工具
 │   │   ├── error_handler.py#  错误处理
@@ -127,8 +127,6 @@ xianyu-openclaw/
 │   └── qa/                #   质量检查
 │
 ├── docs/                  # 文档
-├── docker-compose.yml     # Docker 编排
-├── Dockerfile.python      # Python 镜像
 ├── requirements.txt       # Python 依赖
 ├── .env / .env.example    # 环境变量
 └── README.md              # 项目说明
@@ -190,21 +188,6 @@ cd client && npx vite --host
 |------|------|---------|
 | 管理面板 | http://localhost:5173 | 管理面板首页 |
 | Python API | http://localhost:8091 | Dashboard 页面 |
-
----
-
-## Docker 模式
-
-```bash
-cp .env.example .env    # 编辑 .env 填入配置
-docker compose up -d    # 启动
-docker compose ps       # 查看状态
-```
-
-| 容器 | 端口 | 说明 |
-|------|------|------|
-| xianyu-python-backend | 8091 | Python 后端 |
-| xianyu-react-frontend | 5173 | React 前端 |
 
 ---
 
@@ -279,7 +262,6 @@ set CHINA_MIRROR=1 && quick-start.bat
 |------|---------|---------|
 | pip (Python) | `mirrors.aliyun.com/pypi/simple/` | 自动设置 |
 | npm (Node.js) | `registry.npmmirror.com` | 自动设置 |
-| Docker 基础镜像 | 见下方 Docker 配置 | Docker daemon 配置 |
 
 ### 手动配置国内源（不使用启动脚本时）
 
@@ -293,27 +275,6 @@ npm install
 ```
 
 > DrissionPage 使用系统已安装的 Chrome/Chromium，无需额外下载浏览器驱动。
-
-### Docker 国内构建
-
-```bash
-# 使用国内镜像源构建所有容器
-MIRROR=china docker compose build
-docker compose up -d
-```
-
-Docker 拉取基础镜像加速 — 编辑 `/etc/docker/daemon.json`：
-
-```json
-{
-  "registry-mirrors": [
-    "https://mirror.ccs.tencentyun.com",
-    "https://docker.mirrors.ustc.edu.cn"
-  ]
-}
-```
-
-然后重启 Docker：`sudo systemctl restart docker`
 
 ### 离线部署方案
 
@@ -396,9 +357,8 @@ npm install --registry=https://registry.npmmirror.com
 ```bash
 # 一键启动模式：Ctrl+C 即可停止所有服务
 
-# Docker 模式
-docker compose down       # 停止（保留数据）
-docker compose down -v    # 停止并删除数据卷（谨慎）
+# 服务控制脚本
+bash service.sh stop      # 停止全部服务
 ```
 
 ---
@@ -409,6 +369,7 @@ docker compose down -v    # 停止并删除数据卷（谨慎）
 |------|------|------|
 | `quick-start.sh` | macOS/Linux | 交互式引导、彩色输出、状态检查 |
 | `quick-start.bat` | Windows | 交互式引导、状态检查 |
+| `service.sh start` | macOS/Linux | 服务控制，start/stop/restart/status |
 | `start.sh` | macOS/Linux | 精简版，直接启动 |
 | `start.bat` | Windows | 精简版，直接启动 |
 | `setup.sh` | macOS/Linux | 仅安装依赖，不启动服务 |

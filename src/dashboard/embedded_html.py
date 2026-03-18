@@ -914,7 +914,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
     async function runFullCheck() {
       try {
-        const res = await fetch("/api/module/check?skip_gateway=1");
+        const res = await fetch("/api/module/check");
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         renderDoctorStatus(data);

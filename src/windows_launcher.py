@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib.util
-import shutil
 import subprocess
 import sys
 import threading
@@ -37,9 +36,6 @@ ALL_SUPPORTED_KEYS = _sw.ALL_SUPPORTED_KEYS
 CONTENT_PROVIDERS = _sw.CONTENT_PROVIDERS
 _build_env_content = _sw._build_env_content
 _read_existing_env = _sw._read_existing_env
-
-
-DOCKER_INSTALLER_URL = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
 
 
 def _runtime_root() -> Path:
@@ -123,8 +119,6 @@ class WindowsLauncherApp(ctk.CTk):
         self.port_var = ctk.StringVar(value=self.existing_values.get("FRONTEND_PORT", "5173"))
         self.password_masked = True
 
-        self.docker_ready = False
-        self.docker_skipped = False
         self.deploy_running = False
 
         self.status_var = ctk.StringVar(value="")
@@ -139,7 +133,6 @@ class WindowsLauncherApp(ctk.CTk):
         self._build_pages()
         self._apply_existing_values()
         self.show_page(0)
-        self.after(200, self._detect_docker_async)
 
     def _build_pages(self) -> None:
         self.pages = [
@@ -172,46 +165,14 @@ class WindowsLauncherApp(ctk.CTk):
 
         ctk.CTkLabel(
             frame,
-            text="将引导你完成 Docker 检测、AI 配置、鉴权与 Cookie 设置。",
+            text="将引导你完成 AI 配置、鉴权与 Cookie 设置。",
             text_color="gray80",
-        ).grid(row=2, column=0, padx=30, pady=(0, 18), sticky="w")
-
-        self.docker_status_dot = ctk.CTkLabel(frame, text="●", text_color="red")
-        self.docker_status_dot.grid(row=3, column=0, padx=(30, 0), pady=(0, 8), sticky="w")
-        self.docker_status_text = ctk.CTkLabel(frame, text="正在检测 Docker...", text_color="gray85")
-        self.docker_status_text.grid(row=3, column=0, padx=(52, 30), pady=(0, 8), sticky="w")
-
-        self.docker_error_text = ctk.CTkLabel(frame, text="", text_color="#ff6f6f", wraplength=700, justify="left")
-        self.docker_error_text.grid(row=4, column=0, padx=30, pady=(0, 12), sticky="w")
-
-        self.download_docker_btn = ctk.CTkButton(
-            frame,
-            text="下载 Docker Desktop",
-            command=lambda: webbrowser.open(DOCKER_INSTALLER_URL),
-            width=180,
-        )
-        self.download_docker_btn.grid(row=5, column=0, padx=30, pady=(0, 8), sticky="w")
-        self.download_docker_btn.grid_remove()
+        ).grid(row=2, column=0, padx=30, pady=(0, 24), sticky="w")
 
         nav = ctk.CTkFrame(frame, fg_color="transparent")
         nav.grid(row=8, column=0, padx=30, pady=24, sticky="ew")
         nav.grid_columnconfigure(0, weight=1)
-
-        self.skip_docker_btn = ctk.CTkButton(
-            nav,
-            text="跳过检测",
-            fg_color="transparent",
-            hover=False,
-            text_color="#7fb8ff",
-            command=self._skip_docker_check,
-            width=90,
-        )
-        self.skip_docker_btn.grid(row=0, column=0, sticky="w")
-
-        self.next_from_welcome_btn = ctk.CTkButton(
-            nav, text="下一步", width=140, state="disabled", command=self._goto_next
-        )
-        self.next_from_welcome_btn.grid(row=0, column=1, sticky="e")
+        ctk.CTkButton(nav, text="下一步", width=140, command=self._goto_next).grid(row=0, column=1, sticky="e")
         return frame
 
     def _build_page_content(self) -> ctk.CTkFrame:
@@ -469,49 +430,6 @@ class WindowsLauncherApp(ctk.CTk):
         self.cookie_1_placeholder.set(existing.get("XIANYU_COOKIE_1", ""))
         self.cookie_2_placeholder.set(existing.get("XIANYU_COOKIE_2", ""))
 
-    def _skip_docker_check(self) -> None:
-        self.docker_skipped = True
-        self.next_from_welcome_btn.configure(state="normal")
-        self.docker_status_dot.configure(text_color="#f6c85f")
-        self.docker_status_text.configure(text="已跳过 Docker 检测")
-        self.docker_error_text.configure(text="")
-        self.download_docker_btn.grid_remove()
-
-    def _detect_docker_async(self) -> None:
-        self.docker_status_text.configure(text="正在检测 Docker 与 Compose...", text_color="gray85")
-
-        def worker() -> None:
-            ok = True
-            error = ""
-            if shutil.which("docker") is None:
-                ok = False
-                error = "未检测到 Docker，请先安装并启动 Docker Desktop。"
-            else:
-                result = subprocess.run(["docker", "compose", "version"], capture_output=True, text=True, check=False)
-                if result.returncode != 0:
-                    ok = False
-                    error = "检测到 Docker，但 docker compose 不可用。请确认 Docker Desktop 已启动。"
-
-            self.after(0, lambda: self._on_docker_checked(ok, error))
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _on_docker_checked(self, ok: bool, error: str) -> None:
-        self.docker_ready = ok
-        if ok:
-            self.docker_status_dot.configure(text_color="#49c16d")
-            self.docker_status_text.configure(text="Docker 已就绪", text_color="#8ad9a0")
-            self.docker_error_text.configure(text="")
-            self.download_docker_btn.grid_remove()
-            self.next_from_welcome_btn.configure(state="normal")
-        else:
-            self.docker_status_dot.configure(text_color="#ff6f6f")
-            self.docker_status_text.configure(text="未检测到 Docker", text_color="#ff8d8d")
-            self.docker_error_text.configure(text=error)
-            self.download_docker_btn.grid()
-            if not self.docker_skipped:
-                self.next_from_welcome_btn.configure(state="disabled")
-
     def _validate_content_and_next(self) -> None:
         self.content_error_label.configure(text="")
         if not self.content_key_var.get().strip():
@@ -641,7 +559,7 @@ class WindowsLauncherApp(ctk.CTk):
                 f"Cookie 1：{_mask_secret(merged.get('XIANYU_COOKIE_1', ''))}",
                 f"Cookie 2：{_mask_secret(merged.get('XIANYU_COOKIE_2', ''))}",
                 "",
-                "确认后可选择仅生成配置，或直接生成并启动容器。",
+                "确认后可选择仅生成配置，或直接生成并启动服务。",
             ]
         )
 
@@ -653,7 +571,7 @@ class WindowsLauncherApp(ctk.CTk):
     def _generate_only(self) -> None:
         ok, msg = self._write_env_file()
         if ok:
-            self._set_status(f"{msg}\n你可以稍后手动执行：docker compose up -d", "#8ad9a0")
+            self._set_status(f"{msg}\n你可以稍后手动执行：start.bat 或 ./start.sh 启动服务", "#8ad9a0")
             self.show_logs_btn.grid_remove()
             self.open_browser_btn.grid_remove()
         else:
@@ -674,7 +592,7 @@ class WindowsLauncherApp(ctk.CTk):
             return
 
         self._set_deploy_controls(True)
-        self._set_status(f"{msg}\n正在执行 docker compose up -d，请稍候...", "gray85")
+        self._set_status(f"{msg}\n正在执行 start.bat 启动本地服务，请稍候...", "gray85")
         self.show_logs_btn.grid_remove()
         self.open_browser_btn.grid_remove()
         self.progress.grid()
@@ -682,15 +600,19 @@ class WindowsLauncherApp(ctk.CTk):
 
         def worker() -> None:
             try:
-                result = subprocess.run(
-                    ["docker", "compose", "--env-file", str(self.env_path), "up", "-d"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                stdout = (result.stdout or "").strip()
-                stderr = (result.stderr or "").strip()
-                self.after(0, lambda: self._on_deploy_finished(result.returncode, stdout, stderr))
+                start_bat = self.project_root / "start.bat"
+                if start_bat.exists():
+                    # start "" start.bat 在新窗口启动，主进程立即返回
+                    result = subprocess.run(
+                        ["cmd", "/c", "start", "", "start.bat"],
+                        cwd=str(self.project_root),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.after(0, lambda: self._on_deploy_finished(result.returncode, "", ""))
+                else:
+                    self.after(0, lambda: self._on_deploy_finished(1, "", f"未找到 {start_bat}"))
             except Exception as exc:
                 err = exc
                 self.after(0, lambda: self._on_deploy_exception(err))
@@ -704,14 +626,14 @@ class WindowsLauncherApp(ctk.CTk):
 
         if code != 0:
             detail = stderr or stdout or "未知错误"
-            self._set_status(f"启动失败，请检查配置或 Docker 状态。\n错误详情：{detail}", "#ff8d8d")
+            self._set_status(f"启动失败，请检查配置。\n错误详情：{detail}", "#ff8d8d")
             self.show_logs_btn.grid()
             self.open_browser_btn.grid_remove()
             return
 
         port = self.port_var.get().strip()
-        self._set_status("容器启动中，正在检查状态...", "gray85")
-        self.after(3000, lambda: self._check_container_status(port))
+        self._set_status("服务启动中，正在检查状态...", "gray85")
+        self.after(3000, lambda: self._check_local_status(port))
 
     def _on_deploy_exception(self, exc: Exception) -> None:
         self.progress.stop()
@@ -720,63 +642,37 @@ class WindowsLauncherApp(ctk.CTk):
         self._set_status(f"执行启动命令时出现异常：{exc}", "#ff8d8d")
         self.show_logs_btn.grid()
 
-    def _check_container_status(self, port: str) -> None:
+    def _check_local_status(self, port: str) -> None:
         def worker() -> None:
             try:
-                import time
+                import socket
 
-                time.sleep(2)
-
-                result = subprocess.run(
-                    ["docker", "compose", "--env-file", str(self.env_path), "ps", "--format", "json"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-
-                if result.returncode != 0:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                reachable = sock.connect_ex(("127.0.0.1", int(port))) == 0
+                sock.close()
+                if reachable:
+                    self.after(0, lambda: self._set_status(f"启动完成！访问地址：http://localhost:{port}", "#8ad9a0"))
+                else:
                     self.after(
                         0,
                         lambda: self._set_status(
-                            f"启动完成！访问地址：http://localhost:{port}\n（注意：无法获取容器状态，请手动检查）",
+                            f"服务已启动（新窗口运行）。访问地址：http://localhost:{port}\n若无法访问，请查看启动窗口的日志。",
                             "#8ad9a0",
                         ),
                     )
-                    self.after(0, self.open_browser_btn.grid)
-                    return
-
-                output = result.stdout or ""
-                if '"Restarting"' in output or "restarting" in output.lower():
-                    logs_result = subprocess.run(
-                        ["docker", "compose", "--env-file", str(self.env_path), "logs", "--tail=30"],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-                    logs = (logs_result.stdout or "") + (logs_result.stderr or "")
-                    error_msg = "容器正在重启，可能原因：\n"
-                    if "At least one AI provider API key" in logs:
-                        error_msg += "• AI Key未配置：请在第2步配置主 AI 的 API Key\n"
-                    elif "pairing required" in logs.lower():
-                        error_msg += "• 需要设备配对：请在PowerShell执行配对命令\n"
-                    elif "cookie" in logs.lower() and ("missing" in logs.lower() or "invalid" in logs.lower()):
-                        error_msg += "• Cookie无效：请在第5步配置有效的闲鱼Cookie\n"
-                    else:
-                        error_msg += "• 配置错误或其他问题，请查看日志\n"
-
-                    error_msg += "\n查看日志了解详情。"
-
-                    self.after(0, lambda: self._set_status(error_msg, "#ff8d8d"))
-                    self.after(0, self.show_logs_btn.grid)
-                    self.after(0, self.open_browser_btn.grid_remove)
-                else:
-                    self.after(0, lambda: self._set_status(f"启动完成！访问地址：http://localhost:{port}", "#8ad9a0"))
-                    self.after(0, self.open_browser_btn.grid)
-                    self.after(0, self.show_logs_btn.grid_remove)
-
-            except Exception:
-                self.after(0, lambda: self._set_status(f"启动完成！访问地址：http://localhost:{port}", "#8ad9a0"))
                 self.after(0, self.open_browser_btn.grid)
+                self.after(0, self.show_logs_btn.grid)
+            except Exception:
+                self.after(
+                    0,
+                    lambda: self._set_status(
+                        f"服务已启动。访问地址：http://localhost:{port}\n请查看启动窗口确认服务状态。",
+                        "#8ad9a0",
+                    ),
+                )
+                self.after(0, self.open_browser_btn.grid)
+                self.after(0, self.show_logs_btn.grid)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -784,27 +680,29 @@ class WindowsLauncherApp(ctk.CTk):
         webbrowser.open(f"http://localhost:{self.port_var.get().strip()}")
 
     def _show_logs(self) -> None:
-        self._set_status("正在读取 docker compose logs --tail=80 ...", "gray85")
+        self._set_status("正在读取本地日志...", "gray85")
 
         def worker() -> None:
             try:
-                result = subprocess.run(
-                    ["docker", "compose", "--env-file", str(self.env_path), "logs", "--tail=80"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                text = (result.stdout or "") + ("\n" + result.stderr if result.stderr else "")
-                self.after(0, lambda: self._open_logs_window(text.strip() or "暂无日志输出"))
+                logs_dir = self.project_root / "logs"
+                lines: list[str] = []
+                if logs_dir.exists():
+                    for f in sorted(logs_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)[:3]:
+                        try:
+                            content = f.read_text(encoding="utf-8", errors="replace")
+                            lines.append(f"=== {f.name} ===\n{content[-8000:]}")  # 最近约 8KB
+                        except Exception:
+                            pass
+                text = "\n\n".join(lines) if lines else "本地模式下日志在各服务窗口输出。\n若使用 scripts 启动，可查看 logs/ 目录。"
+                self.after(0, lambda: self._open_logs_window(text.strip()))
             except Exception as exc:
-                err = exc
-                self.after(0, lambda: self._open_logs_window(f"读取日志失败：{err}"))
+                self.after(0, lambda: self._open_logs_window(f"读取日志失败：{exc}"))
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _open_logs_window(self, text: str) -> None:
         dialog = ctk.CTkToplevel(self)
-        dialog.title("容器日志")
+        dialog.title("服务日志")
         dialog.geometry("860x520")
         dialog.minsize(760, 420)
         dialog.transient(self)

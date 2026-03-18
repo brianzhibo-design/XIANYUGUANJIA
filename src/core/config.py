@@ -199,7 +199,7 @@ class Config:
         """
         defaults = {
             "app": {
-                "name": "xianyu-openclaw",
+                "name": "xianyu-guanjia",
                 "version": __import__("src").__version__,
                 "debug": False,
                 "log_level": "INFO",
@@ -331,11 +331,6 @@ class Config:
                 for key, value in values.items():
                     if key not in self._config[section]:
                         self._config[section][key] = value
-
-        if "browser_runtime" not in self._config and "openclaw" in self._config:
-            self._config["browser_runtime"] = dict(self._config["openclaw"])
-        if "openclaw" not in self._config and "browser_runtime" in self._config:
-            self._config["openclaw"] = dict(self._config["browser_runtime"])
 
     def _merge_system_config(self) -> None:
         """Merge data/system_config.json into runtime config.
@@ -484,10 +479,7 @@ class Config:
         Returns:
             配置值
         """
-        alias_map = {"openclaw": "browser_runtime"}
         keys = key.split(".")
-        if keys and keys[0] in alias_map:
-            keys[0] = alias_map[keys[0]]
         value = self._config
 
         for k in keys:
@@ -509,21 +501,12 @@ class Config:
         Returns:
             配置段落字典
         """
-        if section == "openclaw":
-            section = "browser_runtime"
-        if section == "browser_runtime" and section not in self._config and "openclaw" in self._config:
-            return self._config.get("openclaw", default or {})
         return self._config.get(section, default or {})
 
     @property
     def app(self) -> dict[str, Any]:
         """应用配置"""
         return self.get_section("app")
-
-    @property
-    def openclaw(self) -> dict[str, Any]:
-        """兼容旧字段名。"""
-        return self.get_section("browser_runtime")
 
     @property
     def browser_runtime(self) -> dict[str, Any]:

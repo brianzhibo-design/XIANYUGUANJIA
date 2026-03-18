@@ -1,12 +1,12 @@
-# Contributing to xianyu-openclaw
+# Contributing to xianyu-guanjia
 
 Thanks for your interest in contributing! Here's how to get started.
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/G3niusYukki/xianyu-openclaw.git
-cd xianyu-openclaw
+git clone https://github.com/brianzhibo-design/XIANYUGUANJIA.git
+cd XIANYUGUANJIA
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -17,11 +17,10 @@ pip install -r requirements.txt
 ```
 src/
 ├── cli.py              # CLI entry point
-├── core/               # Framework: config, logging, browser client, crypto, cookie_grabber
+├── core/               # Framework: config, logging, drissionpage client, crypto, cookie_grabber
 ├── modules/            # Business logic: listing, operations, messages, orders, analytics
 ├── dashboard_server.py # Python Dashboard API server
 └── integrations/       # Third-party integrations (xianguanjia)
-server/                 # Node.js backend (config proxy, webhook gate)
 client/                 # React frontend (Vite + Tailwind)
 tests/                  # Python test suite
 ```
@@ -30,15 +29,15 @@ tests/                  # Python test suite
 
 ### Bug Reports
 
-Open an [issue](https://github.com/G3niusYukki/xianyu-openclaw/issues/new?template=bug_report.md) with:
+Open an [issue](https://github.com/brianzhibo-design/XIANYUGUANJIA/issues/new?template=bug_report.md) with:
 - What you expected
 - What actually happened
 - Steps to reproduce
-- Logs (`docker compose logs`)
+- Logs (from `bash service.sh status` or terminal output)
 
 ### Feature Requests
 
-Open an [issue](https://github.com/G3niusYukki/xianyu-openclaw/issues/new?template=feature_request.md) describing the use case.
+Open an [issue](https://github.com/brianzhibo-design/XIANYUGUANJIA/issues/new?template=feature_request.md) describing the use case.
 
 ### Pull Requests
 
@@ -106,4 +105,4 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Need Help?
 
-Open an issue or start a [discussion](https://github.com/G3niusYukki/xianyu-openclaw/discussions).
+Open an issue or start a [discussion](https://github.com/brianzhibo-design/XIANYUGUANJIA/discussions).

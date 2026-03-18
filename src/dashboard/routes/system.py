@@ -214,8 +214,7 @@ def handle_module_status(ctx: RouteContext) -> None:
 
 @get("/api/module/check")
 def handle_module_check(ctx: RouteContext) -> None:
-    skip_gateway = ctx.query_bool("skip_gateway")
-    payload = ctx.module_console.check(skip_gateway=skip_gateway)
+    payload = ctx.module_console.check()
     status = 200 if not payload.get("error") else 500
     ctx.send_json(payload, status=status)
 

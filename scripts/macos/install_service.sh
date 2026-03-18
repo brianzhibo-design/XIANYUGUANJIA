@@ -1,12 +1,12 @@
 #!/bin/bash
-# 闲鱼 OpenClaw — macOS launchd 服务管理
+# 闲鱼管家 — macOS launchd 服务管理
 # 用法: ./install_service.sh [install|uninstall|status]
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-PLIST_NAME="com.xianyu-openclaw"
+PLIST_NAME="com.xianyu-guanjia"
 PLIST_SOURCE="$SCRIPT_DIR/${PLIST_NAME}.plist"
 PLIST_TARGET="$HOME/Library/LaunchAgents/${PLIST_NAME}.plist"
 
@@ -20,7 +20,7 @@ usage() {
 }
 
 install_service() {
-    echo "Installing xianyu-openclaw service..."
+    echo "Installing xianyu-guanjia service..."
 
     # 查找 Python3（优先 venv）
     local PYTHON3=""
@@ -55,13 +55,13 @@ install_service() {
     launchctl start "$PLIST_NAME" 2>/dev/null || true
     echo "  Service started."
     echo ""
-    echo "✅ xianyu-openclaw service installed and started."
+    echo "✅ xianyu-guanjia service installed and started."
     echo "   Logs: $PROJECT_ROOT/logs/launchd-stdout.log"
     echo "   Errors: $PROJECT_ROOT/logs/launchd-stderr.log"
 }
 
 uninstall_service() {
-    echo "Uninstalling xianyu-openclaw service..."
+    echo "Uninstalling xianyu-guanjia service..."
 
     launchctl stop "$PLIST_NAME" 2>/dev/null || true
     launchctl unload "$PLIST_TARGET" 2>/dev/null || true
@@ -71,11 +71,11 @@ uninstall_service() {
         echo "  Removed: $PLIST_TARGET"
     fi
 
-    echo "✅ xianyu-openclaw service uninstalled."
+    echo "✅ xianyu-guanjia service uninstalled."
 }
 
 check_status() {
-    echo "Checking xianyu-openclaw service status..."
+    echo "Checking xianyu-guanjia service status..."
     echo ""
 
     if [ ! -f "$PLIST_TARGET" ]; then

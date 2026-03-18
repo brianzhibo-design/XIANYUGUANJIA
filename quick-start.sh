@@ -351,7 +351,7 @@ echo ""
 
 # ═══════════════ 6. 系统诊断 ═══════════════
 printf "${B}[6/7] 系统诊断${N}\n"
-python3 -m src.cli doctor --skip-gateway --skip-quote 2>/dev/null | head -20 || warn "诊断跳过 (服务启动中)"
+python3 -m src.cli doctor --skip-quote 2>/dev/null | head -20 || warn "诊断跳过 (服务启动中)"
 echo ""
 
 # ═══════════════ 7. 启动完成 ═══════════════

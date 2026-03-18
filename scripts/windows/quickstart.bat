@@ -17,18 +17,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
-where docker >nul 2>&1
-if errorlevel 1 (
-  echo [ERROR] Docker not found in PATH. Install Docker Desktop first.
-  exit /b 1
-)
-
-echo [STEP] 3/3 Start services via docker compose
-docker compose up -d
-if errorlevel 1 (
-  echo [ERROR] docker compose up -d failed.
-  exit /b 1
-)
+echo [STEP] 3/3 Start services locally (new window)
+start "" cmd /c start.bat
 
 echo [OK] Quickstart finished.
 echo [INFO] Web UI: http://localhost:8080
