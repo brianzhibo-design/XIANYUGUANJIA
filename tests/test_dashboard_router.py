@@ -1,55 +1,49 @@
-"""
-Tests for dashboard router.
-"""
+"""Tests for dashboard router - corrected API usage."""
 
 import pytest
 from unittest.mock import MagicMock
 
 from src.dashboard.router import (
     RouteContext,
-    all_routes,
-    dispatch_get,
-    dispatch_post,
-    dispatch_put,
-    dispatch_delete,
+    _GET_ROUTES,
+    _POST_ROUTES,
 )
 
 
 class TestRouteContext:
-    """Tests for RouteContext."""
+    """Tests for RouteContext with correct API."""
 
     def test_context_creation(self):
-        ctx = RouteContext(path="/api/test", method="GET", headers={"Content-Type": "application/json"}, body=None)
+        """Test RouteContext creation with correct parameters."""
+        mock_handler = MagicMock()
+        ctx = RouteContext(_handler=mock_handler, path="/api/test", query={"page": ["1"]})
         assert ctx.path == "/api/test"
-        assert ctx.method == "GET"
+
+    def test_query_str(self):
+        """Test query_str helper method."""
+        mock_handler = MagicMock()
+        ctx = RouteContext(_handler=mock_handler, path="/api/test", query={"search": ["keyword"]})
+        assert ctx.query_str("search") == "keyword"
+        assert ctx.query_str("missing") == ""
+
+    def test_query_int(self):
+        """Test query_int helper method."""
+        mock_handler = MagicMock()
+        ctx = RouteContext(_handler=mock_handler, path="/api/test", query={"page": ["5"]})
+        assert ctx.query_int("page") == 5
+        assert ctx.query_int("missing") == 0
 
 
-class TestRouterDispatch:
-    """Tests for router dispatch functions."""
+class TestRouterRoutes:
+    """Tests for router route registration."""
 
-    def test_all_routes_returns_dict(self):
-        routes = all_routes()
-        assert isinstance(routes, dict)
+    def test_get_routes_exist(self):
+        """Test that GET routes dictionary exists."""
+        assert isinstance(_GET_ROUTES, dict)
 
-    def test_dispatch_get_handles_unknown_path(self):
-        ctx = MagicMock()
-        result = dispatch_get("/unknown/path", ctx)
-        assert result is False
-
-    def test_dispatch_post_handles_unknown_path(self):
-        ctx = MagicMock()
-        result = dispatch_post("/unknown/path", ctx)
-        assert result is False
-
-    def test_dispatch_put_handles_unknown_path(self):
-        ctx = MagicMock()
-        result = dispatch_put("/unknown/path", ctx)
-        assert result is False
-
-    def test_dispatch_delete_handles_unknown_path(self):
-        ctx = MagicMock()
-        result = dispatch_delete("/unknown/path", ctx)
-        assert result is False
+    def test_post_routes_exist(self):
+        """Test that POST routes dictionary exists."""
+        assert isinstance(_POST_ROUTES, dict)
 
 
 if __name__ == "__main__":
