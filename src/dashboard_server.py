@@ -4795,10 +4795,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_json(_error_payload(str(e), code="INTERNAL_ERROR"), status=500)
 
     _QUIET_PREFIXES = (
-        "/api/update/status", "/api/dashboard/summary", "/api/system/status",
-        "/api/summary", "/api/status", "/api/trend", "/api/top-products",
-        "/api/recent-operations", "/api/slider/stats", "/api/slider/events",
-        "/healthz", "/assets/", "/favicon",
+        "/api/update/status",
+        "/api/dashboard/summary",
+        "/api/system/status",
+        "/api/summary",
+        "/api/status",
+        "/api/trend",
+        "/api/top-products",
+        "/api/recent-operations",
+        "/api/slider/stats",
+        "/api/slider/events",
+        "/healthz",
+        "/assets/",
+        "/favicon",
     )
 
     def log_message(self, format: str, *args: Any) -> None:
@@ -4953,6 +4962,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
 
     from loguru import logger as _loguru
     from src.dashboard.router import all_routes
+
     routes = all_routes()
     total = sum(len(v) for v in routes.values())
     _loguru.info("已注册 {} 个 API 路由", total)
