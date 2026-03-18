@@ -1,7 +1,6 @@
-"""
-Test suite for quote engine and related modules.
-"""
+"""Tests for quote engine and related modules - corrected API usage."""
 
+import tempfile
 import pytest
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
@@ -43,23 +42,31 @@ class TestQuoteEngine:
 
 
 class TestQuoteModels:
-    """Tests for quote models."""
+    """Tests for quote models with correct API."""
 
     def test_quote_result_creation(self):
-        """Test QuoteResult model."""
+        """Test QuoteResult model with correct parameters."""
         try:
-            from src.modules.quote.models import QuoteResult
+            from src.modules.quote.models import QuoteResult, QuoteSnapshot
 
-            result = QuoteResult(price=25.0, courier="顺丰", eta_days=2)
+            # QuoteResult uses provider, base_fee, eta_minutes (not price, courier, eta_days)
+            snapshot = QuoteSnapshot()
+            result = QuoteResult(
+                provider="顺丰",
+                base_fee=25.0,
+                total_fee=30.0,
+                eta_minutes=2880,  # 2 days in minutes
+                snapshot=snapshot,
+            )
 
-            assert result.price == 25.0
-            assert result.courier == "顺丰"
+            assert result.provider == "顺丰"
+            assert result.base_fee == 25.0
         except ImportError:
             pytest.skip("QuoteResult not available")
 
 
 class TestCostTable:
-    """Tests for CostTableRepository."""
+    """Tests for CostTableRepository with correct API."""
 
     def test_cost_table_import(self):
         """Test CostTableRepository can be imported."""
@@ -71,18 +78,20 @@ class TestCostTable:
             pytest.skip("CostTableRepository not available")
 
     def test_cost_table_creation(self):
-        """Test CostTableRepository can be created."""
+        """Test CostTableRepository can be created with table_dir parameter."""
         try:
             from src.modules.quote.cost_table import CostTableRepository
 
-            repo = CostTableRepository()
-            assert repo is not None
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # CostTableRepository requires table_dir parameter
+                repo = CostTableRepository(table_dir=tmpdir)
+                assert repo is not None
         except ImportError:
             pytest.skip("CostTableRepository not available")
 
 
 class TestGeoResolver:
-    """Tests for GeoResolver."""
+    """Tests for GeoResolver with correct API."""
 
     def test_geo_resolver_import(self):
         """Test GeoResolver can be imported."""
@@ -103,15 +112,16 @@ class TestGeoResolver:
         except ImportError:
             pytest.skip("GeoResolver not available")
 
-    def test_resolve_city(self):
-        """Test resolving a city."""
+    def test_province_of_city(self):
+        """Test getting province of a city using province_of method."""
         try:
             from src.modules.quote.geo_resolver import GeoResolver
 
             resolver = GeoResolver()
-            result = resolver.resolve("北京")
+            # GeoResolver uses province_of, not resolve
+            result = resolver.province_of("北京")
 
-            assert result is not None or result is None  # May return None if data not loaded
+            assert isinstance(result, str)
         except ImportError:
             pytest.skip("GeoResolver not available")
 

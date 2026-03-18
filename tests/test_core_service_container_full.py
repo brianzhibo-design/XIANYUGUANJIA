@@ -1,6 +1,4 @@
-"""
-Test suite for core service container module.
-"""
+"""Tests for core service container module - corrected API usage."""
 
 import pytest
 from unittest.mock import MagicMock, patch
@@ -8,8 +6,26 @@ from unittest.mock import MagicMock, patch
 from src.core.service_container import ServiceContainer
 
 
+class ITestService:
+    """Test service interface."""
+
+    pass
+
+
+class TestServiceImpl(ITestService):
+    """Test service implementation."""
+
+    pass
+
+
+class AnotherService:
+    """Another test service."""
+
+    pass
+
+
 class TestServiceContainer:
-    """Tests for ServiceContainer class."""
+    """Tests for ServiceContainer class with correct type-based API."""
 
     def test_container_creation(self):
         """Test ServiceContainer can be created."""
@@ -24,14 +40,14 @@ class TestServiceContainer:
         assert container1 is container2
 
     def test_register_and_get_service(self):
-        """Test registering and retrieving a service."""
+        """Test registering and retrieving a service by type."""
         container = ServiceContainer()
 
         mock_service = MagicMock()
-        mock_service.name = "TestService"
 
-        container.register("test_service", mock_service)
-        retrieved = container.get("test_service")
+        # ServiceContainer uses type parameters, not strings
+        container.register(TestServiceImpl, instance=mock_service)
+        retrieved = container.get(TestServiceImpl)
 
         assert retrieved is mock_service
 
@@ -39,29 +55,29 @@ class TestServiceContainer:
         """Test getting a non-existent service."""
         container = ServiceContainer()
 
-        result = container.get("nonexistent")
+        result = container.get(AnotherService)
         assert result is None
 
     def test_has_service(self):
-        """Test checking if service exists."""
+        """Test checking if service exists by type."""
         container = ServiceContainer()
 
         mock_service = MagicMock()
-        container.register("existing", mock_service)
+        container.register(TestServiceImpl, instance=mock_service)
 
-        assert container.has("existing") is True
-        assert container.has("not_existing") is False
+        assert container.has(TestServiceImpl) is True
+        assert container.has(AnotherService) is False
 
-    def test_unregister_service(self):
-        """Test unregistering a service."""
+    def test_clear_services(self):
+        """Test clearing all services."""
         container = ServiceContainer()
 
         mock_service = MagicMock()
-        container.register("to_remove", mock_service)
-        assert container.has("to_remove") is True
+        container.register(TestServiceImpl, instance=mock_service)
+        assert container.has(TestServiceImpl) is True
 
-        container.unregister("to_remove")
-        assert container.has("to_remove") is False
+        container.clear()
+        assert container.has(TestServiceImpl) is False
 
 
 if __name__ == "__main__":

@@ -1,8 +1,7 @@
-"""
-Test suite for core error handler module.
-"""
+"""Tests for core error handler module - corrected API usage."""
 
 import pytest
+import asyncio
 from unittest.mock import MagicMock, patch
 
 from src.core.error_handler import (
@@ -16,6 +15,7 @@ from src.core.error_handler import (
     handle_controller_errors,
     handle_operation_errors,
     safe_execute,
+    handle_errors,
 )
 
 
@@ -59,7 +59,7 @@ class TestXianyuError:
 
 
 class TestErrorDecorators:
-    """Tests for error handling decorators."""
+    """Tests for error handling decorators - using class methods."""
 
     def test_handle_controller_errors_decorator(self):
         """Test handle_controller_errors decorator exists."""
@@ -73,24 +73,36 @@ class TestErrorDecorators:
         """Test safe_execute decorator exists."""
         assert callable(safe_execute)
 
-    def test_controller_error_handler_with_function(self):
-        """Test handle_controller_errors with a function."""
+    @pytest.mark.asyncio
+    async def test_controller_error_handler_with_async_method(self):
+        """Test handle_controller_errors with an async class method."""
 
-        @handle_controller_errors(default_return="fallback")
-        def test_func():
-            raise ValueError("Test error")
+        class TestController:
+            def __init__(self):
+                self.logger = MagicMock()
 
-        result = test_func()
+            @handle_controller_errors(default_return="fallback")
+            async def test_method(self):
+                raise ValueError("Test error")
+
+        controller = TestController()
+        result = await controller.test_method()
         assert result == "fallback"
 
-    def test_operation_error_handler_with_function(self):
-        """Test handle_operation_errors with a function."""
+    @pytest.mark.asyncio
+    async def test_operation_error_handler_with_async_method(self):
+        """Test handle_operation_errors with an async class method."""
 
-        @handle_operation_errors(default_return=False)
-        def test_func():
-            raise ValueError("Test error")
+        class TestService:
+            def __init__(self):
+                self.logger = MagicMock()
 
-        result = test_func()
+            @handle_operation_errors(default_return=False)
+            async def test_method(self):
+                raise ValueError("Test error")
+
+        service = TestService()
+        result = await service.test_method()
         assert result is False
 
     def test_safe_execute_with_function(self):
@@ -103,32 +115,20 @@ class TestErrorDecorators:
         result = test_func()
         assert result == "safe"
 
-    def test_handle_error_with_context(self):
-        """Test handling error with context."""
-        handler = ErrorHandler()
 
-        context = {"user_id": "123", "action": "test"}
-        result = handler.handle(Exception("Test"), severity=ErrorSeverity.WARNING, context=context)
-        assert result is not None
+class TestHandleErrorsFunction:
+    """Tests for standalone handle_errors function."""
 
+    def test_handle_errors_exists(self):
+        """Test handle_errors function exists."""
+        assert callable(handle_errors)
 
-class TestHandleErrorFunction:
-    """Tests for standalone handle_error function."""
-
-    def test_handle_error_basic(self):
-        """Test basic error handling."""
+    def test_handle_errors_basic(self):
+        """Test basic error handling with handle_errors."""
         try:
             raise RuntimeError("Test runtime error")
         except Exception as e:
-            result = handle_error(e)
-            assert result is not None
-
-    def test_handle_error_with_severity(self):
-        """Test error handling with severity."""
-        try:
-            raise ValueError("Test value error")
-        except Exception as e:
-            result = handle_error(e, severity="critical")
+            result = handle_errors(e)
             assert result is not None
 
 

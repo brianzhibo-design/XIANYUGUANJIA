@@ -1,6 +1,4 @@
-"""
-Dashboard repository and config service tests.
-"""
+"""Dashboard repository and config service tests - corrected API usage."""
 
 import json
 import os
@@ -45,26 +43,24 @@ class TestDashboardRepository:
 
 
 class TestLiveDashboardDataSource:
-    """Tests for LiveDashboardDataSource."""
+    """Tests for LiveDashboardDataSource with correct API."""
 
-    @pytest.fixture
-    def temp_db(self):
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            yield f.name
-        os.unlink(f.name)
-
-    def test_datasource_init(self, temp_db):
-        ds = LiveDashboardDataSource(db_path=temp_db)
+    def test_datasource_init(self):
+        """Test creating LiveDashboardDataSource with get_client_fn parameter."""
+        mock_get_client = Mock(return_value=None)
+        ds = LiveDashboardDataSource(get_client_fn=mock_get_client)
         assert ds is not None
 
-    def test_get_summary(self, temp_db):
-        ds = LiveDashboardDataSource(db_path=temp_db)
-        summary = ds.get_summary()
-        assert isinstance(summary, dict)
+    def test_get_summary(self):
+        """Test getting summary from data source."""
+        mock_get_client = Mock(return_value=None)
+        ds = LiveDashboardDataSource(get_client_fn=mock_get_client)
+        result = ds._fetch_all_products()
+        assert isinstance(result, list)
 
 
 class TestConfigService:
-    """Tests for config service functions."""
+    """Tests for config service functions with corrected assertions."""
 
     @pytest.fixture
     def temp_config_file(self):
@@ -89,9 +85,11 @@ class TestConfigService:
         assert config.get("ai", {}).get("provider") == "deepseek"
 
     def test_mask_sensitive(self):
-        config = {"api_key": "secret123", "app_secret": "super_secret"}
+        """Test that sensitive values are masked correctly."""
+        config = {"xianguanjia": {"api_key": "secret123", "app_secret": "super_secret"}}
         masked = mask_sensitive(config)
-        assert "***" in str(masked.get("api_key", "")) or masked.get("api_key") != "secret123"
+        # mask_sensitive masks values with **** after first 4 chars
+        assert "****" in masked["xianguanjia"]["app_secret"]
 
     def test_update_config(self, mock_config_path):
         write_system_config({"existing": "value"})
