@@ -3227,8 +3227,33 @@ class MimicOps:
 
         setup._backup_existing_file() if existed else None
         setup._write_yaml(data)
+        # Bridge: also persist to system_config.json so MessagesService/QuoteEngine picks it up.
+        try:
+            import json as _json
+
+            from src.dashboard.config_service import write_system_config as _write_sys
+
+            sys_path = self.project_root / "data" / "system_config.json"
+            sys_data: dict[str, Any] = {}
+            if sys_path.exists():
+                try:
+                    sys_data = _json.loads(sys_path.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+            sys_data["quote"] = dict(quote_cfg)
+            _write_sys(sys_data)
+        except Exception:
+            pass
         try:
             get_config().reload(str(self.config_path))
+        except Exception:
+            pass
+        # Hot-reload the live MessagesService quote engine so it takes effect immediately.
+        try:
+            from src.modules.messages.service import _active_service
+
+            if _active_service is not None:
+                _active_service.reload_quote_engine()
         except Exception:
             pass
 

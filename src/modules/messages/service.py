@@ -394,6 +394,17 @@ class MessagesService:
         )
         self.logger.info("Reply rules hot-reloaded (%d rules)", len(self.reply_engine.rules))
 
+    def reload_quote_engine(self) -> None:
+        """Hot-reload quote engine from latest config (called after pricing config save)."""
+        get_config().reload()
+        app_config = get_config()
+        self.quote_config = {
+            **app_config.get_section("quote", {}),
+            **self.config.get("quote", {}),
+        }
+        self.quote_engine = AutoQuoteEngine(self.quote_config)
+        self.logger.info("Quote engine hot-reloaded (mode=%s)", self.quote_engine.mode)
+
     @staticmethod
     def _normalized_transport_mode(raw_mode: Any) -> str:
         mode = str(raw_mode or "ws").strip().lower()
