@@ -204,6 +204,23 @@ def check_lite_browser_dependency() -> StartupCheckResult:
     return StartupCheckResult("Lite 浏览器驱动", True, "Playwright + Chromium 已就绪", critical=True)
 
 
+def check_drissionpage_dependency() -> StartupCheckResult:
+    """Check if DrissionPage is installed (optional, for improved slider solving)."""
+    try:
+        import importlib
+        if importlib.util.find_spec("DrissionPage"):
+            return StartupCheckResult(
+                "DrissionPage 滑块驱动", True,
+                "DrissionPage 已安装（提高滑块通过率）", critical=False,
+            )
+    except Exception:
+        pass
+    return StartupCheckResult(
+        "DrissionPage 滑块驱动", True,
+        "未安装（可选）。安装: pip install DrissionPage", critical=False,
+    )
+
+
 def _is_production_env() -> bool:
     env_keys = ("APP_ENV", "ENV", "PYTHON_ENV", "OPENCLAW_ENV")
     for key in env_keys:

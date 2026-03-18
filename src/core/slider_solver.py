@@ -410,7 +410,7 @@ async def _solve_nc_slider(page: Any, frame: Any, slider_el: Any) -> dict[str, A
         track_width = 300
 
     slider_width = int(box.get("width", 40))
-    drag_distance = track_width - slider_width
+    drag_distance = track_width - slider_width + random.randint(-3, 3)
 
     if drag_distance <= 10:
         drag_distance = 260
@@ -435,7 +435,7 @@ async def _solve_nc_slider(page: Any, frame: Any, slider_el: Any) -> dict[str, A
         await page.mouse.move(current_x, current_y)
         await asyncio.sleep(dt_ms / 1000.0)
 
-    await asyncio.sleep(random.uniform(0.01, 0.05))
+    await asyncio.sleep(random.uniform(0.1, 0.3))
     await page.mouse.up()
 
     for _ in range(10):
@@ -956,6 +956,263 @@ async def _try_launch_fresh(pw: Any, headless: bool, cookie_text: str, _log: Any
     return browser, context, False
 
 
+def _try_slider_drissionpage(
+    fp_cfg: dict[str, Any],
+    cookie_text: str,
+    max_attempts: int,
+    _log: Any,
+) -> dict[str, Any] | None:
+    """DrissionPage 滑块求解 — 连接 BitBrowser 已有窗口，使用 CDP 原生拖拽。
+
+    同步函数，由 asyncio.to_thread() 调用。
+    返回格式与 try_slider_recovery 一致。
+    """
+    recovery_start = time.time()
+    attempts_log: list[dict[str, Any]] = []
+
+    try:
+        from DrissionPage import Chromium
+    except ImportError:
+        _log.debug("DrissionPage not installed, skipping")
+        return None
+
+    api_url = fp_cfg.get("api_url", "")
+    browser_id = fp_cfg.get("browser_id", "")
+    if not api_url or not browser_id:
+        _log.debug("DrissionPage: fingerprint_browser config incomplete")
+        return None
+
+    import httpx as _httpx
+
+    try:
+        resp = _httpx.post(
+            f"{api_url.rstrip('/')}/browser/open",
+            json={"id": browser_id},
+            timeout=10,
+        )
+        data = resp.json()
+        if not data.get("success"):
+            _log.info(f"DrissionPage: BitBrowser open failed: {data}")
+            return None
+        ws_url = data.get("data", {}).get("ws")
+        if not ws_url:
+            _log.info("DrissionPage: no ws URL from BitBrowser")
+            return None
+    except Exception as exc:
+        _log.info(f"DrissionPage: BitBrowser API error: {exc}")
+        return None
+
+    browser = None
+    try:
+        browser = Chromium(ws_url)
+
+        tab = None
+        for t in browser.get_tabs():
+            try:
+                page = browser.get_tab(t)
+                if page and "goofish.com/im" in (page.url or ""):
+                    tab = page
+                    break
+            except Exception:
+                continue
+
+        if not tab:
+            for t in browser.get_tabs():
+                try:
+                    page = browser.get_tab(t)
+                    if page and "goofish.com" in (page.url or ""):
+                        tab = page
+                        break
+                except Exception:
+                    continue
+
+        if not tab:
+            tab = browser.latest_tab
+            if tab:
+                _log.info(f"DrissionPage: no goofish tab, navigating latest tab to {_GOOFISH_IM_URL}")
+                tab.get(_GOOFISH_IM_URL)
+            else:
+                _log.info("DrissionPage: no tabs available")
+                return None
+        else:
+            _log.info(f"DrissionPage: reloading tab {tab.url}")
+            tab.refresh()
+
+        time.sleep(3)
+
+        for attempt in range(max_attempts):
+            attempt_data: dict[str, Any] = {
+                "attempt_num": attempt + 1,
+                "slider_type": None,
+                "result": "failed",
+                "fail_reason": None,
+                "screenshot_path": None,
+                "browser_strategy": "drissionpage",
+                "browser_connect_ms": int((time.time() - recovery_start) * 1000),
+            }
+            _log.info(f"DrissionPage slider attempt {attempt + 1}/{max_attempts}")
+
+            time.sleep(2)
+
+            slider_el = None
+            slider_type = None
+
+            for sel in ["#nc_1_n1z", ".btn_slide", "#aliyunCaptcha-sliding-btn", ".slide-btn"]:
+                try:
+                    el = tab.ele(sel, timeout=2)
+                    if el:
+                        slider_el = el
+                        slider_type = "nc"
+                        break
+                except Exception:
+                    continue
+
+            if not slider_el:
+                for sel in [".yoda-image-slice", "#alicaptcha-puzzle", ".baxia-dialog"]:
+                    try:
+                        el = tab.ele(sel, timeout=2)
+                        if el:
+                            slider_el = el
+                            slider_type = "puzzle"
+                            break
+                    except Exception:
+                        continue
+
+            if not slider_el:
+                attempt_data["fail_reason"] = "no_slider_found"
+                _log.info("DrissionPage: no slider element found")
+                try:
+                    ss_path = os.path.join(_SCREENSHOT_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_dp_no_slider.png")
+                    os.makedirs(_SCREENSHOT_DIR, exist_ok=True)
+                    tab.get_screenshot(path=ss_path)
+                    attempt_data["screenshot_path"] = ss_path
+                except Exception:
+                    pass
+                attempts_log.append(attempt_data)
+                continue
+
+            attempt_data["slider_type"] = slider_type
+
+            if slider_type == "nc":
+                try:
+                    track_el = None
+                    for tsel in ["#nc_1__scale_text", ".nc_scale", "#aliyunCaptcha-sliding-track", ".slide-track"]:
+                        try:
+                            track_el = tab.ele(tsel, timeout=1)
+                            if track_el:
+                                break
+                        except Exception:
+                            continue
+
+                    if track_el:
+                        track_rect = track_el.rect
+                        track_width = int(track_rect.size[0]) if track_rect else 300
+                    else:
+                        track_width = 300
+
+                    slider_rect = slider_el.rect
+                    slider_width = int(slider_rect.size[0]) if slider_rect else 40
+                    drag_distance = track_width - slider_width + random.randint(-3, 3)
+                    if drag_distance <= 10:
+                        drag_distance = 260
+
+                    attempt_data["nc_track_width"] = track_width
+                    attempt_data["nc_drag_distance"] = drag_distance
+
+                    duration = random.uniform(0.5, 1.2)
+                    slider_el.drag(drag_distance, 0, duration=duration)
+                    time.sleep(random.uniform(0.1, 0.3))
+
+                except Exception as exc:
+                    attempt_data["fail_reason"] = f"drag_error:{exc}"
+                    attempts_log.append(attempt_data)
+                    continue
+
+                time.sleep(2)
+
+                success = False
+                for _ in range(6):
+                    try:
+                        body_text = tab.html or ""
+                        if any(m in body_text for m in NC_SUCCESS_MARKERS):
+                            success = True
+                            break
+                    except Exception:
+                        pass
+                    found_slider = False
+                    for sel in ["#nc_1_n1z", ".btn_slide"]:
+                        try:
+                            if tab.ele(sel, timeout=0.5):
+                                found_slider = True
+                                break
+                        except Exception:
+                            pass
+                    if not found_slider:
+                        success = True
+                        break
+                    time.sleep(0.5)
+
+                if success:
+                    attempt_data["result"] = "success"
+                    _log.info(f"DrissionPage NC slider solved on attempt {attempt + 1}")
+                else:
+                    attempt_data["fail_reason"] = "no_success_marker"
+                    try:
+                        ss_path = os.path.join(_SCREENSHOT_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_dp_nc_fail.png")
+                        tab.get_screenshot(path=ss_path)
+                        attempt_data["screenshot_path"] = ss_path
+                    except Exception:
+                        pass
+
+            elif slider_type == "puzzle":
+                attempt_data["fail_reason"] = "puzzle_not_implemented_dp"
+                _log.info("DrissionPage: puzzle slider detected, not yet implemented in DP path")
+
+            attempts_log.append(attempt_data)
+
+            if attempt_data["result"] == "success":
+                break
+
+            time.sleep(random.uniform(2, 4))
+
+        time.sleep(2)
+
+        import asyncio as _aio
+        cookie_str = None
+        try:
+            from src.core.bitbrowser_cdp import read_cookies_via_cdp
+            loop = _aio.new_event_loop()
+            try:
+                cookie_str = loop.run_until_complete(read_cookies_via_cdp(ws_url))
+            finally:
+                loop.close()
+        except Exception as exc:
+            _log.debug(f"DrissionPage: cookie read failed: {exc}")
+
+        return {
+            "cookie": cookie_str,
+            "attempts": attempts_log,
+            "browser_strategy": "drissionpage",
+            "total_duration_ms": int((time.time() - recovery_start) * 1000),
+        }
+
+    except Exception as exc:
+        _log.info(f"DrissionPage slider error: {exc}")
+        return {
+            "cookie": None,
+            "attempts": attempts_log,
+            "error": str(exc),
+            "browser_strategy": "drissionpage",
+            "total_duration_ms": int((time.time() - recovery_start) * 1000),
+        }
+    finally:
+        if browser is not None:
+            try:
+                browser.disconnect()
+            except Exception:
+                pass
+
+
 async def try_slider_recovery(
     *,
     cookie_text: str,
@@ -984,6 +1241,14 @@ async def try_slider_recovery(
     max_attempts = slider_cfg["max_attempts"]
     cooldown = slider_cfg["cooldown_seconds"]
     headless = slider_cfg["headless"]
+
+    fp_cfg = slider_cfg.get("fingerprint_browser", {})
+    if fp_cfg.get("enabled"):
+        _log.info("Slider recovery: using DrissionPage (fingerprint_browser enabled)")
+        result = await asyncio.to_thread(
+            _try_slider_drissionpage, fp_cfg, cookie_text, max_attempts, _log
+        )
+        return result
 
     try:
         from playwright.async_api import async_playwright
@@ -1044,7 +1309,7 @@ async def try_slider_recovery(
                         await p.reload(wait_until="domcontentloaded", timeout=15000)
                     except Exception as reload_exc:
                         _log.info(f"Slider recovery: IM tab reload error (non-fatal): {reload_exc}")
-                    if stealth_async is not None:
+                    if stealth_async is not None and not is_cdp:
                         try:
                             await stealth_async(p)
                         except Exception:
@@ -1059,7 +1324,7 @@ async def try_slider_recovery(
                             await page.goto(_GOOFISH_IM_URL, wait_until="domcontentloaded", timeout=30000)
                         except Exception as nav_exc:
                             _log.info(f"Slider recovery: navigation error: {nav_exc}")
-                        if stealth_async is not None:
+                        if stealth_async is not None and not is_cdp:
                             try:
                                 await stealth_async(page)
                             except Exception:
@@ -1067,7 +1332,7 @@ async def try_slider_recovery(
                         break
             if not page:
                 page = await context.new_page()
-                if stealth_async is not None:
+                if stealth_async is not None and not is_cdp:
                     try:
                         await stealth_async(page)
                     except Exception:
@@ -1079,7 +1344,7 @@ async def try_slider_recovery(
                     _log.info(f"Slider recovery: navigation error: {nav_exc}")
         else:
             page = context.pages[0] if context.pages else await context.new_page()
-            if stealth_async is not None:
+            if stealth_async is not None and not is_cdp:
                 try:
                     await stealth_async(page)
                 except Exception:

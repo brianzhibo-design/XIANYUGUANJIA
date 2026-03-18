@@ -244,6 +244,35 @@ def _extra_checks(skip_quote: bool = False) -> list[dict[str, Any]]:
             critical=False,
         )
 
+    # DrissionPage 可用性检查
+    try:
+        import importlib
+        dp_spec = importlib.util.find_spec("DrissionPage")
+        if dp_spec:
+            _append_check(
+                checks,
+                name="DrissionPage 滑块驱动",
+                passed=True,
+                message="DrissionPage 已安装（用于提高滑块通过率）",
+                critical=False,
+            )
+        else:
+            _append_check(
+                checks,
+                name="DrissionPage 滑块驱动",
+                passed=True,
+                message="未安装（可选功能）。安装: pip install DrissionPage",
+                critical=False,
+            )
+    except Exception:
+        _append_check(
+            checks,
+            name="DrissionPage 滑块驱动",
+            passed=True,
+            message="检查跳过",
+            critical=False,
+        )
+
     # CookieCloud 自动同步配置检测
     cc_uuid = os.getenv("COOKIE_CLOUD_UUID", "").strip()
     cc_pwd = os.getenv("COOKIE_CLOUD_PASSWORD", "").strip()

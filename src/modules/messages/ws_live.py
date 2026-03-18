@@ -461,22 +461,38 @@ class GoofishWsTransport:
             await asyncio.sleep(min(interval, max(0.5, deadline - time.time())))
         return False
 
-    async def _wait_for_cookie_update_forever(self) -> bool:
+    async def _wait_for_cookie_update_forever(self, reason: str = "") -> bool:
         interval = max(1.0, float(self.cookie_watch_interval_seconds))
         cc_poll_interval = 30.0
         cc_last_poll = 0.0
         cc_not_configured = False
-        fp_poll_interval = 120.0
-        fp_last_poll = 0.0
-        fp_not_configured = False
         im_poll_interval = 90.0
         im_last_poll = 0.0
+        bb_poll_interval = 60.0
+        bb_last_poll = 0.0
         rk_poll_interval = 180.0
         rk_last_poll = 0.0
         wait_start = time.time()
         escalation_notified = False
         escalation_timeout = float(self.config.get("cookie_wait_escalation_timeout_seconds", 10 * 60))
-        self.logger.info("进入 Cookie 更新等待循环 (检测: env/config, CookieCloud, 指纹浏览器, 闲管家IM, rookiepy)")
+
+        try:
+            from src.core.bitbrowser_cdp import get_fp_config
+            fp_cfg = get_fp_config(self.config)
+            fp_enabled = fp_cfg.get("enabled", False)
+        except ImportError:
+            fp_enabled = False
+
+        is_rgv587 = reason == "rgv587"
+        methods = "env/config, CookieCloud, 闲管家IM"
+        if fp_enabled:
+            methods += ", BitBrowser CDP"
+        else:
+            methods += ", rookiepy"
+        if not is_rgv587 and not fp_enabled:
+            methods += ", 滑块验证"
+        self.logger.info(f"进入 Cookie 更新等待循环 (检测: {methods}) [reason={reason}]")
+
         while not self._stop_event.is_set():
             if self._cookie_changed.is_set():
                 self._cookie_changed.clear()
@@ -493,7 +509,7 @@ class GoofishWsTransport:
 
                     send_system_notification(
                         f"【闲鱼自动化】⚠️ Cookie 等待已超 {elapsed_min} 分钟\n"
-                        "所有自动恢复手段均未成功（CookieCloud/闲管家IM/浏览器DB/滑块验证）。\n"
+                        "所有自动恢复手段均未成功。\n"
                         "请手动打开 Dashboard 更新 Cookie，或确保闲管家IM正在运行。",
                         event="cookie_expire",
                     )
@@ -514,21 +530,18 @@ class GoofishWsTransport:
                     self.logger.info("Cookie wait: 闲管家IM刷新成功")
                     return True
 
-            if (now - rk_last_poll) >= rk_poll_interval:
+            if fp_enabled and (now - bb_last_poll) >= bb_poll_interval:
+                bb_last_poll = now
+                if await self._try_bitbrowser_cookie_refresh():
+                    self.logger.info("Cookie wait: BitBrowser CDP刷新成功")
+                    return True
+
+            if not fp_enabled and (now - rk_last_poll) >= rk_poll_interval:
                 rk_last_poll = now
                 if await self._try_active_cookie_refresh():
                     self.logger.info("Cookie wait: rookiepy主动刷新成功")
                     return True
 
-            if not fp_not_configured and (now - fp_last_poll) >= fp_poll_interval:
-                fp_last_poll = now
-                recovered = await self._try_slider_recovery()
-                if recovered:
-                    return True
-                slider_cfg = self.config.get("slider_auto_solve", {})
-                fp_cfg = slider_cfg.get("fingerprint_browser", {}) if isinstance(slider_cfg, dict) else {}
-                if not (isinstance(fp_cfg, dict) and fp_cfg.get("enabled")):
-                    fp_not_configured = True
             await asyncio.sleep(interval)
         return False
 
@@ -700,9 +713,18 @@ class GoofishWsTransport:
                 "【闲鱼自动化】⚠️ 风控滑块触发 (RGV587)",
                 f"连续触发次数: {self._rgv587_consecutive}",
             ]
+            try:
+                from src.core.bitbrowser_cdp import get_fp_config as _gfp
+                _fp_on = _gfp(self.config).get("enabled", False)
+            except ImportError:
+                _fp_on = False
+
             if slider_on:
-                lines.append("系统将自动尝试滑块验证，请稍候...")
-                lines.append("如自动验证失败，会弹出浏览器窗口，请手动完成滑块拖动")
+                if _fp_on:
+                    lines.append("正在通过 BitBrowser 直读 Cookie + DrissionPage 自动过滑块尝试恢复...")
+                else:
+                    lines.append("系统将自动尝试滑块验证，请稍候...")
+                    lines.append("如自动验证失败，会弹出浏览器窗口，请手动完成滑块拖动")
             else:
                 lines.append("请在浏览器打开 https://www.goofish.com/im 完成滑块验证")
             if cc_on:
@@ -721,6 +743,54 @@ class GoofishWsTransport:
     _slider_recovery_attempts: int = 0
     _SLIDER_MAX_ATTEMPTS_PER_CYCLE = 3
     _RGV587_BACKOFF_CAP = 300.0
+
+    _BB_COOKIE_REFRESH_COOLDOWN = 30.0
+    _last_bb_cookie_refresh_at: float = 0.0
+
+    async def _try_bitbrowser_cookie_refresh(self) -> bool:
+        """通过 CDP 从 BitBrowser 窗口直读 cookie（无页面操作，零风控风险）。"""
+        if (time.time() - self._last_bb_cookie_refresh_at) < self._BB_COOKIE_REFRESH_COOLDOWN:
+            return False
+
+        try:
+            from src.core.bitbrowser_cdp import _BB_LOCK, get_cdp_ws_url, get_fp_config, read_cookies_via_cdp
+        except ImportError:
+            return False
+
+        fp_cfg = get_fp_config(self.config)
+        if not fp_cfg.get("enabled"):
+            return False
+
+        async with _BB_LOCK:
+            if (time.time() - self._last_bb_cookie_refresh_at) < self._BB_COOKIE_REFRESH_COOLDOWN:
+                return False
+            self._last_bb_cookie_refresh_at = time.time()
+
+            ws_url = await get_cdp_ws_url(fp_cfg["api_url"], fp_cfg["browser_id"])
+            if not ws_url:
+                self.logger.debug("BitBrowser cookie refresh: no CDP URL")
+                return False
+
+            cookie_str = await read_cookies_via_cdp(ws_url)
+            if not cookie_str:
+                self.logger.debug("BitBrowser cookie refresh: no cookies read")
+                return False
+
+        _required = {"sgcookie", "unb", "cookie2", "_m_h5_tk"}
+        cookie_keys = {p.split("=")[0].strip() for p in cookie_str.split(";") if "=" in p}
+        missing = _required - cookie_keys
+        if missing:
+            self.logger.debug(f"BitBrowser cookie refresh: incomplete (missing: {missing})")
+            return False
+
+        changed = self._apply_cookie_text(cookie_str, reason="bitbrowser_cdp")
+        if changed:
+            self._last_cookie_applied_at = time.time()
+            os.environ["XIANYU_COOKIE_1"] = cookie_str
+            self._session_peer.clear()
+            self._seen_event.clear()
+            self.logger.info("BitBrowser CDP cookie refresh succeeded")
+        return changed
 
     def _record_slider_events(self, result: dict[str, Any], trigger_source: str) -> None:
         """Persist slider attempt data to SliderEventStore."""
@@ -1479,7 +1549,6 @@ class GoofishWsTransport:
                         self._last_cookie_check = now
                         if self._maybe_reload_cookie(reason="periodic"):
                             self.logger.info("Periodic cookie check detected update, forcing reconnect")
-                            self._ready.clear()
                             self._token = ""
                             self._token_ts = 0.0
                             self._connect_failures = 0
@@ -1494,7 +1563,6 @@ class GoofishWsTransport:
                             if await self._try_goofish_im_refresh():
                                 self._last_im_refresh_at = now
                                 self.logger.info("Proactive IM cookie refresh succeeded")
-                                self._ready.clear()
                                 self._token = ""
                                 self._token_ts = 0.0
                                 self._connect_failures = 0
@@ -1540,6 +1608,13 @@ class GoofishWsTransport:
                 self.logger.warning(f"Goofish WebSocket disconnected, retrying: {reason}")
 
                 is_rgv587 = "RGV587" in reason
+
+                try:
+                    from src.core.bitbrowser_cdp import get_fp_config as _get_fp_cfg
+                    _fp_enabled = _get_fp_cfg(self.config).get("enabled", False)
+                except ImportError:
+                    _fp_enabled = False
+
                 if auth_error:
                     if is_rgv587:
                         self._rgv587_consecutive += 1
@@ -1557,12 +1632,21 @@ class GoofishWsTransport:
                             f"退避 {rgv_backoff:.0f}s..."
                         )
 
+                        # Step 1: 闲管家 IM
                         if self._rgv587_consecutive <= 2 and await self._try_goofish_im_refresh(urgent=True):
                             self._connect_failures = 0
                             self.logger.info(f"闲管家IM Cookie刷新成功，退避 {rgv_backoff:.0f}s 后重试 WS 连接")
                             await asyncio.sleep(rgv_backoff)
                             continue
 
+                        # Step 2: BitBrowser CDP 直读 cookie (fp_enabled 时)
+                        if _fp_enabled and await self._try_bitbrowser_cookie_refresh():
+                            self._connect_failures = 0
+                            self.logger.info(f"BitBrowser CDP Cookie刷新成功，退避 {rgv_backoff:.0f}s 后重试 WS 连接")
+                            await asyncio.sleep(rgv_backoff)
+                            continue
+
+                        # Step 3: 滑块验证
                         can_try_slider = (
                             slider_enabled
                             and self._slider_recovery_attempts < self._SLIDER_MAX_ATTEMPTS_PER_CYCLE
@@ -1590,32 +1674,38 @@ class GoofishWsTransport:
                                 f"退避 {rgv_backoff:.0f}s 后重试..."
                             )
                             await self._try_goofish_im_refresh(urgent=True)
-                            if await self._try_active_cookie_refresh():
+                            if not _fp_enabled and await self._try_active_cookie_refresh():
                                 self.logger.info("Active cookie refresh succeeded during RGV587 backoff")
                             await asyncio.sleep(rgv_backoff)
                             continue
 
                         self.logger.warning(
                             "RGV587 风控持续触发（slider %d/%d 次已耗尽），"
-                            "请在浏览器打开闲鱼消息页(https://www.goofish.com/im)完成滑块验证后更新 Cookie。"
-                            " 暂停自动重连，等待 Cookie 更新...",
+                            "暂停自动重连，等待 Cookie 更新...",
                             self._slider_recovery_attempts,
                             self._SLIDER_MAX_ATTEMPTS_PER_CYCLE,
                         )
                         self._send_risk_control_notification()
 
-                        if await self._wait_for_cookie_update_forever():
+                        if await self._wait_for_cookie_update_forever(reason="rgv587"):
                             self._connect_failures = 0
                             self._rgv587_consecutive = 0
                             self._slider_recovery_attempts = 0
                             self.logger.info("检测到 Cookie 更新，立即重试 WS 连接")
                             continue
+
+                    # 401 恢复链路
                     elif await self._try_goofish_im_refresh(urgent=True):
                         self._active_refresh_401_streak = 0
                         self._connect_failures = 0
                         self.logger.info("闲管家IM Cookie刷新成功 (401恢复)，立即重试 WS 连接")
                         continue
-                    elif await self._try_active_cookie_refresh():
+                    elif _fp_enabled and await self._try_bitbrowser_cookie_refresh():
+                        self._active_refresh_401_streak = 0
+                        self._connect_failures = 0
+                        self.logger.info("BitBrowser CDP Cookie刷新成功 (401恢复)，立即重试 WS 连接")
+                        continue
+                    elif not _fp_enabled and await self._try_active_cookie_refresh():
                         self._active_refresh_401_streak += 1
                         if self._active_refresh_401_streak >= 3:
                             self.logger.warning(
@@ -1627,7 +1717,7 @@ class GoofishWsTransport:
                                 self._connect_failures = 0
                                 self.logger.info("slider_recovery 成功，立即重试 WS 连接")
                                 continue
-                            if await self._wait_for_cookie_update_forever():
+                            if await self._wait_for_cookie_update_forever(reason="401_slider_failed"):
                                 self._active_refresh_401_streak = 0
                                 self._connect_failures = 0
                                 continue
@@ -1636,7 +1726,7 @@ class GoofishWsTransport:
                         continue
                     elif self.auth_hold_until_cookie_update:
                         self.logger.warning("Auth failure detected, suspend reconnect until cookie is updated")
-                        if await self._wait_for_cookie_update_forever():
+                        if await self._wait_for_cookie_update_forever(reason="auth_hold"):
                             self._connect_failures = 0
                             self.logger.info("Detected cookie update, retrying WS connection immediately")
                             continue
