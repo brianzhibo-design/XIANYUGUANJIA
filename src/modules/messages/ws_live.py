@@ -768,21 +768,44 @@ class GoofishWsTransport:
                 self.logger.info("BitBrowser cookie refresh: no cookies read from CDP")
                 return False
 
-        _required = {"sgcookie", "unb", "cookie2", "_m_h5_tk"}
-        cookie_keys = {p.split("=")[0].strip() for p in cookie_str.split(";") if "=" in p}
-        missing = _required - cookie_keys
-        if missing:
-            self.logger.warning(f"BitBrowser cookie refresh: incomplete (missing: {missing}), got {len(cookie_keys)} fields")
+        _min_required = {"sgcookie", "cookie2", "_m_h5_tk"}
+        cdp_keys = {p.split("=")[0].strip() for p in cookie_str.split(";") if "=" in p}
+        missing_min = _min_required - cdp_keys
+        if missing_min:
+            self.logger.warning(
+                f"BitBrowser cookie refresh: too few fields (missing: {missing_min}), got {len(cdp_keys)} fields"
+            )
             return False
 
-        changed = self._apply_cookie_text(cookie_str, reason="bitbrowser_cdp")
+        existing = os.environ.get("XIANYU_COOKIE_1", "") or self.cookie_text
+        merged = self._merge_cookie_strings(existing, cookie_str)
+
+        changed = self._apply_cookie_text(merged, reason="bitbrowser_cdp")
         if changed:
             self._last_cookie_applied_at = time.time()
-            os.environ["XIANYU_COOKIE_1"] = cookie_str
+            os.environ["XIANYU_COOKIE_1"] = merged
             self._session_peer.clear()
             self._seen_event.clear()
-            self.logger.info("BitBrowser CDP cookie refresh succeeded")
+            self.logger.info(
+                f"BitBrowser CDP cookie refresh succeeded (merged {len(cdp_keys)} CDP fields into existing)"
+            )
         return changed
+
+    @staticmethod
+    def _merge_cookie_strings(base: str, overlay: str) -> str:
+        """Merge two cookie strings; overlay values win for same key."""
+        result: dict[str, str] = {}
+        for text in (base, overlay):
+            for part in text.split(";"):
+                part = part.strip()
+                if "=" not in part:
+                    continue
+                k, v = part.split("=", 1)
+                k = k.strip()
+                v = v.strip()
+                if k and v:
+                    result[k] = v
+        return "; ".join(f"{k}={v}" for k, v in result.items())
 
     def _record_slider_events(self, result: dict[str, Any], trigger_source: str) -> None:
         """Persist slider attempt data to SliderEventStore."""

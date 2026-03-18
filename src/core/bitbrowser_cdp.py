@@ -63,10 +63,12 @@ async def read_cookies_via_cdp(
     cdp_ws_url: str,
     domains: tuple[str, ...] = _COOKIE_DOMAINS,
 ) -> str | None:
-    """通过 CDP Network.getAllCookies 读取 cookie，过滤指定域名。
+    """通过 CDP 读取 cookie，过滤指定域名。
+
+    优先使用 Storage.getCookies（browser-level 可用），
+    回退到 Network.getAllCookies（旧版 Chrome）。
 
     返回 'key=value; key=value' 格式字符串，或 None（失败时）。
-    使用 websockets 库直接发送 CDP 命令，不依赖 Playwright / DrissionPage。
     """
     try:
         import websockets
@@ -74,12 +76,19 @@ async def read_cookies_via_cdp(
         logger.debug("websockets not installed, cannot read cookies via CDP")
         return None
 
+    cookies: list[dict[str, Any]] = []
     try:
         async with websockets.connect(cdp_ws_url, open_timeout=10, close_timeout=5) as ws:
-            await ws.send(json.dumps({"id": 1, "method": "Network.getAllCookies"}))
+            await ws.send(json.dumps({"id": 1, "method": "Storage.getCookies"}))
             raw = await asyncio.wait_for(ws.recv(), timeout=10)
             resp = json.loads(raw)
-            cookies: list[dict[str, Any]] = resp.get("result", {}).get("cookies", [])
+            cookies = resp.get("result", {}).get("cookies", [])
+
+            if not cookies:
+                await ws.send(json.dumps({"id": 2, "method": "Network.getAllCookies"}))
+                raw = await asyncio.wait_for(ws.recv(), timeout=10)
+                resp = json.loads(raw)
+                cookies = resp.get("result", {}).get("cookies", [])
     except Exception as exc:
         logger.debug("CDP cookie read failed: %s", exc)
         return None

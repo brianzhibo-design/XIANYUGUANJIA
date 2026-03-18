@@ -852,7 +852,7 @@ def _try_slider_drissionpage(
                 break
             msg = str(data.get("msg", ""))
             if "正在打开" in msg or "opening" in msg.lower():
-                _log.info("DrissionPage: BitBrowser still opening, retry %d/3...", _open_try + 1)
+                _log.info(f"DrissionPage: BitBrowser still opening, retry {_open_try + 1}/3...")
                 time.sleep(3)
                 continue
             _log.info(f"DrissionPage: BitBrowser open failed: {data}")
