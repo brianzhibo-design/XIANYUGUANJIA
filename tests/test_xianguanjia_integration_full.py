@@ -21,11 +21,7 @@ class TestXianguanjiaOpenPlatform:
             from src.integrations.xianguanjia.open_platform_client import OpenPlatformClient
 
             # OpenPlatformClient requires base_url parameter
-            client = OpenPlatformClient(
-                base_url="https://api.xianguanjia.com",
-                app_key="test",
-                app_secret="test"
-            )
+            client = OpenPlatformClient(base_url="https://api.xianguanjia.com", app_key="test", app_secret="test")
             assert client is not None
             assert client.base_url == "https://api.xianguanjia.com"
         except ImportError:
@@ -45,15 +41,11 @@ class TestXianguanjiaSigning:
             pytest.skip("Signing functions not available")
 
     def test_sign_open_platform_request(self):
-        ""Test self-developed mode signing."""
         try:
             from src.integrations.xianguanjia.signing import sign_open_platform_request
 
             signature = sign_open_platform_request(
-                app_key="test_key",
-                app_secret="test_secret",
-                timestamp="1234567890",
-                body='{"test":"data"}'
+                app_key="test_key", app_secret="test_secret", timestamp="1234567890", body='{"test":"data"}'
             )
 
             assert isinstance(signature, str)
@@ -71,7 +63,7 @@ class TestXianguanjiaSigning:
                 app_secret="test_secret",
                 seller_id="seller123",
                 timestamp="1234567890",
-                body='{"test":"data"}'
+                body='{"test":"data"}',
             )
 
             assert isinstance(signature, str)
