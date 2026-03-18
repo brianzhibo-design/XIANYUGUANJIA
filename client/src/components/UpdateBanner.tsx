@@ -67,23 +67,6 @@ export default function UpdateBanner() {
   }, []);
 
   const checkForUpdate = async (force: boolean) => {
-    if (!force) {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        try {
-          const parsed: VersionInfo = JSON.parse(cached);
-          if (Date.now() - parsed.checkedAt < CACHE_TTL) {
-            const dismissedVersion = localStorage.getItem(DISMISS_KEY);
-            if (parsed.hasUpdate && dismissedVersion === parsed.latest) {
-              setDismissed(true);
-            }
-            setInfo(parsed);
-            return;
-          }
-        } catch { /* stale cache */ }
-      }
-    }
-
     try {
       const res = await api.get('/version');
       const currentVersion = res.data?.version || '0.0.0';
@@ -91,11 +74,27 @@ export default function UpdateBanner() {
 
       let latestVersion: string | null = null;
       let releaseNotes = '';
-      try {
-        const ghRes = await api.get('/version/latest');
-        latestVersion = ghRes.data?.latest || null;
-        releaseNotes = ghRes.data?.body || '';
-      } catch { /* GitHub check failed */ }
+
+      if (!force) {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const parsed: VersionInfo = JSON.parse(cached);
+            if (Date.now() - parsed.checkedAt < CACHE_TTL) {
+              latestVersion = parsed.latest;
+              releaseNotes = parsed.releaseNotes || '';
+            }
+          } catch { /* stale cache */ }
+        }
+      }
+
+      if (latestVersion === null) {
+        try {
+          const ghRes = await api.get('/version/latest');
+          latestVersion = ghRes.data?.latest || null;
+          releaseNotes = ghRes.data?.body || '';
+        } catch { /* GitHub check failed */ }
+      }
 
       const result: VersionInfo = {
         current: currentVersion,
@@ -107,7 +106,12 @@ export default function UpdateBanner() {
       };
 
       localStorage.setItem(CACHE_KEY, JSON.stringify(result));
-      if (result.hasUpdate) setDismissed(false);
+      const dismissedVersion = localStorage.getItem(DISMISS_KEY);
+      if (result.hasUpdate && dismissedVersion === result.latest) {
+        setDismissed(true);
+      } else if (result.hasUpdate) {
+        setDismissed(false);
+      }
       setInfo(result);
     } catch { /* version endpoint unavailable */ }
   };
