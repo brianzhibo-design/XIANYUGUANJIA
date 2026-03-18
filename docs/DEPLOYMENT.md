@@ -40,7 +40,7 @@
 ## 方式一：交互式快速启动（推荐新用户）
 
 ```bash
-git clone https://github.com/G3niusYukki/xianyu-openclaw.git
+git clone https://github.com/G3niusYukki/xianyu-guanjia.git
 cd xianyu-openclaw
 
 # macOS / Linux
@@ -68,7 +68,7 @@ quick-start.bat
 ### 1. 准备
 
 ```bash
-git clone https://github.com/G3niusYukki/xianyu-openclaw.git
+git clone https://github.com/G3niusYukki/xianyu-guanjia.git
 cd xianyu-openclaw
 cp .env.example .env
 ```
@@ -358,4 +358,4 @@ python -m src.cli doctor --skip-gateway --skip-quote
 
 - [README.md](../README.md) — 项目概览和功能介绍
 - [SECURITY.md](../SECURITY.md) — 安全最佳实践
-- [GitHub Issues](https://github.com/G3niusYukki/xianyu-openclaw/issues) — 问题反馈
+- [GitHub Issues](https://github.com/G3niusYukki/xianyu-guanjia/issues) — 问题反馈

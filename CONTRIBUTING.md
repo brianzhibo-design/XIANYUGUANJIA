@@ -5,7 +5,7 @@ Thanks for your interest in contributing! Here's how to get started.
 ## Development Setup
 
 ```bash
-git clone https://github.com/G3niusYukki/xianyu-openclaw.git
+git clone https://github.com/G3niusYukki/xianyu-guanjia.git
 cd xianyu-openclaw
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -30,7 +30,7 @@ tests/                  # Python test suite
 
 ### Bug Reports
 
-Open an [issue](https://github.com/G3niusYukki/xianyu-openclaw/issues/new?template=bug_report.md) with:
+Open an [issue](https://github.com/G3niusYukki/xianyu-guanjia/issues/new?template=bug_report.md) with:
 - What you expected
 - What actually happened
 - Steps to reproduce
@@ -38,7 +38,7 @@ Open an [issue](https://github.com/G3niusYukki/xianyu-openclaw/issues/new?templa
 
 ### Feature Requests
 
-Open an [issue](https://github.com/G3niusYukki/xianyu-openclaw/issues/new?template=feature_request.md) describing the use case.
+Open an [issue](https://github.com/G3niusYukki/xianyu-guanjia/issues/new?template=feature_request.md) describing the use case.
 
 ### Pull Requests
 
@@ -106,4 +106,4 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Need Help?
 
-Open an issue or start a [discussion](https://github.com/G3niusYukki/xianyu-openclaw/discussions).
+Open an issue or start a [discussion](https://github.com/G3niusYukki/xianyu-guanjia/discussions).

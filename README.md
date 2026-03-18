@@ -2,6 +2,8 @@
 
 # 闲鱼管家
 
+> **曾用名**：xianyu-openclaw（已于 v8.0.0 更名为 xianyu-guanjia）
+
 [![Version](https://img.shields.io/badge/version-8.0.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![React](https://img.shields.io/badge/react-18-61DAFB.svg?logo=react&logoColor=white)](https://react.dev/)

@@ -46,7 +46,7 @@
 
 ### 3.1 下载本工具
 
-1. 打开 https://github.com/G3niusYukki/xianyu-openclaw
+1. 打开 https://github.com/G3niusYukki/xianyu-guanjia
 2. 点击绿色的 "Code" 按钮
 3. 点击 "Download ZIP"
 4. 解压到你想放的位置
@@ -54,7 +54,7 @@
 或者用命令行：
 
 ```bash
-git clone https://github.com/G3niusYukki/xianyu-openclaw.git
+git clone https://github.com/G3niusYukki/xianyu-guanjia.git
 cd xianyu-openclaw
 ```
 

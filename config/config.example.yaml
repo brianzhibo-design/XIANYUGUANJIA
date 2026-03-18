@@ -1,5 +1,5 @@
 app:
-  name: xianyu-openclaw
+  name: xianyu-guanjia
   version: 4.5.0
   debug: false
   log_level: INFO

@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [8.0.0] - 2026-03-08
 
 ### Added
-- **全新品牌升级**：项目正式更名为「闲鱼管家」，全新 README 和文档体系
+- **全新品牌升级**：项目正式更名为「闲鱼管家」，GitHub 仓库从 `xianyu-openclaw` 重命名为 `xianyu-guanjia`
 - **一键在线更新系统**：Dashboard 内置更新检查、自动备份、版本回滚功能
 - **SetupWizard 初始化向导**：首次启动自动弹出全屏配置向导，引导完成 Cookie/AI/闲管家配置
 - **macOS 桌面快捷方式**：`.command` 文件 + LaunchAgent 开机自启动
