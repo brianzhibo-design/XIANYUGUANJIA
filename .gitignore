@@ -181,3 +181,9 @@ vendor/
 .cursor/
 .codex/
 *.bak.*
+
+# Server directory (if runtime only)
+server/
+
+# Temporary diff files
+*.diff

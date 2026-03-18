@@ -1,6 +1,6 @@
 [project]
 name = "xianyu-openclaw"
-version = "1.0.0"
+version = "8.0.0"
 
 [tool.black]
 line-length = 100
@@ -93,4 +93,23 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@abstractmethod",
     "@abc.abstractmethod"
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "-ra",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "flaky: marks tests as flaky (will be retried)",
+    "unit: marks tests as unit tests",
 ]
