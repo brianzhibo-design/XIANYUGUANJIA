@@ -6,7 +6,7 @@
 逐项检测 4 大问题:
   1. API 超时 (/service-status 15s 超时)
   2. 话术模板加载
-  3. Playwright 浏览器拉起
+  3. DrissionPage 浏览器驱动
   4. 自动回复链路
 """
 
@@ -328,114 +328,17 @@ def check_reply_templates():
 
 
 # ══════════════════════════════════════════════════════════
-#  3. Playwright / 浏览器拉起诊断
+#  3. DrissionPage / 浏览器驱动诊断
 # ══════════════════════════════════════════════════════════
-def check_playwright():
-    section("3. Playwright 浏览器拉起诊断")
+def check_drissionpage():
+    section("3. DrissionPage 浏览器驱动诊断")
 
-    os_name = platform.system()
-    ok(f"当前平台: {os_name} {platform.machine()}")
-
-    # 3a. playwright 是否安装
     try:
-        import playwright
-        pw_ver = getattr(playwright, "__version__", None)
-        if not pw_ver:
-            try:
-                from importlib.metadata import version as pkg_version
-                pw_ver = pkg_version("playwright")
-            except Exception:
-                pw_ver = "unknown"
-        ok(f"playwright 库已安装: {pw_ver}")
+        import DrissionPage
+
+        ok(f"DrissionPage 已安装 (版本: {DrissionPage.__version__})")
     except ImportError:
-        fail("playwright 库未安装", "pip install playwright")
-        return
-
-    # 3a-2. greenlet 依赖检查 (Windows 常见问题)
-    try:
-        import greenlet
-        ok("greenlet 依赖正常")
-    except ImportError as e:
-        err_msg = str(e)
-        if "DLL" in err_msg:
-            fail(f"greenlet 导入失败: {err_msg}",
-                 "安装 Microsoft Visual C++ Redistributable 2015-2022 (x64)")
-        else:
-            fail(f"greenlet 导入失败: {err_msg}", "pip install greenlet")
-
-    # 3b. Chromium 浏览器是否下载
-    try:
-        result = subprocess.run(
-            [sys.executable, "-c", """
-import json, subprocess, sys
-r = subprocess.run([sys.executable, '-m', 'playwright', 'install', '--dry-run', 'chromium'],
-                   capture_output=True, text=True, timeout=10)
-print(r.stdout[:500])
-print(r.stderr[:500])
-"""],
-            capture_output=True, text=True, timeout=15,
-        )
-        output = result.stdout + result.stderr
-        if "is already installed" in output.lower() or "already installed" in output.lower():
-            ok("Chromium 浏览器已下载")
-        else:
-            warn("Chromium 可能未下载", "运行: playwright install chromium")
-    except Exception:
-        pass
-
-    # 3c. 真实拉起测试
-    try:
-        result = subprocess.run(
-            [sys.executable, "-c", """
-import sys
-try:
-    from playwright.sync_api import sync_playwright
-    p = sync_playwright().start()
-    try:
-        b = p.chromium.launch(headless=True, timeout=10000)
-        page = b.new_page()
-        page.goto("about:blank", timeout=5000)
-        b.close()
-        print("LAUNCH_OK")
-    except Exception as e:
-        print(f"LAUNCH_FAIL:{e}")
-    finally:
-        p.stop()
-except Exception as e:
-    print(f"IMPORT_FAIL:{e}")
-"""],
-            capture_output=True, text=True, timeout=30,
-        )
-        output = result.stdout.strip()
-        stderr = result.stderr.strip()
-
-        if "LAUNCH_OK" in output:
-            ok("Chromium headless 拉起成功")
-        elif "LAUNCH_FAIL" in output:
-            error = output.split("LAUNCH_FAIL:", 1)[-1]
-            fail(f"Chromium 拉起失败: {error[:120]}")
-
-            if os_name == "Windows":
-                print(f"\n    {YELLOW}Windows 常见原因:{NC}")
-                print(f"    1. 未运行 'playwright install chromium' 下载浏览器")
-                print(f"    2. 杀毒软件拦截 Chromium 进程")
-                print(f"    3. 缺少 Visual C++ Redistributable")
-                print(f"    4. 系统防火墙阻止 WebSocket 连接")
-                print(f"    5. 路径包含中文或特殊字符")
-            elif os_name == "Linux":
-                print(f"\n    {YELLOW}Linux 常见原因:{NC}")
-                print(f"    1. 缺少系统依赖: playwright install-deps chromium")
-                print(f"    2. 无头服务器无 display: 确保用 headless=True")
-                print(f"    3. 缺少 libgbm, libnss3, libatk 等库")
-        elif "IMPORT_FAIL" in output:
-            fail(f"playwright 导入失败: {output}")
-        else:
-            fail(f"Chromium 测试异常: stdout={output[:80]}, stderr={stderr[:80]}")
-
-    except subprocess.TimeoutExpired:
-        fail("Chromium 拉起超时 (>30s)", "可能缺少系统依赖或 Chromium 下载不完整")
-    except Exception as e:
-        fail(f"Chromium 测试异常: {e}")
+        warn("DrissionPage 未安装", "运行: pip install DrissionPage")
 
     # 3d. rookiepy 检查（Cookie Level 1 直读浏览器 DB）
     try:
@@ -661,7 +564,7 @@ def main():
     check_environment()
     check_api_timeout()
     check_reply_templates()
-    check_playwright()
+    check_drissionpage()
     check_auto_reply()
     summary()
 

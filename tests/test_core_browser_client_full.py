@@ -155,7 +155,7 @@ async def test_set_cookies_and_factory_helpers(monkeypatch):
         def __init__(self, _cfg):
             self.connect = AsyncMock(return_value=False)
 
-    monkeypatch.setattr("src.core.playwright_client.PlaywrightBrowserClient", Lite)
+    monkeypatch.setattr("src.core.drissionpage_client.DrissionPageBrowserClient", Lite)
     with pytest.raises(BrowserError):
         await _create_lite_client({})
 

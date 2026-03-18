@@ -161,32 +161,7 @@ if errorlevel 1 (
 echo [OK] Dependencies installed
 
 :: =========================================
-:: Step 5: Install Playwright Chromium
-:: =========================================
-echo.
-if "%OFFLINE%"=="1" (
-    if exist "%VENDOR_DIR%\playwright\windows-amd64" (
-        echo [*] Installing Playwright Chromium from offline package...
-        set "PW_DEST=%LOCALAPPDATA%\ms-playwright"
-        mkdir "%PW_DEST%" 2>nul
-        xcopy /E /I /Y "%VENDOR_DIR%\playwright\windows-amd64\*" "%PW_DEST%\" >nul 2>&1
-        echo [OK] Playwright Chromium installed (offline)
-    ) else (
-        echo [WARN] Offline Playwright package not found. Attempting online install...
-        .venv\Scripts\playwright install chromium
-    )
-) else (
-    echo [*] Installing Playwright Chromium browser...
-    .venv\Scripts\playwright install chromium
-    if errorlevel 1 (
-        echo [WARN] Playwright Chromium install failed, cookie auto-grab may not work.
-    ) else (
-        echo [OK] Playwright Chromium installed
-    )
-)
-
-:: =========================================
-:: Step 6: Install frontend dependencies
+:: Step 5: Install frontend dependencies
 :: =========================================
 echo.
 node --version >nul 2>&1

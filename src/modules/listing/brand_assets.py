@@ -34,9 +34,8 @@ _MIME_MAP = {
 def file_to_data_uri(path: Path) -> str:
     """将本地图片文件转为 base64 data URI。
 
-    Playwright ``page.set_content()`` 的文档来源是 ``about:blank``，
-    Chromium 安全策略禁止从该来源加载 ``file://`` 资源，
-    因此必须将图片内联为 data URI 才能正常渲染。
+    浏览器加载本地 HTML 时，安全策略可能禁止跨域加载 ``file://`` 资源，
+    因此将图片内联为 data URI 以确保正常渲染。
     """
     ext = path.suffix.lstrip(".").lower()
     mime = _MIME_MAP.get(ext) or mimetypes.guess_type(str(path))[0] or "image/png"

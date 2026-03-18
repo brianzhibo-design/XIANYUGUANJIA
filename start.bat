@@ -32,7 +32,6 @@ if errorlevel 1 set "USE_CN_MIRROR=1"
 if "%USE_CN_MIRROR%"=="1" (
     set "PIP_MIRROR_ARGS=-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
     set "NPM_REGISTRY_ARGS=--registry=https://registry.npmmirror.com"
-    set "PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright"
     echo [OK] 国内网络环境，已切换国内镜像源
 )
 
@@ -90,16 +89,6 @@ if not exist ".venv\.deps_installed" (
     echo [*] 安装 Python 依赖...
     pip install -q -r requirements.txt %PIP_MIRROR_ARGS%
     echo. > .venv\.deps_installed
-)
-
-:: Playwright Chromium 浏览器
-if not exist ".venv\.playwright_installed" (
-    echo [*] 安装 Playwright Chromium 浏览器（首次约 150MB）...
-    .venv\Scripts\playwright install chromium
-    echo. > .venv\.playwright_installed
-    echo [OK] Playwright Chromium 安装完成
-) else (
-    echo [OK] Playwright Chromium 已就绪
 )
 
 if not exist "client\node_modules" (

@@ -1,7 +1,7 @@
 """HTML 模板引擎 — 商品图片生成。
 
 所有模板输出 750x1000 像素的 HTML 页面，
-使用内联 CSS，无外部依赖，可直接被 Playwright 截图。
+使用内联 CSS，无外部依赖，可直接被浏览器截图。
 """
 
 from __future__ import annotations

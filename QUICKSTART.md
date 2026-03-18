@@ -149,10 +149,9 @@ xianyu-openclaw/
 ### 第 1 步：安装依赖
 
 ```bash
-# Python 依赖
+# Python 依赖（含 DrissionPage 浏览器自动化）
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-playwright install chromium
 
 # 前端依赖（Vite 开发工具需要 Node.js）
 cd client && npm install && cd ..
@@ -263,7 +262,7 @@ set CHINA_MIRROR=1 && quick-start.bat
 |------|---------|---------|
 | pip (Python) | `mirrors.aliyun.com/pypi/simple/` | 自动设置 |
 | npm (Node.js) | `registry.npmmirror.com` | 自动设置 |
-| Playwright | `npmmirror.com/mirrors/playwright` | `PLAYWRIGHT_DOWNLOAD_HOST` |
+| Docker 基础镜像 | 见下方 Docker 配置 | Docker daemon 配置 |
 
 ### 手动配置国内源（不使用启动脚本时）
 
@@ -274,11 +273,30 @@ pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --tru
 # npm 使用 npmmirror
 npm config set registry https://registry.npmmirror.com
 npm install
-
-# Playwright 使用国内镜像下载
-export PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
-playwright install chromium
 ```
+
+> DrissionPage 使用系统已安装的 Chrome/Chromium，无需额外下载浏览器驱动。
+
+### Docker 国内构建
+
+```bash
+# 使用国内镜像源构建所有容器
+MIRROR=china docker compose build
+docker compose up -d
+```
+
+Docker 拉取基础镜像加速 — 编辑 `/etc/docker/daemon.json`：
+
+```json
+{
+  "registry-mirrors": [
+    "https://mirror.ccs.tencentyun.com",
+    "https://docker.mirrors.ustc.edu.cn"
+  ]
+}
+```
+
+然后重启 Docker：`sudo systemctl restart docker`
 
 ### 离线部署方案
 

@@ -18,7 +18,7 @@ _SUGGESTIONS = {
     "浏览器运行时": "可通过 `.env` 设置 `APP_RUNTIME=auto|lite|pro`，推荐先用 `auto`。",
     "Python版本": "请安装 Python 3.10+，并使用 `python3 -m venv .venv` 创建虚拟环境。",
     "Legacy Browser Gateway": "如需启用 legacy browser gateway，请先执行 `docker compose up -d`，再重试 doctor。",
-    "Lite 浏览器驱动": "请执行 `pip install playwright`，然后执行 `playwright install chromium`。",
+    "Lite 浏览器驱动": "请执行 `pip install DrissionPage`。",
     "数据库": "请确认数据库目录可写，并检查 `config/config.yaml` 中 database.path 配置。",
     "闲鱼Cookie": "请在 `.env` 中设置有效的 `XIANYU_COOKIE_1`。",
     "Cookie有效性": "请重新抓取并更新闲鱼 Cookie，避免使用过期会话。",
@@ -241,6 +241,35 @@ def _extra_checks(skip_quote: bool = False) -> list[dict[str, Any]]:
             name="BitBrowser 指纹浏览器",
             passed=True,
             message=f"检查跳过: {exc}",
+            critical=False,
+        )
+
+    # DrissionPage 可用性检查
+    try:
+        import importlib
+        dp_spec = importlib.util.find_spec("DrissionPage")
+        if dp_spec:
+            _append_check(
+                checks,
+                name="DrissionPage 滑块驱动",
+                passed=True,
+                message="DrissionPage 已安装（用于提高滑块通过率）",
+                critical=False,
+            )
+        else:
+            _append_check(
+                checks,
+                name="DrissionPage 滑块驱动",
+                passed=True,
+                message="未安装（可选功能）。安装: pip install DrissionPage",
+                critical=False,
+            )
+    except Exception:
+        _append_check(
+            checks,
+            name="DrissionPage 滑块驱动",
+            passed=True,
+            message="检查跳过",
             critical=False,
         )
 

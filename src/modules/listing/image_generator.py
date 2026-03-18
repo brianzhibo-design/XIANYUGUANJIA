@@ -1,9 +1,9 @@
-"""商品图片生成器 — HTML 模板渲染 + Playwright 截图。
+"""商品图片生成器 — HTML 模板渲染 + DrissionPage 截图。
 
 流程:
 1. 根据品类/框架选择 HTML 模板
 2. 填充商品参数生成完整 HTML
-3. 使用 Playwright 加载 HTML 并截图为 PNG
+3. 使用 DrissionPage headless Chrome 加载 HTML 并截图为 PNG
 4. 返回本地文件路径列表
 """
 
@@ -84,26 +84,46 @@ async def _render_html_to_png(
     output_path: Path,
     viewport: dict[str, int] | None = None,
 ) -> None:
-    """使用 Playwright 将 HTML 字符串渲染为 PNG 截图。"""
+    """使用 DrissionPage headless Chrome 将 HTML 字符串渲染为 PNG 截图。"""
+    import tempfile
+
     try:
-        from playwright.async_api import async_playwright
+        from DrissionPage import Chromium, ChromiumOptions
     except ImportError as exc:
         raise RuntimeError(
-            "Playwright is required for image generation. "
-            "Install: pip install playwright && playwright install chromium"
+            "DrissionPage is required for image generation. "
+            "Install: pip install DrissionPage"
         ) from exc
 
     vp = viewport or VIEWPORT
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+
+    def _render() -> None:
+        co = ChromiumOptions()
+        co.auto_port()
+        co.headless()
+        co.set_argument("--window-size", f'{vp["width"]},{vp["height"]}')
+        co.set_argument("--hide-scrollbars")
+        browser = Chromium(co)
         try:
-            page = await browser.new_page(viewport=vp)
-            await page.set_content(html, wait_until="networkidle")
-            await asyncio.sleep(0.3)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            await page.screenshot(path=str(output_path), full_page=False)
+            tab = browser.latest_tab
+            with tempfile.NamedTemporaryFile(
+                suffix=".html", delete=False, mode="w", encoding="utf-8"
+            ) as f:
+                f.write(html)
+                tmp_path = f.name
+            try:
+                tab.get(f"file://{tmp_path}")
+                import time
+
+                time.sleep(0.3)
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                tab.get_screenshot(path=str(output_path), full_page=False)
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
         finally:
-            await browser.close()
+            browser.quit()
+
+    await asyncio.to_thread(_render)
 
 
 async def generate_brand_images(

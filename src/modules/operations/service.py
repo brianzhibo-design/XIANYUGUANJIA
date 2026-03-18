@@ -26,7 +26,7 @@ class OperationsSelectors:
     """
     运营页面元素选择器
 
-    使用 Playwright 文本匹配和稳定属性选择器，
+    使用文本匹配和稳定属性选择器，
     避免依赖 React 动态生成的 class 名。
     """
 

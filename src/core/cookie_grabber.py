@@ -1,18 +1,22 @@
 """
 自动获取闲鱼 Cookie 模块
 
-三级降级策略：
+降级策略：
+  Level 0   — CookieCloud 远程拉取（如果已配置）
   Level 1   — rookiepy 直读本地浏览器 Cookie 数据库（零操作）
-  Level 1.5 — Playwright persistent context 复用 Chrome Profile（静默）
+  Level IM  — 闲管家IM直读（CookieAutoRefresher 使用）
+  Level BB  — BitBrowser CDP 直读（ws_live.py 使用）
+
+已移除的策略（Playwright 依赖，已不再使用）：
+  Level 1.5 — Playwright persistent context 复用 Chrome Profile
   Level 2   — Playwright 全新窗口让用户扫码登录
+  Level 1+  — Playwright 注入 Cookie 补全会话字段
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
-import platform
-import subprocess
 import threading
 import time
 from dataclasses import dataclass
@@ -66,7 +70,7 @@ class GrabResult:
 
 
 class CookieGrabber:
-    """自动获取闲鱼 Cookie — 三级降级策略。"""
+    """自动获取闲鱼 Cookie — CookieCloud + rookiepy 降级策略。"""
 
     def __init__(self) -> None:
         self._cancel = False
@@ -97,7 +101,7 @@ class CookieGrabber:
     # ------------------------------------------------------------------
 
     async def auto_grab(self) -> GrabResult:
-        """组合 Level 0 (CookieCloud) → Level 1 → 1.5 → 2 的完整获取流程。"""
+        """组合 Level 0 (CookieCloud) → Level 1 (rookiepy) 的获取流程。"""
         self._cancel = False
 
         # Level 0: CookieCloud 远程拉取（如果已配置）
@@ -116,63 +120,26 @@ class CookieGrabber:
         if self._cancel:
             return GrabResult(ok=False, error="已取消")
         if cookie:
-            if not self._has_session_fields(cookie):
-                logger.info("Level 1: Cookie 缺少会话字段 (_m_h5_tk)，尝试 Level 1+ 补全...")
-                enriched = await self._enrich_with_session_cookies(cookie)
-                if enriched:
-                    cookie = enriched
-                else:
-                    logger.info("Level 1+: 会话字段补全失败，继续下一级别")
-                    cookie = None
-            if cookie:
-                valid = await self._validate(cookie)
-                if valid:
-                    self._save(cookie, source="browser_db")
-                    self._update(
-                        GrabStage.SUCCESS, "Cookie 获取成功！", "从浏览器数据库直接读取，Cookie 有效期约 7-30 天", 100
-                    )
-                    return GrabResult(ok=True, cookie_str=cookie, source="browser_db", message="从浏览器数据库获取成功")
-
-        # Level 1.5: Playwright persistent context 复用 Chrome Profile
-        cookie = await self._grab_from_profile()
-        if self._cancel:
-            return GrabResult(ok=False, error="已取消")
-        if cookie:
             valid = await self._validate(cookie)
             if valid:
-                self._save(cookie, source="chrome_profile")
+                self._save(cookie, source="browser_db")
                 self._update(
-                    GrabStage.SUCCESS, "Cookie 获取成功！", "从 Chrome 已有登录态提取，Cookie 有效期约 7-30 天", 100
+                    GrabStage.SUCCESS, "Cookie 获取成功！", "从浏览器数据库直接读取，Cookie 有效期约 7-30 天", 100
                 )
-                return GrabResult(
-                    ok=True, cookie_str=cookie, source="chrome_profile", message="从 Chrome 已有登录态获取成功"
-                )
-
-        # Level 2: Playwright 全新窗口 QR 扫码登录
-        cookie = await self._grab_via_login()
-        if self._cancel:
-            return GrabResult(ok=False, error="已取消")
-        if cookie:
-            valid = await self._validate(cookie)
-            if valid:
-                self._save(cookie, source="browser_login")
-                self._update(
-                    GrabStage.SUCCESS, "Cookie 获取成功！", "Cookie 有效期约 7-30 天，过期后可再次自动获取", 100
-                )
-                return GrabResult(ok=True, cookie_str=cookie, source="browser_login", message="从浏览器登录获取成功")
+                return GrabResult(ok=True, cookie_str=cookie, source="browser_db", message="从浏览器数据库获取成功")
 
         self._update(
             GrabStage.FAILED,
             "Cookie 获取失败",
-            "所有自动方式均未成功，请手动粘贴 Cookie（F12 → Network → 复制 Cookie 请求头）",
+            "自动方式未成功。请在 BitBrowser 中登录闲鱼，或手动粘贴 Cookie",
         )
 
         from src.core.notify import send_system_notification
 
         send_system_notification(
-            "【闲鱼自动化】⚠️ Cookie 自动获取全部失败\n"
-            "三级策略（浏览器数据库 → Chrome Profile → QR 扫码登录）均未成功。\n"
-            "请尽快手动打开 Dashboard 更新 Cookie，否则消息自动回复将中断。",
+            "【闲鱼自动化】⚠️ Cookie 自动获取失败\n"
+            "CookieCloud 和浏览器数据库均未获取到有效 Cookie。\n"
+            "请在 BitBrowser 中登录闲鱼，或手动打开 Dashboard 更新 Cookie。",
             event="cookie_expire",
         )
         return GrabResult(ok=False, error="所有获取方式均失败")
@@ -375,278 +342,6 @@ class CookieGrabber:
             logger.debug(f"Firefox rookiepy: {exc}")
             return None
 
-    # ------------------------------------------------------------------
-    # Level 1.5: Playwright persistent context 复用 Chrome Profile
-    # ------------------------------------------------------------------
-
-    async def _grab_from_profile(self) -> str | None:
-        """静默加载用户 Chrome Profile，提取已有登录态 Cookie。"""
-        self._update(
-            GrabStage.READING_PROFILE,
-            "正在尝试读取 Chrome 已有登录态...",
-            "如果你之前在 Chrome 中登录过闲鱼，可直接提取",
-            20,
-        )
-
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            logger.debug("Level 1.5: playwright 未安装，跳过")
-            return None
-
-        chrome_dir = self._find_chrome_user_data_dir()
-        if not chrome_dir:
-            logger.info("Level 1.5: 未找到 Chrome 用户数据目录")
-            return None
-
-        if self._is_chrome_running():
-            logger.info("Level 1.5: Chrome 正在运行，无法使用其 Profile（会产生锁冲突）")
-            self._update(
-                GrabStage.READING_PROFILE,
-                "Chrome 正在运行，跳过 Profile 读取...",
-                "关闭 Chrome 后重试可直接提取已有登录态",
-                25,
-            )
-            await asyncio.sleep(1)
-            return None
-
-        pw = None
-        context = None
-        try:
-            pw = await async_playwright().start()
-            self._update(GrabStage.READING_PROFILE, "正在加载 Chrome 用户数据...", "静默读取中，无需操作", 30)
-
-            context = await pw.chromium.launch_persistent_context(
-                str(chrome_dir),
-                channel="chrome",
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled"],
-                viewport={"width": 1280, "height": 800},
-            )
-
-            page = context.pages[0] if context.pages else await context.new_page()
-
-            try:
-                await page.goto(_MY_PAGE_URL, wait_until="domcontentloaded", timeout=15000)
-            except Exception as exc:
-                logger.debug(f"Level 1.5: 导航到 /personal 失败: {exc}")
-
-            await asyncio.sleep(2)
-
-            all_cookies = await context.cookies()
-            cookie_str = self._extract_goofish_cookies(all_cookies)
-            if not cookie_str:
-                logger.info("Level 1.5: Chrome Profile 中未找到闲鱼 Cookie")
-                return None
-
-            if not self._has_login_cookies(all_cookies):
-                logger.info("Level 1.5: Chrome Profile 有 Cookie 但缺少登录态标记")
-                return None
-
-            logger.info(f"Level 1.5: 从 Chrome Profile 提取到 Cookie ({len(cookie_str)} chars)")
-            return cookie_str
-
-        except Exception as exc:
-            logger.info(f"Level 1.5: Chrome Profile 读取失败: {exc}")
-            return None
-        finally:
-            if context:
-                try:
-                    await context.close()
-                except Exception:
-                    pass
-            if pw:
-                try:
-                    await pw.stop()
-                except Exception:
-                    pass
-            self._cleanup_singleton_lock(chrome_dir)
-
-    @staticmethod
-    def _find_chrome_user_data_dir() -> Path | None:
-        system = platform.system()
-        candidates: list[Path] = []
-
-        if system == "Darwin":
-            candidates = [
-                Path.home() / "Library" / "Application Support" / "Google" / "Chrome",
-                Path.home() / "Library" / "Application Support" / "Microsoft Edge",
-            ]
-        elif system == "Windows":
-            local = Path(os.environ.get("LOCALAPPDATA", ""))
-            candidates = [
-                local / "Google" / "Chrome" / "User Data",
-                local / "Microsoft" / "Edge" / "User Data",
-            ]
-        else:  # Linux
-            candidates = [
-                Path.home() / ".config" / "google-chrome",
-                Path.home() / ".config" / "microsoft-edge",
-                Path.home() / ".config" / "chromium",
-            ]
-
-        for path in candidates:
-            if path.exists() and (path / "Default").is_dir():
-                logger.debug(f"找到 Chrome 用户数据目录: {path}")
-                return path
-
-        return None
-
-    @staticmethod
-    def _is_chrome_running() -> bool:
-        system = platform.system()
-        try:
-            if system == "Darwin":
-                r = subprocess.run(["pgrep", "-x", "Google Chrome"], capture_output=True)
-                if r.returncode == 0:
-                    return True
-                r = subprocess.run(["pgrep", "-x", "Microsoft Edge"], capture_output=True)
-                return r.returncode == 0
-            elif system == "Windows":
-                for proc_name in ("chrome.exe", "msedge.exe"):
-                    r = subprocess.run(
-                        ["tasklist", "/FI", f"IMAGENAME eq {proc_name}"],
-                        capture_output=True,
-                        text=True,
-                    )
-                    if proc_name in (r.stdout or "").lower():
-                        return True
-                return False
-            else:
-                r = subprocess.run(["pgrep", "-f", "chrome|chromium"], capture_output=True)
-                return r.returncode == 0
-        except Exception:
-            return True  # 检测失败时假设在运行，避免锁冲突
-
-    @staticmethod
-    def _cleanup_singleton_lock(chrome_dir: Path) -> None:
-        lock = chrome_dir / "SingletonLock"
-        try:
-            if lock.exists():
-                lock.unlink()
-                logger.debug(f"已清理 SingletonLock: {lock}")
-        except Exception:
-            pass
-
-    # ------------------------------------------------------------------
-    # Level 2: Playwright 全新窗口 QR 扫码登录
-    # ------------------------------------------------------------------
-
-    async def _grab_via_login(self) -> str | None:
-        """打开浏览器窗口，导航到"我的闲鱼"触发登录。"""
-        self._update(
-            GrabStage.LOGIN_REQUIRED,
-            "需要扫码登录闲鱼",
-            "即将打开浏览器窗口，请用闲鱼 App 扫描二维码登录",
-            40,
-        )
-        await asyncio.sleep(2)
-
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            self._update(
-                GrabStage.FAILED, "Playwright 未安装", "请执行: pip install playwright && playwright install chromium"
-            )
-            return None
-
-        pw = None
-        browser = None
-        try:
-            pw = await async_playwright().start()
-
-            launch_kwargs: dict[str, Any] = {
-                "headless": False,
-                "args": ["--disable-blink-features=AutomationControlled"],
-            }
-            for channel in ("chrome", "msedge", None):
-                try:
-                    kw = {**launch_kwargs}
-                    if channel:
-                        kw["channel"] = channel
-                    browser = await pw.chromium.launch(**kw)
-                    break
-                except Exception:
-                    continue
-
-            if not browser:
-                self._update(GrabStage.FAILED, "无法启动浏览器", "请确认已安装 Chrome 或 Edge 浏览器")
-                return None
-
-            context = await browser.new_context(
-                viewport={"width": 1280, "height": 800},
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                ),
-            )
-            page = await context.new_page()
-
-            self._update(GrabStage.WAITING_LOGIN, "正在打开闲鱼...", "请等待浏览器加载完成", 45)
-
-            await page.goto(_MY_PAGE_URL, wait_until="domcontentloaded", timeout=30000)
-
-            await asyncio.sleep(2)
-            initial_cookies = await context.cookies()
-            initial_names = {c.get("name", "") for c in initial_cookies}
-            logger.debug(
-                f"Level 2: 初始 Cookie 数量={len(initial_cookies)}, 名称={initial_names & (_AUTH_COOKIES | _WEAK_LOGIN_COOKIES)}"
-            )
-
-            self._update(
-                GrabStage.WAITING_LOGIN, "请在浏览器中登录闲鱼", "点击页面上的「登录」按钮，用闲鱼 App 扫码完成登录", 50
-            )
-
-            deadline = time.time() + (_LOGIN_TIMEOUT_MS / 1000)
-            logged_in = False
-
-            while time.time() < deadline:
-                if self._cancel:
-                    return None
-
-                await asyncio.sleep(3)
-
-                all_cookies = await context.cookies()
-                current_names = {c.get("name", "") for c in all_cookies}
-                new_auth = (current_names & _AUTH_COOKIES) - initial_names
-                if new_auth:
-                    logger.info(f"Level 2: 检测到新增认证 Cookie: {new_auth}")
-                    logged_in = True
-                    break
-
-                remaining = max(0, int(deadline - time.time()))
-                pct = 50 + int(40 * (1 - remaining / (_LOGIN_TIMEOUT_MS / 1000)))
-                self._update(
-                    GrabStage.WAITING_LOGIN,
-                    f"等待登录中... (剩余 {remaining} 秒)",
-                    "点击页面上的「登录」按钮，用闲鱼 App 扫码完成登录",
-                    pct,
-                )
-
-            if not logged_in:
-                self._update(GrabStage.FAILED, "登录超时", "5 分钟内未完成登录，请重试或手动粘贴 Cookie")
-                return None
-
-            self._update(GrabStage.WAITING_LOGIN, "登录成功，正在提取 Cookie...", "", 88)
-            await asyncio.sleep(3)
-
-            all_cookies = await context.cookies()
-            cookie_str = self._extract_goofish_cookies(all_cookies)
-
-            if not cookie_str:
-                self._update(GrabStage.FAILED, "登录成功但未获取到 Cookie", "请尝试手动粘贴 Cookie")
-                return None
-
-            if not self._has_login_cookies(all_cookies):
-                logger.warning("Level 2: Cookie 缺少登录态标记，但仍尝试使用")
-
-            logger.info(f"Level 2: 从浏览器登录获取到 Cookie ({len(cookie_str)} chars)")
-            return cookie_str
-
-        except Exception as exc:
-            logger.error(f"Level 2: 浏览器登录失败: {exc}")
-            self._update(GrabStage.FAILED, f"浏览器打开失败: {type(exc).__name__}", "请确认已安装 Chrome 浏览器")
-            return None
 
     # ------------------------------------------------------------------
     # Cookie extraction & login detection helpers
@@ -692,107 +387,11 @@ class CookieGrabber:
         url_lower = url.lower()
         return "login" in url_lower or "signin" in url_lower or "passport" in url_lower or "qrcode" in url_lower
 
-    # ------------------------------------------------------------------
-    # Level 1+: Playwright 注入 Cookie 补全会话字段
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _has_session_fields(cookie_str: str) -> bool:
         """检查 cookie_str 是否包含 _m_h5_tk 会话字段。"""
         pairs = {p.split("=", 1)[0].strip() for p in cookie_str.split(";") if "=" in p}
         return bool(pairs & _SESSION_COOKIES)
-
-    async def _enrich_with_session_cookies(self, cookie_str: str) -> str | None:
-        """用 Playwright headless 注入已有 Cookie，访问页面让 mtop 下发会话字段，再提取完整 Cookie。"""
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            logger.debug("Level 1+: playwright 未安装，无法补全会话字段")
-            return None
-
-        self._update(GrabStage.VALIDATING, "正在补全会话字段...", "通过 Playwright 注入 Cookie 获取 _m_h5_tk", 85)
-
-        pw = None
-        browser = None
-        try:
-            pw = await async_playwright().start()
-
-            launch_kwargs: dict[str, Any] = {
-                "headless": True,
-                "args": ["--disable-blink-features=AutomationControlled"],
-            }
-            for channel in ("chrome", "msedge", None):
-                try:
-                    kw = {**launch_kwargs}
-                    if channel:
-                        kw["channel"] = channel
-                    browser = await pw.chromium.launch(**kw)
-                    break
-                except Exception:
-                    continue
-
-            if not browser:
-                logger.info("Level 1+: 无法启动浏览器")
-                return None
-
-            context = await browser.new_context(
-                viewport={"width": 1280, "height": 800},
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                ),
-            )
-
-            cookies_to_inject = []
-            for pair in cookie_str.split(";"):
-                pair = pair.strip()
-                if "=" not in pair:
-                    continue
-                name, value = pair.split("=", 1)
-                cookies_to_inject.append(
-                    {
-                        "name": name.strip(),
-                        "value": value.strip(),
-                        "domain": ".goofish.com",
-                        "path": "/",
-                    }
-                )
-
-            if cookies_to_inject:
-                await context.add_cookies(cookies_to_inject)
-
-            page = await context.new_page()
-            try:
-                await page.goto(_MY_PAGE_URL, wait_until="domcontentloaded", timeout=20000)
-            except Exception as exc:
-                logger.debug(f"Level 1+: 导航失败: {exc}")
-
-            await asyncio.sleep(5)
-
-            all_cookies = await context.cookies()
-            enriched = self._extract_goofish_cookies(all_cookies)
-
-            if enriched and self._has_session_fields(enriched):
-                logger.info(f"Level 1+: 会话字段补全成功 ({len(enriched)} chars)")
-                return enriched
-
-            logger.info("Level 1+: 补全后仍缺少会话字段")
-            return None
-
-        except Exception as exc:
-            logger.info(f"Level 1+: 会话字段补全失败: {exc}")
-            return None
-        finally:
-            if browser:
-                try:
-                    await browser.close()
-                except Exception:
-                    pass
-            if pw:
-                try:
-                    await pw.stop()
-                except Exception:
-                    pass
 
     # ------------------------------------------------------------------
     # Validation & persistence
@@ -992,23 +591,6 @@ class CookieAutoRefresher:
                 new_cookie = loop.run_until_complete(grabber._grab_from_browser_db())
                 if new_cookie:
                     self._last_refresh_source = "browser_db"
-                if new_cookie and not CookieGrabber._has_session_fields(new_cookie):
-                    logger.info("自动刷新: Cookie 缺少会话字段，尝试 Level 1+ 补全...")
-                    enriched = loop.run_until_complete(grabber._enrich_with_session_cookies(new_cookie))
-                    if enriched:
-                        new_cookie = enriched
-                    else:
-                        logger.info("自动刷新: 会话字段补全失败")
-            # Level 1.5: Chrome Profile headless（零交互）
-            if not new_cookie:
-                try:
-                    profile_cookie = loop.run_until_complete(grabber._grab_from_profile())
-                    if profile_cookie:
-                        new_cookie = profile_cookie
-                        self._last_refresh_source = "chrome_profile"
-                        logger.info("自动刷新: Chrome Profile 获取成功")
-                except Exception as prof_exc:
-                    logger.debug(f"自动刷新: Chrome Profile 失败: {prof_exc}")
         finally:
             loop.close()
 
@@ -1019,8 +601,8 @@ class CookieAutoRefresher:
             self._send_notification(
                 "⚠️ Cookie 已失效且自动刷新失败",
                 f"【闲鱼自动化】Cookie 过期告警\n状态: {msg}\n"
-                "静默刷新: 闲管家IM/CookieCloud/浏览器DB/Chrome Profile 均未获取到新 Cookie\n"
-                "请手动打开 Dashboard 更新 Cookie",
+                "静默刷新: 闲管家IM/CookieCloud/浏览器DB 均未获取到新 Cookie\n"
+                "请在 BitBrowser 中登录闲鱼，或手动打开 Dashboard 更新 Cookie",
                 event="cookie_expire",
             )
             return
@@ -1052,7 +634,6 @@ class CookieAutoRefresher:
             "goofish_im": "闲管家IM",
             "cookiecloud": "CookieCloud",
             "browser_db": "浏览器数据库",
-            "chrome_profile": "Chrome Profile",
         }
         source_label = _source_labels.get(self._last_refresh_source, self._last_refresh_source)
         logger.info(f"Cookie 静默刷新成功 (来源={source_label}, length={len(new_cookie)})")

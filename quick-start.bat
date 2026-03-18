@@ -36,11 +36,9 @@ if errorlevel 1 set "USE_CN_MIRROR=1"
 if "%USE_CN_MIRROR%"=="1" (
     set "PIP_MIRROR_ARGS=-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
     set "NPM_REGISTRY_ARGS=--registry=https://registry.npmmirror.com"
-    set "PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright"
     echo   [镜像] 检测到国内网络环境，已自动切换国内镜像源
     echo   --^>  pip  → mirrors.aliyun.com
     echo   --^>  npm  → registry.npmmirror.com
-    echo   --^>  Playwright → npmmirror.com
     echo.
     echo   强制使用国际源: set CHINA_MIRROR=0 ^&^& quick-start.bat
 ) else (
@@ -113,14 +111,6 @@ if not exist "client\node_modules" (
     echo   [OK] 前端依赖安装完成
 ) else (
     echo   [OK] 前端依赖已存在
-)
-
-if not exist ".venv\.playwright_ok" (
-    echo   --^>  安装 Playwright 浏览器...
-    playwright install chromium 2>nul && echo. > .venv\.playwright_ok
-    echo   [OK] Playwright 安装完成
-) else (
-    echo   [OK] Playwright 已就绪
 )
 
 :: 确保 data 目录存在

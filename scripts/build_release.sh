@@ -189,7 +189,6 @@ cp -a "$STAGING_DIR" "$MACOS_STAGING"
 # 移除 Windows 专属内容
 rm -rf "$MACOS_STAGING/vendor/installers/windows" 2>/dev/null || true
 rm -rf "$MACOS_STAGING/vendor/pip-packages/windows-amd64" 2>/dev/null || true
-rm -rf "$MACOS_STAGING/vendor/playwright/windows-amd64" 2>/dev/null || true
 rm -f "$MACOS_STAGING/start.bat" "$MACOS_STAGING/quick-start.bat" 2>/dev/null || true
 rm -rf "$MACOS_STAGING/scripts/windows" 2>/dev/null || true
 rm -f "$MACOS_STAGING/scripts/install-desktop.bat" 2>/dev/null || true
@@ -213,7 +212,6 @@ cp -a "$STAGING_DIR" "$WIN_STAGING"
 # 移除 macOS 专属内容
 rm -rf "$WIN_STAGING/vendor/installers/macos" 2>/dev/null || true
 rm -rf "$WIN_STAGING/vendor/pip-packages/macos-arm64" 2>/dev/null || true
-rm -rf "$WIN_STAGING/vendor/playwright/macos-arm64" 2>/dev/null || true
 rm -f "$WIN_STAGING/start.sh" "$WIN_STAGING/quick-start.sh" 2>/dev/null || true
 rm -rf "$WIN_STAGING/scripts/macos" 2>/dev/null || true
 rm -rf "$WIN_STAGING/scripts/unix" 2>/dev/null || true

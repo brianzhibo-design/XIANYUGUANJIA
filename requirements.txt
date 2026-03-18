@@ -8,7 +8,6 @@ python-dateutil>=2.8.2,<3.0.0
 
 # HTTP client (for OpenClaw Gateway API)
 httpx>=0.25.0,<1.0.0
-playwright>=1.52.0,<2.0.0
 websockets>=12.0,<16.0
 python-socks[asyncio]>=2.4.0,<3.0.0
 
@@ -16,8 +15,8 @@ python-socks[asyncio]>=2.4.0,<3.0.0
 Pillow>=10.2.0,<11.0.0
 opencv-python-headless>=4.8.0,<5.0.0
 
-# Browser stealth
-playwright-stealth>=2.0.0,<3.0.0
+# DrissionPage (CDP-based browser automation, replaces Playwright)
+DrissionPage>=4.1
 
 # OSS Storage
 oss2>=2.18.0,<3.0.0

@@ -3,7 +3,7 @@ Browser Client — 浏览器自动化客户端。
 
 BrowserClient (OpenClaw Gateway) 已废弃。
 所有业务操作已迁移到闲管家 API，浏览器仅用于 Cookie 抓取和 HTML 截图。
-create_browser_client() 现在默认使用 PlaywrightBrowserClient (lite 模式)。
+create_browser_client() 现在默认使用 DrissionPageBrowserClient (lite 模式)。
 """
 
 from __future__ import annotations
@@ -659,16 +659,16 @@ async def _create_gateway_client(config: dict[str, Any] | None = None) -> Browse
 
 async def _create_lite_client(config: dict[str, Any] | None = None):
     try:
-        from src.core.playwright_client import PlaywrightBrowserClient
+        from src.core.drissionpage_client import DrissionPageBrowserClient
     except Exception as exc:
         raise BrowserError(
-            "Lite runtime requires Playwright. Install with: pip install playwright && playwright install chromium"
+            "Lite runtime requires DrissionPage. Install with: pip install DrissionPage"
         ) from exc
 
-    client = PlaywrightBrowserClient(config)
+    client = DrissionPageBrowserClient(config)
     connected = await client.connect()
     if not connected:
         raise BrowserError(
-            "Failed to start Playwright Lite browser. Run: pip install playwright && playwright install chromium"
+            "Failed to start DrissionPage Lite browser. Run: pip install DrissionPage"
         )
     return client

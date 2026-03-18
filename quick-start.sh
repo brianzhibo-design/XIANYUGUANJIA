@@ -70,11 +70,9 @@ if [ "$OFFLINE_MODE" -eq 0 ]; then
   if [ "$USE_CN_MIRROR" -eq 1 ]; then
     PIP_MIRROR_ARGS="-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
     NPM_REGISTRY="https://registry.npmmirror.com"
-    export PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright"
     printf "${Y}  [镜像]${N} 检测到国内网络环境，已自动切换国内镜像源\n"
     info "pip  → mirrors.aliyun.com"
     info "npm  → registry.npmmirror.com"
-    info "Playwright → npmmirror.com"
     echo ""
     info "强制使用国际源: CHINA_MIRROR=0 bash quick-start.sh"
   else
@@ -216,30 +214,6 @@ if [ ! -d "client/node_modules" ]; then
   fi
 else
   ok "前端依赖已存在"
-fi
-
-# -- Playwright Chromium --
-if [ ! -f ".venv/.playwright_ok" ]; then
-  if [ "$OFFLINE_MODE" -eq 1 ] && [ -d "$VENDOR_DIR/playwright/$PIP_PLATFORM_DIR" ]; then
-    info "从离线包安装 Playwright Chromium..."
-    PW_CACHE=""
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-      PW_CACHE="$HOME/Library/Caches/ms-playwright"
-    else
-      PW_CACHE="$HOME/.cache/ms-playwright"
-    fi
-    mkdir -p "$PW_CACHE"
-    cp -rn "$VENDOR_DIR/playwright/$PIP_PLATFORM_DIR/"* "$PW_CACHE/" 2>/dev/null || \
-    cp -r "$VENDOR_DIR/playwright/$PIP_PLATFORM_DIR/"* "$PW_CACHE/" 2>/dev/null || true
-    touch .venv/.playwright_ok
-    ok "Playwright Chromium 安装完成 (离线)"
-  else
-    info "安装 Playwright 浏览器 (首次约 150MB)..."
-    playwright install chromium 2>/dev/null && touch .venv/.playwright_ok
-    ok "Playwright 安装完成"
-  fi
-else
-  ok "Playwright 已就绪"
 fi
 echo ""
 

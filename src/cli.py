@@ -243,8 +243,8 @@ def _module_check_summary(target: str, doctor_report: dict[str, Any]) -> dict[st
                     "critical": True,
                     "message": "auto 模式下 legacy browser gateway 与 Lite 驱动均不可用",
                     "suggestion": (
-                        "启动 legacy gateway（docker compose up -d）或安装 Playwright"
-                        "（pip install playwright && playwright install chromium）。"
+                        "启动 legacy gateway（docker compose up -d）或安装 DrissionPage"
+                        "（pip install DrissionPage）。"
                     ),
                     "meta": {"runtime": runtime},
                 }

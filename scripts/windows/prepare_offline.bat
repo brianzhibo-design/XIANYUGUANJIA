@@ -47,20 +47,18 @@ echo [OK] Tools ready
 
 :: Create directory structure
 echo.
-echo [1/5] Creating directory structure...
+echo [1/4] Creating directory structure...
 mkdir "%VENDOR_DIR%\installers\macos" 2>nul
 mkdir "%VENDOR_DIR%\installers\windows" 2>nul
 mkdir "%VENDOR_DIR%\pip-packages\macos-arm64" 2>nul
 mkdir "%VENDOR_DIR%\pip-packages\windows-amd64" 2>nul
 mkdir "%VENDOR_DIR%\npm-cache" 2>nul
-mkdir "%VENDOR_DIR%\playwright\macos-arm64" 2>nul
-mkdir "%VENDOR_DIR%\playwright\windows-amd64" 2>nul
 mkdir "%VENDOR_DIR%\extensions" 2>nul
 echo [OK] Directory structure created
 
 :: Download Python installer (Windows)
 echo.
-echo [2/5] Downloading installers...
+echo [2/4] Downloading installers...
 
 if not exist "%VENDOR_DIR%\installers\windows\python-%PYTHON_VER%-amd64.exe" (
     echo [*] Downloading Python %PYTHON_VER% Windows installer...
@@ -102,7 +100,7 @@ if not exist "%VENDOR_DIR%\installers\macos\node-%NODE_VER%.pkg" (
 
 :: Download pip packages
 echo.
-echo [3/5] Downloading Python packages...
+echo [3/4] Downloading Python packages...
 
 echo [*] Windows x64 wheels...
 pip download -r "%PROJECT_DIR%\requirements.txt" ^
@@ -127,7 +125,7 @@ echo [OK] macOS pip packages downloaded
 
 :: npm cache
 echo.
-echo [4/5] Caching frontend dependencies...
+echo [4/4] Caching frontend dependencies...
 node --version >nul 2>&1
 if not errorlevel 1 (
     cd /d "%PROJECT_DIR%\client"
@@ -137,19 +135,6 @@ if not errorlevel 1 (
 ) else (
     echo [WARN] Node.js not available, skipping npm cache
 )
-
-:: Playwright (Windows only from Windows host)
-echo.
-echo [5/5] Downloading Playwright Chromium...
-set "PLAYWRIGHT_BROWSERS_PATH=%VENDOR_DIR%\playwright\windows-amd64"
-python -m playwright install chromium 2>nul
-if errorlevel 1 (
-    echo [WARN] Playwright download failed
-) else (
-    echo [OK] Windows Playwright Chromium downloaded
-)
-echo [INFO] macOS Playwright must be prepared on a macOS machine:
-echo        bash scripts/prepare_offline.sh --platform macos
 
 :: CookieCloud extension guidance
 echo.

@@ -28,7 +28,7 @@ class XianyuSelectors:
     闲鱼页面元素选择器
 
     goofish.com 是 React SPA，class 名会随构建变化。
-    优先使用 Playwright 文本匹配、placeholder、role 和 input[type] 等稳定属性。
+    优先使用文本匹配、placeholder、role 和 input[type] 等稳定属性。
     如果闲鱼改版导致选择器失效，只需要在这里集中更新。
     """
 
@@ -71,7 +71,7 @@ class XianyuSelectors:
     CONDITION_SELECT = "[class*='condition'], [class*='quality']"
     CONDITION_ITEM = "[class*='condition'] [class*='item'], [class*='quality'] [class*='option']"
 
-    # 发布/提交按钮 — 使用 Playwright text 匹配
+    # 发布/提交按钮
     SUBMIT_BUTTON = "button:has-text('发布'), button:has-text('提交'), [class*='submit'] button"
     CONFIRM_BUTTON = "button:has-text('确认'), button:has-text('确定'), button:has-text('好的')"
 

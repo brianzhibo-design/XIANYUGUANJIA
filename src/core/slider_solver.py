@@ -410,7 +410,7 @@ async def _solve_nc_slider(page: Any, frame: Any, slider_el: Any) -> dict[str, A
         track_width = 300
 
     slider_width = int(box.get("width", 40))
-    drag_distance = track_width - slider_width
+    drag_distance = track_width - slider_width + random.randint(-3, 3)
 
     if drag_distance <= 10:
         drag_distance = 260
@@ -435,7 +435,7 @@ async def _solve_nc_slider(page: Any, frame: Any, slider_el: Any) -> dict[str, A
         await page.mouse.move(current_x, current_y)
         await asyncio.sleep(dt_ms / 1000.0)
 
-    await asyncio.sleep(random.uniform(0.01, 0.05))
+    await asyncio.sleep(random.uniform(0.1, 0.3))
     await page.mouse.up()
 
     for _ in range(10):
@@ -811,149 +811,263 @@ def _has_login_cookies(cookies: list[dict[str, Any]]) -> bool:
     return bool(names & _AUTH_COOKIES)
 
 
-async def _try_connect_fingerprint_browser(
-    pw: Any, fp_config: dict[str, Any], _log: Any
-) -> tuple[Any, Any, bool] | None:
-    """Strategy 0: Connect via BitBrowser fingerprint browser API."""
-    api_url = fp_config.get("api_url", "")
-    browser_id = fp_config.get("browser_id", "")
-    if not api_url or not browser_id:
-        return None
+
+
+def _try_slider_drissionpage(
+    fp_cfg: dict[str, Any],
+    cookie_text: str,
+    max_attempts: int,
+    _log: Any,
+) -> dict[str, Any] | None:
+    """DrissionPage 滑块求解 — 连接 BitBrowser 已有窗口，使用 CDP 原生拖拽。
+
+    同步函数，由 asyncio.to_thread() 调用。
+    返回格式与 try_slider_recovery 一致。
+    """
+    recovery_start = time.time()
+    attempts_log: list[dict[str, Any]] = []
+
     try:
-        import httpx
-
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                f"{api_url}/browser/open",
-                json={"id": browser_id},
-            )
-            data = resp.json()
-            if not data.get("success"):
-                _log.info(f"Fingerprint browser open failed: {data}")
-                return None
-            ws_url = data.get("data", {}).get("ws")
-            if not ws_url:
-                _log.info("Fingerprint browser returned no ws URL")
-                return None
-        browser = await pw.chromium.connect_over_cdp(ws_url)
-        contexts = browser.contexts
-        if contexts:
-            _log.info("Slider recovery: connected via fingerprint browser (BitBrowser)")
-            return browser, contexts[0], True
-        _log.info("Fingerprint browser connected but no contexts")
-        await browser.close()
-    except Exception as e:
-        _log.info(f"Fingerprint browser connect failed: {e}")
-    return None
-
-
-_CDP_PORTS = [9222, 9223, 9224]
-
-
-async def _try_connect_cdp(pw: Any, _log: Any) -> tuple[Any, Any, bool] | None:
-    """Try connecting to an already-running Chrome via CDP."""
-    import socket
-
-    for port in _CDP_PORTS:
-        s = socket.socket()
-        s.settimeout(0.5)
-        try:
-            s.connect(("127.0.0.1", port))
-            s.close()
-        except Exception:
-            continue
-        try:
-            browser = await pw.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
-            contexts = browser.contexts
-            if contexts:
-                _log.info(f"Slider recovery: connected to existing Chrome via CDP port {port}")
-                return browser, contexts[0], True
-            _log.info(f"Slider recovery: CDP connected but no contexts on port {port}")
-            await browser.close()
-        except Exception as e:
-            _log.debug(f"CDP connect failed on port {port}: {e}")
-    return None
-
-
-async def _try_launch_with_profile(pw: Any, headless: bool, _log: Any) -> tuple[Any, Any, bool] | None:
-    """Launch Chrome using the user's real profile (persistent context)."""
-    system = platform.system()
-    candidates: list[str] = []
-    if system == "Darwin":
-        home = os.path.expanduser("~")
-        candidates = [
-            f"{home}/Library/Application Support/Google/Chrome",
-            f"{home}/Library/Application Support/Microsoft Edge",
-        ]
-    elif system == "Linux":
-        home = os.path.expanduser("~")
-        candidates = [f"{home}/.config/google-chrome", f"{home}/.config/chromium"]
-    elif system == "Windows":
-        local = os.environ.get("LOCALAPPDATA", "")
-        candidates = [f"{local}\\Google\\Chrome\\User Data", f"{local}\\Microsoft\\Edge\\User Data"]
-
-    for user_data_dir in candidates:
-        if not os.path.isdir(user_data_dir) or not os.path.isdir(os.path.join(user_data_dir, "Default")):
-            continue
-        try:
-            context = await pw.chromium.launch_persistent_context(
-                user_data_dir,
-                headless=headless,
-                channel="chrome",
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-first-run",
-                    "--no-default-browser-check",
-                ],
-                viewport={"width": 1280, "height": 800},
-                ignore_default_args=["--enable-automation"],
-            )
-            _log.info(f"Slider recovery: launched with Chrome profile from {user_data_dir}")
-            return None, context, False
-        except Exception as e:
-            _log.debug(f"Profile launch failed ({user_data_dir}): {e}")
-    return None
-
-
-async def _try_launch_fresh(pw: Any, headless: bool, cookie_text: str, _log: Any) -> tuple[Any, Any, bool] | None:
-    """Fallback: launch a fresh browser and inject cookies."""
-    browser = None
-    for channel in ("chrome", "msedge", None):
-        try:
-            kw: dict[str, Any] = {
-                "headless": headless,
-                "args": ["--disable-blink-features=AutomationControlled"],
-            }
-            if channel:
-                kw["channel"] = channel
-            browser = await pw.chromium.launch(**kw)
-            break
-        except Exception:
-            continue
-    if not browser:
+        from DrissionPage import Chromium
+    except ImportError:
+        _log.debug("DrissionPage not installed, skipping")
         return None
 
-    context = await browser.new_context(
-        viewport={"width": 1280 + random.randint(-30, 30), "height": 800 + random.randint(-20, 20)},
-        user_agent=(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
-    )
-    if cookie_text:
-        cookies_to_inject = []
-        for pair in cookie_text.split(";"):
-            pair = pair.strip()
-            if "=" not in pair:
-                continue
-            name, value = pair.split("=", 1)
-            for domain in [".goofish.com", ".taobao.com"]:
-                cookies_to_inject.append({"name": name.strip(), "value": value.strip(), "domain": domain, "path": "/"})
-        if cookies_to_inject:
-            await context.add_cookies(cookies_to_inject)
+    api_url = fp_cfg.get("api_url", "")
+    browser_id = fp_cfg.get("browser_id", "")
+    if not api_url or not browser_id:
+        _log.debug("DrissionPage: fingerprint_browser config incomplete")
+        return None
 
-    _log.info("Slider recovery: launched fresh browser (cookies may be incomplete)")
-    return browser, context, False
+    import httpx as _httpx
+
+    try:
+        resp = _httpx.post(
+            f"{api_url.rstrip('/')}/browser/open",
+            json={"id": browser_id},
+            timeout=10,
+        )
+        data = resp.json()
+        if not data.get("success"):
+            _log.info(f"DrissionPage: BitBrowser open failed: {data}")
+            return None
+        ws_url = data.get("data", {}).get("ws")
+        if not ws_url:
+            _log.info("DrissionPage: no ws URL from BitBrowser")
+            return None
+    except Exception as exc:
+        _log.info(f"DrissionPage: BitBrowser API error: {exc}")
+        return None
+
+    browser = None
+    try:
+        browser = Chromium(ws_url)
+
+        tab = None
+        for t in browser.get_tabs():
+            try:
+                page = browser.get_tab(t)
+                if page and "goofish.com/im" in (page.url or ""):
+                    tab = page
+                    break
+            except Exception:
+                continue
+
+        if not tab:
+            for t in browser.get_tabs():
+                try:
+                    page = browser.get_tab(t)
+                    if page and "goofish.com" in (page.url or ""):
+                        tab = page
+                        break
+                except Exception:
+                    continue
+
+        if not tab:
+            tab = browser.latest_tab
+            if tab:
+                _log.info(f"DrissionPage: no goofish tab, navigating latest tab to {_GOOFISH_IM_URL}")
+                tab.get(_GOOFISH_IM_URL)
+            else:
+                _log.info("DrissionPage: no tabs available")
+                return None
+        else:
+            _log.info(f"DrissionPage: reloading tab {tab.url}")
+            tab.refresh()
+
+        time.sleep(3)
+
+        for attempt in range(max_attempts):
+            attempt_data: dict[str, Any] = {
+                "attempt_num": attempt + 1,
+                "slider_type": None,
+                "result": "failed",
+                "fail_reason": None,
+                "screenshot_path": None,
+                "browser_strategy": "drissionpage",
+                "browser_connect_ms": int((time.time() - recovery_start) * 1000),
+            }
+            _log.info(f"DrissionPage slider attempt {attempt + 1}/{max_attempts}")
+
+            time.sleep(2)
+
+            slider_el = None
+            slider_type = None
+
+            for sel in ["#nc_1_n1z", ".btn_slide", "#aliyunCaptcha-sliding-btn", ".slide-btn"]:
+                try:
+                    el = tab.ele(sel, timeout=2)
+                    if el:
+                        slider_el = el
+                        slider_type = "nc"
+                        break
+                except Exception:
+                    continue
+
+            if not slider_el:
+                for sel in [".yoda-image-slice", "#alicaptcha-puzzle", ".baxia-dialog"]:
+                    try:
+                        el = tab.ele(sel, timeout=2)
+                        if el:
+                            slider_el = el
+                            slider_type = "puzzle"
+                            break
+                    except Exception:
+                        continue
+
+            if not slider_el:
+                attempt_data["fail_reason"] = "no_slider_found"
+                _log.info("DrissionPage: no slider element found")
+                try:
+                    ss_path = os.path.join(_SCREENSHOT_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_dp_no_slider.png")
+                    os.makedirs(_SCREENSHOT_DIR, exist_ok=True)
+                    tab.get_screenshot(path=ss_path)
+                    attempt_data["screenshot_path"] = ss_path
+                except Exception:
+                    pass
+                attempts_log.append(attempt_data)
+                continue
+
+            attempt_data["slider_type"] = slider_type
+
+            if slider_type == "nc":
+                try:
+                    track_el = None
+                    for tsel in ["#nc_1__scale_text", ".nc_scale", "#aliyunCaptcha-sliding-track", ".slide-track"]:
+                        try:
+                            track_el = tab.ele(tsel, timeout=1)
+                            if track_el:
+                                break
+                        except Exception:
+                            continue
+
+                    if track_el:
+                        track_rect = track_el.rect
+                        track_width = int(track_rect.size[0]) if track_rect else 300
+                    else:
+                        track_width = 300
+
+                    slider_rect = slider_el.rect
+                    slider_width = int(slider_rect.size[0]) if slider_rect else 40
+                    drag_distance = track_width - slider_width + random.randint(-3, 3)
+                    if drag_distance <= 10:
+                        drag_distance = 260
+
+                    attempt_data["nc_track_width"] = track_width
+                    attempt_data["nc_drag_distance"] = drag_distance
+
+                    duration = random.uniform(0.5, 1.2)
+                    slider_el.drag(drag_distance, 0, duration=duration)
+                    time.sleep(random.uniform(0.1, 0.3))
+
+                except Exception as exc:
+                    attempt_data["fail_reason"] = f"drag_error:{exc}"
+                    attempts_log.append(attempt_data)
+                    continue
+
+                time.sleep(2)
+
+                success = False
+                for _ in range(6):
+                    try:
+                        body_text = tab.html or ""
+                        if any(m in body_text for m in NC_SUCCESS_MARKERS):
+                            success = True
+                            break
+                    except Exception:
+                        pass
+                    found_slider = False
+                    for sel in ["#nc_1_n1z", ".btn_slide"]:
+                        try:
+                            if tab.ele(sel, timeout=0.5):
+                                found_slider = True
+                                break
+                        except Exception:
+                            pass
+                    if not found_slider:
+                        success = True
+                        break
+                    time.sleep(0.5)
+
+                if success:
+                    attempt_data["result"] = "success"
+                    _log.info(f"DrissionPage NC slider solved on attempt {attempt + 1}")
+                else:
+                    attempt_data["fail_reason"] = "no_success_marker"
+                    try:
+                        ss_path = os.path.join(_SCREENSHOT_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_dp_nc_fail.png")
+                        tab.get_screenshot(path=ss_path)
+                        attempt_data["screenshot_path"] = ss_path
+                    except Exception:
+                        pass
+
+            elif slider_type == "puzzle":
+                attempt_data["fail_reason"] = "puzzle_not_implemented_dp"
+                _log.info("DrissionPage: puzzle slider detected, not yet implemented in DP path")
+
+            attempts_log.append(attempt_data)
+
+            if attempt_data["result"] == "success":
+                break
+
+            time.sleep(random.uniform(2, 4))
+
+        time.sleep(2)
+
+        import asyncio as _aio
+        cookie_str = None
+        try:
+            from src.core.bitbrowser_cdp import read_cookies_via_cdp
+            loop = _aio.new_event_loop()
+            try:
+                cookie_str = loop.run_until_complete(read_cookies_via_cdp(ws_url))
+            finally:
+                loop.close()
+        except Exception as exc:
+            _log.debug(f"DrissionPage: cookie read failed: {exc}")
+
+        return {
+            "cookie": cookie_str,
+            "attempts": attempts_log,
+            "browser_strategy": "drissionpage",
+            "total_duration_ms": int((time.time() - recovery_start) * 1000),
+        }
+
+    except Exception as exc:
+        _log.info(f"DrissionPage slider error: {exc}")
+        return {
+            "cookie": None,
+            "attempts": attempts_log,
+            "error": str(exc),
+            "browser_strategy": "drissionpage",
+            "total_duration_ms": int((time.time() - recovery_start) * 1000),
+        }
+    finally:
+        if browser is not None:
+            try:
+                browser.disconnect()
+            except Exception:
+                pass
 
 
 async def try_slider_recovery(
@@ -962,16 +1076,11 @@ async def try_slider_recovery(
     config: dict[str, Any] | None = None,
     logger: Any = None,
 ) -> dict[str, Any] | None:
-    """Slider recovery with three-tier browser strategy.
+    """Slider recovery via DrissionPage + BitBrowser.
 
     Returns {"cookie": str, "attempts": [...]} on success, None on failure.
-    Each attempt in "attempts" contains: attempt_num, slider_type,
-    result, fail_reason, screenshot_path, and type-specific details.
     """
     _log = logger or get_logger()
-    recovery_start = time.time()
-    attempts_log: list[dict[str, Any]] = []
-    browser_strategy = "none"
 
     cleanup_old_screenshots()
 
@@ -980,324 +1089,14 @@ async def try_slider_recovery(
         return None
 
     slider_cfg = _get_slider_config(config)
-    auto_solve = slider_cfg["enabled"]
     max_attempts = slider_cfg["max_attempts"]
-    cooldown = slider_cfg["cooldown_seconds"]
-    headless = slider_cfg["headless"]
 
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError:
-        _log.debug("Playwright not available for slider recovery")
+    fp_cfg = slider_cfg.get("fingerprint_browser", {})
+    if not fp_cfg.get("enabled"):
+        _log.info("Slider recovery: fingerprint_browser not enabled, skipping")
         return None
 
-    try:
-        from playwright_stealth import stealth_async
-    except ImportError:
-        stealth_async = None
-
-    pw = None
-    browser = None
-    context = None
-    is_cdp = False
-    browser_connect_start = time.time()
-    try:
-        pw = await async_playwright().start()
-
-        fp_cfg = slider_cfg.get("fingerprint_browser", {})
-        if fp_cfg.get("enabled"):
-            fp_result = await _try_connect_fingerprint_browser(pw, fp_cfg, _log)
-            if fp_result:
-                browser, context, is_cdp = fp_result
-                browser_strategy = "fingerprint"
-
-        if not context:
-            cdp_result = await _try_connect_cdp(pw, _log)
-            if cdp_result:
-                browser, context, is_cdp = cdp_result
-                browser_strategy = "cdp"
-            else:
-                profile_result = await _try_launch_with_profile(pw, headless, _log)
-                if profile_result:
-                    browser, context, is_cdp = profile_result
-                    browser_strategy = "profile"
-                else:
-                    fresh_result = await _try_launch_fresh(pw, headless, cookie_text, _log)
-                    if fresh_result:
-                        browser, context, is_cdp = fresh_result
-                        browser_strategy = "fresh"
-
-        browser_connect_ms = int((time.time() - browser_connect_start) * 1000)
-
-        if not context:
-            _log.info("Slider recovery: all browser strategies failed")
-            return None
-
-        if is_cdp:
-            pages = context.pages
-            page = None
-            for p in pages:
-                if "goofish.com/im" in (p.url or ""):
-                    page = p
-                    _log.info(f"Slider recovery: reusing IM tab, reloading to trigger slider: {p.url}")
-                    try:
-                        await p.reload(wait_until="domcontentloaded", timeout=15000)
-                    except Exception as reload_exc:
-                        _log.info(f"Slider recovery: IM tab reload error (non-fatal): {reload_exc}")
-                    if stealth_async is not None:
-                        try:
-                            await stealth_async(p)
-                        except Exception:
-                            pass
-                    break
-            if not page:
-                for p in pages:
-                    if "goofish.com" in (p.url or ""):
-                        page = p
-                        _log.info("Slider recovery: navigating existing tab to IM page")
-                        try:
-                            await page.goto(_GOOFISH_IM_URL, wait_until="domcontentloaded", timeout=30000)
-                        except Exception as nav_exc:
-                            _log.info(f"Slider recovery: navigation error: {nav_exc}")
-                        if stealth_async is not None:
-                            try:
-                                await stealth_async(page)
-                            except Exception:
-                                pass
-                        break
-            if not page:
-                page = await context.new_page()
-                if stealth_async is not None:
-                    try:
-                        await stealth_async(page)
-                    except Exception:
-                        pass
-                _log.info(f"Slider recovery: navigating new tab to {_GOOFISH_IM_URL}")
-                try:
-                    await page.goto(_GOOFISH_IM_URL, wait_until="domcontentloaded", timeout=30000)
-                except Exception as nav_exc:
-                    _log.info(f"Slider recovery: navigation error: {nav_exc}")
-        else:
-            page = context.pages[0] if context.pages else await context.new_page()
-            if stealth_async is not None:
-                try:
-                    await stealth_async(page)
-                except Exception:
-                    pass
-            _log.info(f"Slider recovery: navigating to {_GOOFISH_IM_URL}")
-            try:
-                await page.goto(_GOOFISH_IM_URL, wait_until="domcontentloaded", timeout=30000)
-            except Exception as nav_exc:
-                _log.info(f"Slider recovery: navigation error: {nav_exc}")
-
-        await asyncio.sleep(3)
-
-        if auto_solve:
-            for attempt in range(max_attempts):
-                time.time()
-                attempt_data: dict[str, Any] = {
-                    "attempt_num": attempt + 1,
-                    "slider_type": None,
-                    "result": "failed",
-                    "fail_reason": None,
-                    "screenshot_path": None,
-                    "browser_strategy": browser_strategy,
-                    "browser_connect_ms": browser_connect_ms,
-                }
-                _log.info(f"Slider auto-solve attempt {attempt + 1}/{max_attempts}")
-                await asyncio.sleep(2)
-
-                slider_info = await _find_slider_in_frames(page)
-                if not slider_info:
-                    all_cookies = await context.cookies()
-                    if _has_login_cookies(all_cookies):
-                        cookie_str = _extract_goofish_cookies(all_cookies)
-                        if cookie_str:
-                            cookie_keys = {p.split("=")[0].strip() for p in cookie_str.split(";") if "=" in p}
-                            if "_m_h5_tk" in cookie_keys:
-                                _log.info("Slider recovery: no slider found, complete cookies detected")
-                                attempt_data.update(result="cookies_complete", slider_type="none")
-                                attempts_log.append(attempt_data)
-                                return {
-                                    "cookie": cookie_str,
-                                    "attempts": attempts_log,
-                                    "browser_strategy": browser_strategy,
-                                    "browser_connect_ms": browser_connect_ms,
-                                    "total_duration_ms": int((time.time() - recovery_start) * 1000),
-                                }
-
-                            _log.info(
-                                "Slider recovery: no slider, cookies missing _m_h5_tk. "
-                                "Reloading page to trigger slider/token..."
-                            )
-                            try:
-                                await page.reload(wait_until="domcontentloaded", timeout=15000)
-                                await asyncio.sleep(5)
-                            except Exception as reload_exc:
-                                _log.info(f"Page reload failed: {reload_exc}")
-
-                            slider_after_reload = await _find_slider_in_frames(page)
-                            if slider_after_reload:
-                                _log.info("Slider appeared after reload!")
-                                slider_info = slider_after_reload
-                            else:
-                                all_cookies = await context.cookies()
-                                cookie_str = _extract_goofish_cookies(all_cookies) or cookie_str
-                                if attempt < max_attempts - 1:
-                                    _log.info("Slider recovery: no slider after reload, trying next attempt...")
-                                    attempt_data.update(
-                                        result="no_slider", slider_type="none", fail_reason="no_slider_after_reload"
-                                    )
-                                    attempts_log.append(attempt_data)
-                                    continue
-                                _log.info("Slider recovery: no slider found, returning partial cookies")
-                                attempt_data.update(result="cookies_complete", slider_type="none")
-                                attempts_log.append(attempt_data)
-                                return {
-                                    "cookie": cookie_str,
-                                    "attempts": attempts_log,
-                                    "browser_strategy": browser_strategy,
-                                    "browser_connect_ms": browser_connect_ms,
-                                    "total_duration_ms": int((time.time() - recovery_start) * 1000),
-                                }
-                    else:
-                        _log.info("Slider recovery: no slider element and no login cookies on page")
-                        attempt_data.update(
-                            result="no_slider",
-                            slider_type="none",
-                            fail_reason="no_slider_no_login",
-                            screenshot_path=await _take_screenshot(page, "no_slider_no_login"),
-                        )
-                        attempts_log.append(attempt_data)
-                        if attempt < max_attempts - 1:
-                            continue
-                        break
-
-                if not slider_info:
-                    continue
-
-                frame, slider_el, slider_type = slider_info
-                _log.info(f"Slider detected: type={slider_type}")
-                attempt_data["slider_type"] = slider_type
-
-                solve_result: dict[str, Any] = {"solved": False}
-                if slider_type == "nc":
-                    solve_result = await _solve_nc_slider(page, frame, slider_el)
-                    attempt_data.update(
-                        nc_track_width=solve_result.get("track_width"),
-                        nc_drag_distance=solve_result.get("drag_distance"),
-                    )
-                elif slider_type == "puzzle":
-                    solve_result = await _solve_puzzle_slider(page, frame, slider_el)
-                    attempt_data.update(
-                        puzzle_bg_found=solve_result.get("puzzle_bg_found"),
-                        puzzle_slice_found=solve_result.get("puzzle_slice_found"),
-                        puzzle_gap_x=solve_result.get("puzzle_gap_x"),
-                        puzzle_match_score=solve_result.get("puzzle_match_score"),
-                    )
-
-                attempt_data["fail_reason"] = solve_result.get("fail_reason")
-                attempt_data["screenshot_path"] = solve_result.get("screenshot_path")
-
-                if solve_result.get("solved"):
-                    _log.info("Slider verification passed!")
-                    attempt_data["result"] = "passed"
-                    attempts_log.append(attempt_data)
-                    try:
-                        await page.wait_for_load_state("networkidle", timeout=10000)
-                    except Exception:
-                        pass
-                    await asyncio.sleep(3)
-
-                    all_cookies = await context.cookies()
-                    cookie_str = _extract_goofish_cookies(all_cookies)
-                    if cookie_str and _has_login_cookies(all_cookies):
-                        return {
-                            "cookie": cookie_str,
-                            "attempts": attempts_log,
-                            "browser_strategy": browser_strategy,
-                            "browser_connect_ms": browser_connect_ms,
-                            "total_duration_ms": int((time.time() - recovery_start) * 1000),
-                        }
-                    _log.info("Slider solved but cookies incomplete, waiting for page reload...")
-                    await asyncio.sleep(5)
-                    try:
-                        await page.reload(wait_until="domcontentloaded", timeout=15000)
-                    except Exception:
-                        pass
-                    await asyncio.sleep(3)
-                    all_cookies = await context.cookies()
-                    cookie_str = _extract_goofish_cookies(all_cookies)
-                    if cookie_str:
-                        return {
-                            "cookie": cookie_str,
-                            "attempts": attempts_log,
-                            "browser_strategy": browser_strategy,
-                            "browser_connect_ms": browser_connect_ms,
-                            "total_duration_ms": int((time.time() - recovery_start) * 1000),
-                        }
-                else:
-                    _log.info(f"Slider auto-solve attempt {attempt + 1} failed")
-                    attempt_data["result"] = "failed"
-                    attempts_log.append(attempt_data)
-                    if attempt < max_attempts - 1:
-                        _log.info(f"Waiting {cooldown}s before next attempt...")
-                        await asyncio.sleep(cooldown)
-
-        if not headless and not is_cdp:
-            _log.info("Slider recovery: monitoring browser for manual verification...")
-            deadline = time.time() + 1800
-            while time.time() < deadline:
-                if browser and not browser.is_connected():
-                    break
-                all_cookies = await context.cookies()
-                if _has_login_cookies(all_cookies):
-                    cookie_str = _extract_goofish_cookies(all_cookies)
-                    if cookie_str:
-                        _log.info("Slider recovery: manual verification detected")
-                        attempts_log.append(
-                            {"attempt_num": 0, "slider_type": "manual", "result": "passed", "fail_reason": None}
-                        )
-                        return {
-                            "cookie": cookie_str,
-                            "attempts": attempts_log,
-                            "browser_strategy": browser_strategy,
-                            "browser_connect_ms": browser_connect_ms,
-                            "total_duration_ms": int((time.time() - recovery_start) * 1000),
-                        }
-                await asyncio.sleep(3)
-
-        return {
-            "cookie": None,
-            "attempts": attempts_log,
-            "browser_strategy": browser_strategy,
-            "browser_connect_ms": browser_connect_ms,
-            "total_duration_ms": int((time.time() - recovery_start) * 1000),
-        }
-
-    except Exception as exc:
-        _log.info(f"Slider recovery error: {exc}")
-        return {
-            "cookie": None,
-            "attempts": attempts_log,
-            "error": str(exc),
-            "browser_strategy": browser_strategy,
-            "total_duration_ms": int((time.time() - recovery_start) * 1000),
-        }
-    finally:
-        if not is_cdp:
-            if browser:
-                try:
-                    await browser.close()
-                except Exception:
-                    pass
-            elif context:
-                try:
-                    await context.close()
-                except Exception:
-                    pass
-        if pw:
-            try:
-                await pw.stop()
-            except Exception:
-                pass
+    _log.info("Slider recovery: using DrissionPage (fingerprint_browser enabled)")
+    return await asyncio.to_thread(
+        _try_slider_drissionpage, fp_cfg, cookie_text, max_attempts, _log
+    )

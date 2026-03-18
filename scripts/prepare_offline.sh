@@ -64,7 +64,7 @@ case "$PLATFORM" in
   current)
     [ "$CURRENT_OS" = "macos" ] && PREP_MACOS=1
     [ "$CURRENT_OS" = "windows" ] && PREP_WINDOWS=1
-    [ "$CURRENT_OS" = "linux" ] && { PREP_MACOS=1; warn "Linux 主机默认准备 macOS 包，Windows Playwright 需在 Windows 上单独 prepare"; }
+    [ "$CURRENT_OS" = "linux" ] && { PREP_MACOS=1; warn "Linux 主机默认准备 macOS 包，Windows 需在 Windows 上单独 prepare"; }
     ;;
   *) fail "未知平台: $PLATFORM (可选: all, macos, windows, current)"; exit 1 ;;
 esac
@@ -86,7 +86,7 @@ info "输出目录: $VENDOR_DIR"
 echo ""
 
 # ═══════════════ 0. 环境检查 ═══════════════
-printf "${B}[1/6] 环境检查${N}\n"
+printf "${B}[1/5] 环境检查${N}\n"
 
 command -v python3 &>/dev/null || { fail "需要 python3"; exit 1; }
 command -v pip3 &>/dev/null || command -v pip &>/dev/null || { fail "需要 pip"; exit 1; }
@@ -100,15 +100,15 @@ ok "基础工具就绪"
 echo ""
 
 # ═══════════════ 1. 创建目录结构 ═══════════════
-printf "${B}[2/6] 创建目录结构${N}\n"
+printf "${B}[2/5] 创建目录结构${N}\n"
 
-mkdir -p "$VENDOR_DIR"/{installers/macos,installers/windows,pip-packages/macos-arm64,pip-packages/windows-amd64,npm-cache,playwright/macos-arm64,playwright/windows-amd64,extensions}
+mkdir -p "$VENDOR_DIR"/{installers/macos,installers/windows,pip-packages/macos-arm64,pip-packages/windows-amd64,npm-cache,extensions}
 
 ok "vendor/ 目录结构已创建"
 echo ""
 
 # ═══════════════ 2. 下载 Python / Node 安装包 ═══════════════
-printf "${B}[3/6] 下载 Python / Node 安装包${N}\n"
+printf "${B}[3/5] 下载 Python / Node 安装包${N}\n"
 
 download_if_missing() {
   local url="$1" dest="$2" label="$3"
@@ -155,7 +155,7 @@ fi
 echo ""
 
 # ═══════════════ 3. 下载 pip 包（含完整依赖链） ═══════════════
-printf "${B}[4/6] 下载 Python 依赖包${N}\n"
+printf "${B}[4/5] 下载 Python 依赖包${N}\n"
 
 REQ_FILE="$PROJECT_ROOT/requirements.txt"
 if [ ! -f "$REQ_FILE" ]; then
@@ -232,7 +232,7 @@ fi
 echo ""
 
 # ═══════════════ 4. 缓存 npm 前端依赖 ═══════════════
-printf "${B}[5/6] 缓存前端依赖${N}\n"
+printf "${B}[5/5] 缓存前端依赖${N}\n"
 
 NPM_CACHE_DIR="$VENDOR_DIR/npm-cache"
 
@@ -250,45 +250,6 @@ else
 fi
 
 echo ""
-
-# ═══════════════ 5. 下载 Playwright Chromium ═══════════════
-printf "${B}[6/6] 下载 Playwright Chromium 浏览器${N}\n"
-
-if [ "$PREP_MACOS" -eq 1 ] && [ "$CURRENT_OS" = "macos" ]; then
-  PW_DEST="$VENDOR_DIR/playwright/macos-arm64"
-  if [ -d "$PW_DEST" ] && [ "$(ls -A "$PW_DEST" 2>/dev/null)" ]; then
-    ok "macOS Playwright Chromium (已存在，跳过)"
-  else
-    info "下载 macOS Playwright Chromium (~330MB)..."
-    PLAYWRIGHT_BROWSERS_PATH="$PW_DEST" python3 -m playwright install chromium 2>/dev/null || \
-    PLAYWRIGHT_BROWSERS_PATH="$PW_DEST" playwright install chromium 2>/dev/null || \
-      warn "Playwright Chromium 下载失败，新设备需联网安装"
-    if [ -d "$PW_DEST" ] && [ "$(ls -A "$PW_DEST" 2>/dev/null)" ]; then
-      pw_size=$(du -sh "$PW_DEST" | cut -f1)
-      ok "macOS Playwright Chromium ($pw_size)"
-    fi
-  fi
-elif [ "$PREP_MACOS" -eq 1 ]; then
-  warn "macOS Playwright Chromium 需要在 macOS 设备上准备 (当前为 ${CURRENT_OS})"
-fi
-
-if [ "$PREP_WINDOWS" -eq 1 ] && [ "$CURRENT_OS" = "windows" ]; then
-  PW_DEST="$VENDOR_DIR/playwright/windows-amd64"
-  if [ -d "$PW_DEST" ] && [ "$(ls -A "$PW_DEST" 2>/dev/null)" ]; then
-    ok "Windows Playwright Chromium (已存在，跳过)"
-  else
-    info "下载 Windows Playwright Chromium (~330MB)..."
-    PLAYWRIGHT_BROWSERS_PATH="$PW_DEST" python3 -m playwright install chromium 2>/dev/null || \
-      warn "Playwright Chromium 下载失败"
-    if [ -d "$PW_DEST" ] && [ "$(ls -A "$PW_DEST" 2>/dev/null)" ]; then
-      pw_size=$(du -sh "$PW_DEST" | cut -f1)
-      ok "Windows Playwright Chromium ($pw_size)"
-    fi
-  fi
-elif [ "$PREP_WINDOWS" -eq 1 ]; then
-  warn "Windows Playwright Chromium 需要在 Windows 设备上准备 (当前为 ${CURRENT_OS})"
-  info "在 Windows 设备上运行: scripts\\windows\\prepare_offline.bat"
-fi
 
 # CookieCloud 扩展引导
 echo ""

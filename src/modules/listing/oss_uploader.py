@@ -1,7 +1,7 @@
 """阿里云 OSS 上传器 — 将本地图片上传到 OSS 获取公网 URL。
 
 闲管家商品创建 API 要求图片为公网 URL，
-本模块将 Playwright 截图生成的本地 PNG 上传到阿里云 OSS。
+本模块将截图生成的本地 PNG 上传到阿里云 OSS。
 
 配置来源（优先级从高到低）:
 1. 函数参数 config dict

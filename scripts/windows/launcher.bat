@@ -14,7 +14,7 @@ echo ==================================================
 echo  Xianyu OpenClaw - Windows Launcher
 echo ==================================================
 echo  1) Lite quickstart (Recommended)
-echo  2) Lite setup (runtime=lite + install playwright)
+echo  2) Lite setup (runtime=lite)
 echo  3) Module check (all, strict)
 echo  4) Start all modules (lite, background)
 echo  5) Start presales only

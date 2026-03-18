@@ -59,7 +59,6 @@ a = Analysis(
         'numpy',
         'scipy',
         'pandas',
-        'playwright',
         'streamlit',
         'fastapi',
         'uvicorn',

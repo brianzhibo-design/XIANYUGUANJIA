@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -81,31 +81,35 @@ class TestGenerateProductImages:
 
 class TestRenderHtmlToPng:
     @pytest.mark.asyncio
-    async def test_playwright_import_error(self):
-        with patch.dict("sys.modules", {"playwright": None, "playwright.async_api": None}):
+    async def test_drissionpage_import_error(self):
+        with patch.dict("sys.modules", {"DrissionPage": None}):
             with pytest.raises((RuntimeError, ImportError)):
                 await _render_html_to_png("<html></html>", Path("/tmp/test.png"))
 
     @pytest.mark.asyncio
     async def test_successful_render(self, tmp_path):
-        mock_page = AsyncMock()
-        mock_browser = AsyncMock()
-        mock_browser.new_page = AsyncMock(return_value=mock_page)
-        mock_browser.close = AsyncMock()
+        mock_tab = Mock()
+        mock_browser = Mock()
+        mock_browser.latest_tab = mock_tab
+        mock_browser.quit = Mock()
 
-        mock_pw_ctx = AsyncMock()
-        mock_pw_ctx.chromium.launch = AsyncMock(return_value=mock_browser)
+        mock_chromium_cls = Mock(return_value=mock_browser)
+        mock_options_cls = Mock()
+        mock_options_instance = Mock()
+        mock_options_cls.return_value = mock_options_instance
 
-        mock_pw = MagicMock()
-        mock_pw.__aenter__ = AsyncMock(return_value=mock_pw_ctx)
-        mock_pw.__aexit__ = AsyncMock(return_value=False)
+        mock_dp = MagicMock()
+        mock_dp.Chromium = mock_chromium_cls
+        mock_dp.ChromiumOptions = mock_options_cls
 
-        mock_async_pw = MagicMock(return_value=mock_pw)
-        mock_module = MagicMock()
-        mock_module.async_playwright = mock_async_pw
-
-        with patch.dict("sys.modules", {"playwright": MagicMock(), "playwright.async_api": mock_module}):
+        with patch.dict("sys.modules", {"DrissionPage": mock_dp}):
             await _render_html_to_png("<html>test</html>", tmp_path / "out.png")
-            mock_page.set_content.assert_called_once()
-            mock_page.screenshot.assert_called_once()
-            mock_browser.close.assert_called_once()
+
+        mock_chromium_cls.assert_called_once_with(mock_options_instance)
+        assert mock_tab.get.call_count == 1
+        call_args = mock_tab.get.call_args[0]
+        assert call_args[0].startswith("file://")
+        mock_tab.get_screenshot.assert_called_once_with(
+            path=str(tmp_path / "out.png"), full_page=False
+        )
+        mock_browser.quit.assert_called_once()

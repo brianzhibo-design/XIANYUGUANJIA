@@ -77,16 +77,16 @@ RGV587 风控触发
     │
     ├─ 1-2 次 → 退避重试 + 读浏览器 Cookie → 自动重连
     │
-    └─ 3+ 次 → 发送告警通知
+                  └─ 3+ 次 → 发送告警通知
                   │
-                  ├─ 自动方案：Playwright 过滑块（NC / 拼图）
+                  ├─ 自动方案：DrissionPage 过滑块（NC / 拼图）
                   │              ↓
                   │          Cookie 完整? → 自动重连
                   │              ↓ 否
                   └─ CookieCloud 同步 → 自动重连
 ```
 
-- **滑块自动验证** — Playwright + OpenCV，支持 NC 滑块和拼图验证
+- **滑块自动验证** — DrissionPage + OpenCV，支持 NC 滑块和拼图验证
 - **CookieCloud 集成** — 浏览器扩展即时同步 Cookie，风控恢复秒级生效
 - **Cookie 静默刷新** — 后台守护线程每 30 分钟自动检查，失效时静默获取
 
@@ -193,7 +193,6 @@ python3 -m venv .venv && source .venv/bin/activate
 
 # 2. 安装后端依赖
 pip install -r requirements.txt
-playwright install chromium    # 可选，风控滑块自动验证需要
 
 # 3. 安装前端依赖并构建
 cd client && npm install && npm run build && cd ..
@@ -344,14 +343,12 @@ CookieCloud 是浏览器扩展，可将 Cookie 实时同步到服务端。风控
 </details>
 
 <details>
-<summary><b>Windows Playwright 安装失败</b></summary>
-
-**症状**：`playwright install chromium` 报错或超时。
+<summary><b>Docker 部署后无法访问面板</b></summary>
 
 **解决**：
-1. 确认网络可访问 `cdn.playwright.dev`
-2. 网络受限时设置代理：`set HTTPS_PROXY=http://proxy:port` 后重试
-3. 使用离线安装包部署可跳过此步骤（已包含 Playwright）
+1. 确认容器正常运行：`docker compose ps`
+2. 检查端口映射：`docker compose logs`
+3. 国内网络构建失败时使用：`MIRROR=china docker compose up -d --build`
 </details>
 
 ---
@@ -407,7 +404,7 @@ CookieCloud 是浏览器扩展，可将 Cookie 实时同步到服务端。风控
 | **数据库** | SQLite (WAL 模式) | 零配置，内嵌运行，优化并发读写 |
 | **消息通道** | WebSocket 直连闲鱼 | 毫秒级接收，内存队列 + SQLite 持久化 |
 | **AI 服务** | OpenAI 兼容 API | DeepSeek / 通义千问 / 智谱 / 火山方舟 / OpenAI |
-| **浏览器自动化** | Playwright + OpenCV | Cookie 刷新、滑块自动验证 |
+| **浏览器自动化** | DrissionPage + OpenCV | Cookie 刷新、滑块自动验证 |
 | **通知** | HTTP Webhook | 飞书 / 企业微信 |
 | **部署** | 离线安装包 / 一键脚本 | 全平台一键部署 |
 
@@ -434,7 +431,7 @@ XIANYUGUANJIA/
 │   │   ├── notify.py                 # 告警通知 (飞书/企微)
 │   │   ├── update_config.py          # 在线更新配置
 │   │   ├── compliance.py             # 合规护栏 (禁词/频率)
-│   │   ├── playwright_client.py      # 浏览器自动化封装
+│   │   ├── drissionpage_client.py    # 浏览器自动化封装
 │   │   ├── doctor.py                 # 环境诊断工具
 │   │   └── logger.py                 # 日志模块
 │   │
