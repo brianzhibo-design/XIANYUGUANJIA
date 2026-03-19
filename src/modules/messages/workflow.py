@@ -428,7 +428,8 @@ class WorkflowStore:
         with self._connect() as conn:
             conn.execute(
                 """DELETE FROM workflow_jobs
-                   WHERE dedupe_key = ? AND status IN ('done', 'dead')""",
+                   WHERE dedupe_key = ? AND status IN ('done', 'dead')
+                   AND updated_at < datetime('now', '-5 minutes')""",
                 (dedupe_key,),
             )
             cur = conn.execute(

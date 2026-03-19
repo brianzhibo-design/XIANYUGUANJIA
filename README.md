@@ -1,4 +1,4 @@
-# Xianyu Guanjia (闲鱼管家) v9.2.4
+# Xianyu Guanjia (闲鱼管家) v9.2.5
 
 > **⚠️ 架构变更通知 (v8.1.0+)**
 >

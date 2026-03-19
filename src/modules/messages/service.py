@@ -354,6 +354,12 @@ class MessagesService:
         )
         self._workflow_store: Any | None = None
 
+        try:
+            from src.modules.messages.dedup import MessageDedup
+            self._dedup: MessageDedup | None = MessageDedup()
+        except Exception:
+            self._dedup = None
+
         self.compliance_guard = get_compliance_guard()
         self.compliance_center = ComplianceCenter()
         self.high_risk_keywords = [
@@ -1889,6 +1895,15 @@ class MessagesService:
         item_title = str(session.get("item_title", ""))
         peer_name = str(session.get("peer_name", ""))
         sender_user_id = str(session.get("sender_user_id", ""))
+        create_time = int(session.get("create_time", 0) or 0)
+
+        if msg and session_id and self._dedup and create_time:
+            try:
+                if self._dedup.is_replied(session_id, create_time, msg):
+                    self.logger.debug(f"process_session dedup hit: session={session_id}, msg={msg[:30]}")
+                    return {"skipped": True, "reason": "dedup", "session_id": session_id}
+            except Exception:
+                pass
 
         reply_text, quote_meta = await self._generate_reply_with_quote(
             msg,
@@ -1954,6 +1969,12 @@ class MessagesService:
                 sent = await self.reply_to_session(session_id, reply_text, page_id=page_id)
             if not sent:
                 self.logger.warning(f"reply_to_session returned False for session={session_id}")
+
+        if sent and msg and session_id and self._dedup and create_time:
+            try:
+                self._dedup.mark_replied(session_id, create_time, msg, reply_text or "")
+            except Exception:
+                pass
 
         if msg:
             self._check_order_trigger(msg)
