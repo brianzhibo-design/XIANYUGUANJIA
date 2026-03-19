@@ -45,6 +45,10 @@ def _is_known_geo(location: str | None) -> bool:
     n = GeoResolver.normalize(location)
     if n in _geo_known_cache:
         return True
+    if n.endswith("市") and len(n) > 1:
+        n_short = n[:-1]
+        if n_short in _geo_known_cache:
+            return True
     for known in _geo_known_cache:
         if len(known) >= 2 and known.startswith(n):
             return True
@@ -309,6 +313,26 @@ class QuoteMessageParser:
         return "standard"
 
     @staticmethod
+    def _normalize_location_for_geo(loc: str | None) -> str | None:
+        """将市区级地址归一为省/市名以便 Geo 校验。如 广州市天河区 -> 广州，湖北省武汉市 -> 湖北。"""
+        if not loc or not loc.strip():
+            return None
+        s = re.sub(r"\s+", "", loc.strip())
+        province_city = re.search(r"(?:省|自治区)([\u4e00-\u9fa5]{2,6}?)市", s)
+        if province_city:
+            return province_city.group(1) + "市"
+        city_match = re.search(r"([\u4e00-\u9fa5]{2,6})市", s)
+        for suffix in ("特别行政区", "自治区", "自治州", "地区", "省", "市", "县", "区"):
+            if s.endswith(suffix):
+                s = s[: -len(suffix)]
+                break
+        if city_match:
+            return city_match.group(1) + "市"
+        if s:
+            return s
+        return loc.strip()
+
+    @staticmethod
     def extract_locations(message_text: str) -> tuple[str | None, str | None]:
         text = _normalize_chinese(message_text or "")
 
@@ -318,28 +342,46 @@ class QuoteMessageParser:
             if province and len(province) >= 2:
                 return _validate_geo_return(province, province)
 
+        # 寄件人/收件人、发货地/收货地 等标签格式
         labeled_origin = re.search(
-            r"(?:寄件(?:城市)?|发件(?:城市)?|始发地|发(?=\s*[:：]))\s*[:：，,]?\s*([\u4e00-\u9fa5]{2,20})", text
+            r"(?:寄件(?:人|城市|地)?|发件(?:人|城市|地)?|始发地|发货地|发(?=\s*[:：]))\s*[:：，,]?\s*([\u4e00-\u9fa5]{2,20}(?:省|市|区|县|自治区|特别行政区)?)",
+            text,
         )
         labeled_dest = re.search(
-            r"(?:收件(?:城市)?|目的地|寄到|送到|收(?=\s*[:：]))\s*[:：，,]?\s*([\u4e00-\u9fa5]{2,20})", text
+            r"(?:收件(?:人|城市|地)?|目的地|收货地|寄到|送到|收(?=\s*[:：]))\s*[:：，,]?\s*([\u4e00-\u9fa5]{2,20}(?:省|市|区|县|自治区|特别行政区)?)",
+            text,
         )
         if labeled_origin and labeled_dest:
-            return _validate_geo_return(labeled_origin.group(1), labeled_dest.group(1))
+            o = QuoteMessageParser._normalize_location_for_geo(labeled_origin.group(1))
+            d = QuoteMessageParser._normalize_location_for_geo(labeled_dest.group(1))
+            return _validate_geo_return(o, d)
+
+        # XX寄往YY、从XX到YY
+        from_to = re.search(
+            r"(?:从|自)\s*([\u4e00-\u9fa5]{2,20}(?:省|市|区|县|自治区|特别行政区)?)\s*(?:到|至|寄往|发往)\s*([\u4e00-\u9fa5]{2,20}(?:省|市|区|县|自治区|特别行政区)?)",
+            text,
+        )
+        if from_to:
+            o = QuoteMessageParser._normalize_location_for_geo(from_to.group(1))
+            d = QuoteMessageParser._normalize_location_for_geo(from_to.group(2))
+            if o and d:
+                return _validate_geo_return(o, d)
 
         compact = re.search(
             r"([\u4e00-\u9fa5]{2,20})\s*[~～\-\u2013\u2014\u2015→➔>＞]+\s*([\u4e00-\u9fa5]{2,20})", text
         )
         if compact:
-            return _validate_geo_return(compact.group(1), compact.group(2))
+            o = QuoteMessageParser._normalize_location_for_geo(compact.group(1))
+            d = QuoteMessageParser._normalize_location_for_geo(compact.group(2))
+            return _validate_geo_return(o, d)
 
         patterns = [
             (
                 r"(?:从|由)\s*([\u4e00-\u9fa5]{2,20}?)\s*"
-                r"(?:寄到|发到|送到|到)\s*"
+                r"(?:寄到|发到|送到|寄往|发往|到)\s*"
                 r"([\u4e00-\u9fa5]{2,20}(?:省|市|区|县|自治区|特别行政区|自治州|地区)?)"
             ),
-            r"([\u4e00-\u9fa5]{2,20}?)\s*(?:寄到|发到|送到|到)\s*([\u4e00-\u9fa5]{2,20})",
+            r"([\u4e00-\u9fa5]{2,20}?)\s*(?:寄到|发到|送到|寄往|发往|到)\s*([\u4e00-\u9fa5]{2,20})",
             r"([\u4e00-\u9fa5]{2,4})\s*(?:发(?![了的个件给过货到着快包邮顺])|寄(?![了的个件给过到着快包邮顺]))\s*([\u4e00-\u9fa5]{2,4})",
             r"([\u4e00-\u9fa5]{2,4})\s*([\u4e00-\u9fa5]{2,4})\s*\d+(?:\.\d+)?\s*(?:kg|公斤|斤|g|克)",
         ]
@@ -355,7 +397,9 @@ class QuoteMessageParser:
                         text[:60],
                     )
                     continue
-                return _validate_geo_return(origin, dest)
+                o = QuoteMessageParser._normalize_location_for_geo(origin)
+                d = QuoteMessageParser._normalize_location_for_geo(dest)
+                return _validate_geo_return(o, d)
 
         dest = None
         dm = re.search(
@@ -363,7 +407,7 @@ class QuoteMessageParser:
             text,
         )
         if dm:
-            dest = dm.group(1)
+            dest = QuoteMessageParser._normalize_location_for_geo(dm.group(1))
 
         origin = None
         om = re.search(
@@ -371,7 +415,7 @@ class QuoteMessageParser:
             text,
         )
         if om:
-            origin = om.group(1)
+            origin = QuoteMessageParser._normalize_location_for_geo(om.group(1))
 
         return _validate_geo_return(origin, dest)
 

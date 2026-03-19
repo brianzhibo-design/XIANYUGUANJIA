@@ -361,12 +361,41 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def _get_live_dashboard(self) -> LiveDashboardDataSource:
         return LiveDashboardDataSource(self._make_xgj_client)
 
+    def _enrich_summary_with_message_and_order_stats(self, result: dict[str, Any]) -> None:
+        """Merge inquiries, reply_rate_pct, paid_order_count, conversion_rate_pct into summary."""
+        try:
+            status = self.mimic_ops.service_status()
+            msg = status.get("message_stats") or {}
+            inquiries = int(msg.get("total_conversations", 0) or 0)
+            total_replied = int(msg.get("total_replied", 0) or 0)
+            result["inquiries"] = inquiries
+            result["total_replied"] = total_replied
+            result["reply_rate_pct"] = (
+                round(100.0 * total_replied / inquiries, 1) if inquiries else 0.0
+            )
+        except Exception:
+            result.setdefault("inquiries", 0)
+            result.setdefault("total_replied", 0)
+            result.setdefault("reply_rate_pct", 0.0)
+        try:
+            agg = self.mimic_ops.get_dashboard_readonly_aggregate()
+            if isinstance(agg, dict) and agg.get("success"):
+                sections = agg.get("sections") or {}
+                po = sections.get("product_operations") or {}
+                summary = po.get("summary") or {}
+                result["paid_order_count"] = summary.get("paid_order_count")
+                result["conversion_rate_pct"] = summary.get("conversion_rate_pct")
+        except Exception:
+            result.setdefault("paid_order_count", None)
+            result.setdefault("conversion_rate_pct", None)
+
     def _legacy_dashboard_payload(self, path: str, query: dict[str, list[str]]) -> dict[str, Any]:
         live = self._get_live_dashboard()
         try:
             if path == "/api/summary":
                 result = live.get_summary()
                 if result.get("source") == "xianguanjia_api":
+                    self._enrich_summary_with_message_and_order_stats(result)
                     return result
         except Exception:
             logger.debug("LiveDashboard summary failed, falling back to local DB", exc_info=True)
@@ -400,7 +429,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             logger.debug("LiveDashboard trend failed, falling back", exc_info=True)
 
         if path == "/api/summary":
-            return self.repo.get_summary()
+            result = self.repo.get_summary()
+            self._enrich_summary_with_message_and_order_stats(result)
+            return result
         if path == "/api/trend":
             metric = (query.get("metric") or ["views"])[0]
             days = _safe_int((query.get("days") or ["30"])[0], default=30, min_value=1, max_value=120)
@@ -775,7 +806,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
     if apm_cfg.get("enabled") or remind_cfg.get("auto_remind_enabled"):
         from src.modules.orders.auto_price_poller import AutoPricePoller, set_price_poller
 
-        poll_interval = int(apm_cfg.get("poll_interval_seconds", 45))
+        poll_interval = int(apm_cfg.get("poll_interval_seconds", 15))
         price_poller = AutoPricePoller(get_config_fn=_read_system_config, interval=poll_interval)
         price_poller.start()
         set_price_poller(price_poller)

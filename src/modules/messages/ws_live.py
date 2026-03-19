@@ -1355,11 +1355,26 @@ class GoofishWsTransport:
                 return True
         return False
 
+    _ORDER_TRIGGER_KEYWORDS = ("已拍下", "待付款", "买家已付款")
+
     async def _push_event(self, event: dict[str, Any]) -> None:
         chat_id = str(event.get("chat_id", "") or "")
         sender_id = str(event.get("sender_user_id", "") or "")
         text = str(event.get("text", "") or "")
         create_time = int(event.get("create_time", int(time.time() * 1000)) or int(time.time() * 1000))
+
+        # 订单事件快速检测：命中即唤醒改价轮询，不等 process_session
+        if text and any(kw in text for kw in self._ORDER_TRIGGER_KEYWORDS):
+            try:
+                from src.modules.orders.auto_price_poller import get_price_poller
+
+                poller = get_price_poller()
+                if poller:
+                    poller.trigger_now()
+                    self.logger.debug("Order event trigger: woke price poller for text=%s", text[:40])
+            except Exception:
+                pass
+
         if not chat_id or not sender_id or not text:
             return
 
@@ -2025,6 +2040,33 @@ _ws_transport_instance: GoofishWsTransport | None = None
 def set_ws_transport_instance(transport: GoofishWsTransport | None) -> None:
     global _ws_transport_instance
     _ws_transport_instance = transport
+
+
+def get_ws_transport_instance() -> GoofishWsTransport | None:
+    """Return the current WS transport instance for cookie cascade refresh."""
+    return _ws_transport_instance
+
+
+async def run_cascade_cookie_refresh(transport: GoofishWsTransport) -> bool:
+    """Run cascade cookie refresh: IM -> CookieCloud -> BitBrowser/rookiepy.
+    Returns True if any source applied a new cookie.
+    """
+    if await transport._try_goofish_im_refresh(urgent=True):
+        return True
+    if await transport._try_cookiecloud_poll() is True:
+        return True
+    try:
+        from src.core.bitbrowser_cdp import get_fp_config
+        fp_cfg = get_fp_config(transport.config)
+        if fp_cfg.get("enabled"):
+            if await transport._try_bitbrowser_cookie_refresh():
+                return True
+        else:
+            if await transport._try_active_cookie_refresh():
+                return True
+    except Exception:
+        pass
+    return False
 
 
 def get_session_by_buyer_nick(nick: str) -> str:

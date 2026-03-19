@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { getDashboardSummary, getRecentOperations, getSystemStatus, getTrendData, getTopProducts, getSliderStats, type SliderStats } from '../api/dashboard'
+import { getDashboardSummary, getRecentOperations, getSystemStatus, getTrendData, getTopProducts, getSliderStats, getUnmatchedStats, generateRuleSuggestions, applyRuleSuggestion, type SliderStats, type RuleSuggestion } from '../api/dashboard'
 import { Store, ShoppingBag, MessageCircle, FileText, AlertCircle, RefreshCw, Settings, Zap, Bot, BarChart3, Clock, Package, TrendingUp, Calendar, Send, Shield, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react'
 import toast from 'react-hot-toast'
 import SetupGuide from '../components/SetupGuide'
@@ -185,7 +185,17 @@ const TABS = [
 const Dashboard = () => {
   const { category, meta } = useStoreCategory();
   const [activeTab, setActiveTab] = useState('overview');
-  const [stats, setStats] = useState({ products: 0, orders: 0, sales: 0, totalOrders: 0 });
+  const [stats, setStats] = useState({
+    products: 0,
+    orders: 0,
+    sales: 0,
+    totalOrders: 0,
+    inquiries: 0,
+    total_replied: 0,
+    reply_rate_pct: 0,
+    paid_order_count: null as number | null,
+    conversion_rate_pct: null as number | null,
+  });
   const [dataSource, setDataSource] = useState<string>('');
   const [recentOps, setRecentOps] = useState([]);
   const [sysStatus, setSysStatus] = useState(null);
@@ -200,6 +210,52 @@ const Dashboard = () => {
   const [trendData, setTrendData] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [unmatchedStats, setUnmatchedStats] = useState<{ total_count: number; top_keywords: Array<{ word: string; count: number }> } | null>(null);
+  const [ruleSuggestions, setRuleSuggestions] = useState<RuleSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+
+  const handleGenerateSuggestions = useCallback(async () => {
+    setSuggestionsLoading(true);
+    try {
+      const res = await generateRuleSuggestions();
+      const payload = res.data?.data ?? res.data;
+      if (payload?.ok && Array.isArray(payload.suggestions)) {
+        setRuleSuggestions(payload.suggestions);
+        if (payload.suggestions.length === 0) toast('暂无新规则建议', { icon: 'ℹ️' });
+        else toast.success(`生成了 ${payload.suggestions.length} 条规则建议`);
+      } else {
+        toast.error(payload?.message || payload?.error || '生成失败');
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || '规则建议生成失败');
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, []);
+
+  const handleApplySuggestion = useCallback(async (suggestion: RuleSuggestion) => {
+    try {
+      const { reason, ...rule } = suggestion;
+      const res = await applyRuleSuggestion(rule);
+      const payload = res.data?.data ?? res.data;
+      if (payload?.ok) {
+        toast.success(payload.message || '规则已添加');
+        setRuleSuggestions(prev => prev.filter(s => s.name !== suggestion.name));
+      } else {
+        toast.error(payload?.message || payload?.error || '应用失败');
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || '规则应用失败');
+    }
+  }, []);
+
+  const parseUnmatchedResult = useCallback((res: PromiseSettledResult<any> | undefined) => {
+    if (res?.status !== 'fulfilled') return;
+    const payload = res.value?.data?.data ?? res.value?.data;
+    if (payload?.ok || payload?.total_count != null) {
+      setUnmatchedStats({ total_count: payload.total_count ?? 0, top_keywords: payload.top_keywords ?? [] });
+    }
+  }, []);
 
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
@@ -219,6 +275,11 @@ const Dashboard = () => {
         orders: raw.pending_orders ?? raw.today_operations ?? 0,
         sales: raw.total_sales ?? 0,
         totalOrders: raw.total_orders ?? raw.total_operations ?? 0,
+        inquiries: raw.inquiries ?? 0,
+        total_replied: raw.total_replied ?? 0,
+        reply_rate_pct: raw.reply_rate_pct ?? 0,
+        paid_order_count: raw.paid_order_count ?? null,
+        conversion_rate_pct: raw.conversion_rate_pct ?? null,
       });
     }
     if (opsRes?.data) {
@@ -238,17 +299,18 @@ const Dashboard = () => {
     try {
       setLoading(true);
       const results = await Promise.allSettled([
-        getDashboardSummary(), getRecentOperations(10), getSystemStatus()
+        getDashboardSummary(), getRecentOperations(10), getSystemStatus(), getUnmatchedStats()
       ]);
-      if (results.every(r => r.status === 'rejected')) throw new Error('所有接口均请求失败');
+      if (results.slice(0, 3).every(r => r.status === 'rejected')) throw new Error('所有接口均请求失败');
       applyDashboardResults(results);
+      parseUnmatchedResult(results[3]);
     } catch (error) {
       console.error('Dashboard fetch failed:', error);
       toast.error('获取仪表盘数据失败');
     } finally {
       setLoading(false);
     }
-  }, [applyDashboardResults]);
+  }, [applyDashboardResults, parseUnmatchedResult]);
 
   const silentRefreshDashboard = useCallback(async () => {
     if (refreshingRef.current) return;
@@ -256,14 +318,15 @@ const Dashboard = () => {
     setRefreshing(true);
     try {
       const results = await Promise.allSettled([
-        getDashboardSummary(), getRecentOperations(10), getSystemStatus()
+        getDashboardSummary(), getRecentOperations(10), getSystemStatus(), getUnmatchedStats()
       ]);
-      if (!results.every(r => r.status === 'rejected')) {
+      if (!results.slice(0, 3).every(r => r.status === 'rejected')) {
         applyDashboardResults(results);
       }
+      parseUnmatchedResult(results[3]);
     } catch { /* silent */ }
     finally { refreshingRef.current = false; setRefreshing(false); }
-  }, [applyDashboardResults]);
+  }, [applyDashboardResults, parseUnmatchedResult]);
 
   const applyAnalyticsResults = useCallback((trendRes: any, topRes: any) => {
     if (trendRes?.data) {
@@ -423,6 +486,95 @@ const Dashboard = () => {
               </div>
             ))}
           </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-6">
+            {[
+              { label: '今日询盘', value: stats.inquiries ?? 0, icon: MessageCircle, color: 'bg-violet-50', iconColor: 'text-violet-500' },
+              { label: '回复率', value: `${stats.reply_rate_pct ?? 0}%`, icon: BarChart3, color: 'bg-cyan-50', iconColor: 'text-cyan-500' },
+              { label: '成交量', value: stats.paid_order_count ?? '--', icon: Package, color: 'bg-amber-50', iconColor: 'text-amber-500' },
+              { label: '转化率', value: stats.conversion_rate_pct != null ? `${stats.conversion_rate_pct}%` : '--', icon: TrendingUp, color: 'bg-emerald-50', iconColor: 'text-emerald-500' },
+            ].map(card => (
+              <div key={card.label} className="xy-card p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`p-2.5 ${card.color} rounded-lg`}>
+                    <card.icon className={`h-5 w-5 ${card.iconColor}`} />
+                  </div>
+                </div>
+                <p className="text-xs font-medium text-xy-text-secondary mb-0.5">{card.label}</p>
+                <p className="text-xl font-bold text-xy-text-primary">{card.value}</p>
+              </div>
+            ))}
+          </div>
+          {unmatchedStats && (unmatchedStats.total_count > 0 || unmatchedStats.top_keywords.length > 0) && (
+            <div className="xy-card p-4 mb-6">
+              <h3 className="text-sm font-semibold text-xy-text-primary mb-2 flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-violet-500" /> 未匹配消息统计
+              </h3>
+              <p className="text-xs text-xy-text-secondary mb-2">近 {unmatchedStats.total_count} 条未命中规则，可据此优化关键词回复。</p>
+              {unmatchedStats.top_keywords.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {unmatchedStats.top_keywords.slice(0, 10).map(({ word, count }) => (
+                    <span key={word} className="px-2 py-1 rounded-lg bg-violet-50 text-violet-700 text-xs font-medium">
+                      {word} <span className="text-violet-500">×{count}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* L2 智能学习 — 规则建议 */}
+          <div className="xy-card p-4 mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-xy-text-primary flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-500" /> 智能规则建议
+              </h3>
+              <button
+                onClick={handleGenerateSuggestions}
+                disabled={suggestionsLoading}
+                className="px-3 py-1 text-xs rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors font-medium"
+              >
+                {suggestionsLoading ? '分析中...' : '生成建议'}
+              </button>
+            </div>
+            <p className="text-xs text-xy-text-secondary mb-3">基于未匹配消息，AI 自动分析并建议新回复规则。审核通过后一键生效。</p>
+            {ruleSuggestions.length > 0 ? (
+              <div className="space-y-3">
+                {ruleSuggestions.map((s) => (
+                  <div key={s.name} className="border border-xy-border rounded-lg p-3 bg-xy-gray-50">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-xy-text-primary mb-1">{s.name}</p>
+                        <div className="flex flex-wrap gap-1 mb-1">
+                          {s.keywords.map(kw => (
+                            <span key={kw} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px]">{kw}</span>
+                          ))}
+                        </div>
+                        <p className="text-xs text-xy-text-secondary">{s.reply}</p>
+                        {s.reason && <p className="text-[10px] text-xy-text-muted mt-1 italic">{s.reason}</p>}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          onClick={() => handleApplySuggestion(s)}
+                          className="px-2 py-1 text-[10px] rounded bg-green-50 text-green-700 hover:bg-green-100 font-medium"
+                        >
+                          采纳
+                        </button>
+                        <button
+                          onClick={() => setRuleSuggestions(prev => prev.filter(x => x.name !== s.name))}
+                          className="px-2 py-1 text-[10px] rounded bg-gray-100 text-gray-500 hover:bg-gray-200 font-medium"
+                        >
+                          忽略
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-xy-text-muted text-center py-2">点击"生成建议"开始分析未匹配消息</p>
+            )}
+          </div>
+
           {dataSource && (
             <p className="text-xs text-xy-text-muted mb-4 -mt-4">
               数据来源：{dataSource === 'xianguanjia_api' ? '闲管家 API（实时）' : '本地数据库（离线）'}

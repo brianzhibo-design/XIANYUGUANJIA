@@ -118,13 +118,36 @@ class CookieHealthChecker:
             return self._cached_result
 
         result = await self._do_check_async()
+
+        # 不健康时尝试级联刷新：闲管家 IM -> CookieCloud -> cookie_grabber
+        if not result.get("healthy"):
+            refreshed = await self._run_cascade_refresh()
+            if refreshed:
+                self.cookie_text = os.getenv("XIANYU_COOKIE_1", "")
+                result = await self._do_check_async()
+                if result.get("healthy"):
+                    logger.info("Cookie 级联刷新成功，健康检查已恢复")
+
         self._last_check_ts = time.time()
         self._cached_result = result
 
-        # 状态变化时触发告警 / 恢复通知
+        # 状态变化时触发告警 / 恢复通知（全部失败时飞书告警）
         await self._handle_state_change(result)
 
         return result
+
+    async def _run_cascade_refresh(self) -> bool:
+        """级联刷新：IM (30s 冷却) -> CookieCloud (120s) -> grabber (300s)。任一成功即返回 True。"""
+        try:
+            from src.modules.messages.ws_live import get_ws_transport_instance, run_cascade_cookie_refresh
+
+            transport = get_ws_transport_instance()
+            if transport is None:
+                return False
+            return await run_cascade_cookie_refresh(transport)
+        except Exception as exc:
+            logger.debug("Cookie 级联刷新异常: %s", exc)
+            return False
 
     def _do_check_sync(self) -> dict[str, Any]:
         """同步 HTTP 探测 + _m_h5_tk TTL 检查。"""

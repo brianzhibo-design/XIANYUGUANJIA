@@ -171,10 +171,17 @@ class QuoteReplyComposer:
 
         if actual_w is not None and billing_w is not None:
             weight_parts: list[str] = [f"实际重量 {float(actual_w):.1f}kg"]
-            if volume_w and float(volume_w) > 0:
-                weight_parts.append(f"体积重 {float(volume_w):.1f}kg")
+            vol_w_val = float(volume_w or 0)
+            if vol_w_val > 0:
+                weight_parts.append(f"体积重 {vol_w_val:.1f}kg")
             weight_parts.append(f"按 {float(billing_w):.1f}kg 计费")
             seg1_lines.append(" | ".join(weight_parts))
+            # 体积重计费时展示真实抛比公式（配置中 5000/6000/8000 等）
+            if vol_w_val > 0 and float(billing_w or 0) >= vol_w_val:
+                divisor = first_explain.get("volume_divisor")
+                if divisor is not None and float(divisor) > 0:
+                    div_int = int(float(divisor))
+                    seg1_lines.append(f"体积重公式：长×宽×高(cm)/{div_int}，本次按体积重计费~")
 
         def _format_courier_line(index: int, courier_name: str, result: QuoteResult) -> str:
             exp = result.explain if isinstance(result.explain, dict) else {}
@@ -234,6 +241,10 @@ class QuoteReplyComposer:
                 seg1_lines.append(_format_courier_line(i, name, result))
 
         seg1_lines.append(random.choice(self._PICK_COURIER_VARIANTS))
+
+        if len(quote_rows) == 1:
+            single_courier = quote_rows[0][0]
+            seg1_lines.append(f"您这个路线目前 {single_courier} 快递最优惠，其他快递暂无报价或价格偏高~")
 
         segments: list[str] = ["\n".join(seg1_lines)]
 

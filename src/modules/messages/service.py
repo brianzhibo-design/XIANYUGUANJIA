@@ -898,6 +898,7 @@ class MessagesService:
         prompt = (
             "你是快递代寄服务的客服助手。根据买家消息生成简短友好的回复。\n"
             "业务信息：我们代理韵达/圆通/中通/申通快递，不支持顺丰和京东。\n"
+            "术语规范：提及顺丰时用「顺丰到付」不用「顺丰代收」；大件/快运用「中通快运」「德邦快运」等，与「中通快递」「韵达快递」区分。\n"
             "下单流程：闲鱼拍下→改价→付款→收到兑换码→到小程序兑换余额→填地址选快递下单。\n"
             "首单优惠：首次使用新手机号可享首单优惠价，续重不变。如买家问价格，引导提供'寄件城市-收件城市-重量'以便精确报价，严禁自行编造具体金额。\n"
             f"{faq_context}"
@@ -931,13 +932,23 @@ class MessagesService:
             pass
         return ""
 
+    _QUOTE_HISTORY_MERGE_SIZE = 5
+
     def _build_quote_request_with_context(
         self,
         message_text: str,
         session_id: str = "",
     ) -> tuple[QuoteRequest | None, list[str], dict[str, Any], bool]:
+        # 多轮上下文：合并最近 N 条买家消息与当前消息，供地址/重量等提取
+        text_for_extraction = message_text
+        if session_id and getattr(self, "_quote_context_store", None):
+            ctx = self._get_quote_context(session_id)
+            history = ctx.get("chat_history") or []
+            buyer_texts = [h["text"] for h in history if h.get("role") == "buyer"][-self._QUOTE_HISTORY_MERGE_SIZE :]
+            if buyer_texts:
+                text_for_extraction = "\n".join(buyer_texts)
         return self._quote_parser.build_quote_request_with_context(
-            message_text,
+            text_for_extraction,
             session_id,
             get_context=self._get_quote_context,
             update_context=self._update_quote_context,
@@ -1093,21 +1104,34 @@ class MessagesService:
     def _build_quote_request(self, message_text: str) -> tuple[QuoteRequest | None, list[str]]:
         return self._quote_parser.build_quote_request(message_text)
 
-    def _log_unmatched_message(self, message_text: str) -> None:
+    def _log_unmatched_message(
+        self,
+        message_text: str,
+        *,
+        session_id: str | None = None,
+        item_title: str | None = None,
+    ) -> None:
         try:
             log_path = Path("data/unmatched_messages.jsonl")
             log_path.parent.mkdir(parents=True, exist_ok=True)
-            entry = json.dumps(
-                {
-                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "msg": (message_text or "")[:200],
-                },
-                ensure_ascii=False,
-            )
+            payload = {
+                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "msg": (message_text or "")[:200],
+            }
+            if session_id:
+                payload["session_id"] = session_id[:64]
+            if item_title:
+                payload["item_title"] = (item_title or "")[:100]
+            entry = json.dumps(payload, ensure_ascii=False)
             with open(log_path, "a", encoding="utf-8") as f:
                 f.write(entry + "\n")
         except Exception:
             pass
+
+    _BRAND_TERM_CORRECTIONS = (
+        ("顺丰代收", "顺丰到付"),
+        ("中通快递（大件", "中通快运（大件"),
+    )
 
     def _sanitize_reply(self, reply_text: str) -> str:
         text = (reply_text or "").strip()
@@ -1118,6 +1142,8 @@ class MessagesService:
 
         for forbidden, safe in get_word_replacements().items():
             text = text.replace(forbidden, safe)
+        for wrong, correct in self._BRAND_TERM_CORRECTIONS:
+            text = text.replace(wrong, correct)
 
         lowered = text.lower()
         if any(keyword in lowered for keyword in self.high_risk_keywords):
@@ -1264,6 +1290,40 @@ class MessagesService:
                         "[quote_override] Rule '%s' yielded to quote engine (buyer has quote intent + complete info)",
                         pre_matched.name,
                     )
+                else:
+                    # 部分信息：存入上下文并返回智能追问，不再用固定规则回复
+                    has_partial = _origin or _dest or (_weight is not None and _weight > 0)
+                    if has_partial and session_id:
+                        if _origin is not None or _dest is not None:
+                            self._update_quote_context(
+                                session_id,
+                                origin=_origin or context_before.get("origin"),
+                                destination=_dest or context_before.get("destination"),
+                            )
+                        if _weight is not None and _weight > 0:
+                            self._update_quote_context(session_id, weight=_weight)
+                        ctx_merged = self._get_quote_context(session_id)
+                        missing = []
+                        if not ctx_merged.get("origin"):
+                            missing.append("origin")
+                        if not ctx_merged.get("destination"):
+                            missing.append("destination")
+                        w = ctx_merged.get("weight")
+                        if w is None or (isinstance(w, (int, float)) and float(w) <= 0):
+                            missing.append("weight")
+                        if missing:
+                            extracted_fields = {
+                                "origin": ctx_merged.get("origin") or "",
+                                "destination": ctx_merged.get("destination") or "",
+                                "weight": ctx_merged.get("weight"),
+                            }
+                            prompt = self._build_natural_missing_prompt(missing, extracted_fields)
+                            return self._sanitize_reply(prompt), {
+                                "is_quote": True,
+                                "quote_need_info": True,
+                                "quote_missing_fields": missing,
+                                "rule_matched": pre_matched.name,
+                            }
 
             if use_rule_reply:
                 reply = pre_matched.reply
@@ -1363,9 +1423,13 @@ class MessagesService:
                         "ai_generated": True,
                         "quote_context_enabled": bool(self.context_memory_enabled),
                     }
-                self._log_unmatched_message(message_text)
+                self._log_unmatched_message(
+                    message_text, session_id=session_id or None, item_title=item_title or None
+                )
             elif is_default:
-                self._log_unmatched_message(message_text)
+                self._log_unmatched_message(
+                    message_text, session_id=session_id or None, item_title=item_title or None
+                )
             return self._sanitize_reply(reply), {
                 "is_quote": False,
                 "quote_context_enabled": bool(self.context_memory_enabled),

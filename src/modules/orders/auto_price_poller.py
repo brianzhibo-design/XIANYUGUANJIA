@@ -13,7 +13,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_POLL_INTERVAL_DEFAULT = 45
+_POLL_INTERVAL_DEFAULT = 15
 _MAX_QUOTE_AGE_DEFAULT = 7200
 _PROCESSED_CACHE_TTL = 3600
 
@@ -218,30 +218,65 @@ class AutoPricePoller:
             self._processed[order_no] = time.time()
             return
 
-        try:
-            modify_resp = client.modify_order_price(
-                {
-                    "order_no": order_no,
-                    "order_price": target_price_cents,
-                    "express_fee": express_fee_cents,
-                }
-            )
-            if modify_resp.ok:
-                logger.info(
-                    "AutoPricePoller: SUCCESS order=%s from=%d to=%d (express=%d)",
-                    order_no,
-                    total_amount,
-                    target_price_cents,
-                    express_fee_cents,
+        retry_delays = (2, 4, 8)
+        last_exc = None
+        modify_resp = None
+        for attempt in range(1 + len(retry_delays)):
+            try:
+                modify_resp = client.modify_order_price(
+                    {
+                        "order_no": order_no,
+                        "order_price": target_price_cents,
+                        "express_fee": express_fee_cents,
+                    }
                 )
-                self._processed[order_no] = time.time()
-            else:
-                logger.warning(
-                    "AutoPricePoller: FAILED order=%s error=%s",
+                if modify_resp.ok:
+                    logger.info(
+                        "AutoPricePoller: SUCCESS order=%s from=%d to=%d (express=%d)",
+                        order_no,
+                        total_amount,
+                        target_price_cents,
+                        express_fee_cents,
+                    )
+                    self._processed[order_no] = time.time()
+                    return
+                last_exc = None
+                if not getattr(modify_resp, "retryable", False) or attempt >= len(retry_delays):
+                    break
+                delay = retry_delays[attempt]
+                logger.info(
+                    "AutoPricePoller: retry in %ds (attempt %d) order=%s error=%s",
+                    delay,
+                    attempt + 1,
                     order_no,
                     modify_resp.error_message,
                 )
-        except Exception:
+                time.sleep(delay)
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= len(retry_delays):
+                    break
+                from src.integrations.xianguanjia.errors import is_retryable_error
+
+                if not is_retryable_error(exc):
+                    raise
+                delay = retry_delays[attempt]
+                logger.info(
+                    "AutoPricePoller: retry in %ds (attempt %d) order=%s exc=%s",
+                    delay,
+                    attempt + 1,
+                    order_no,
+                    type(exc).__name__,
+                )
+                time.sleep(delay)
+
+        if modify_resp is not None and not modify_resp.ok:
+            logger.warning(
+                "AutoPricePoller: FAILED order=%s error=%s",
+                order_no,
+                modify_resp.error_message,
+            )
+        if last_exc is not None:
             logger.error("AutoPricePoller: modify_order_price error for order=%s", order_no, exc_info=True)
 
     def _evict_stale_cache(self) -> None:

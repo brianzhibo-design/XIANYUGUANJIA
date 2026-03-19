@@ -747,29 +747,68 @@ class MimicOps:
                 logger.info("Auto-price-modify: price already correct for order=%s", order_no)
                 return
 
-            modify_resp = client.modify_order_price(
-                {
-                    "order_no": order_no,
-                    "order_price": target_price_cents,
-                    "express_fee": express_fee_cents,
-                }
-            )
+            import time as _time
 
-            if modify_resp.ok:
-                logger.info(
-                    "Auto-price-modify: SUCCESS order=%s from=%d to=%d (express=%d)",
-                    order_no,
-                    total_amount,
-                    target_price_cents,
-                    express_fee_cents,
-                )
-                self._mark_order_processed_in_poller(order_no)
-            else:
+            retry_delays = (2, 4, 8)
+            last_exc = None
+            modify_resp = None
+            for attempt in range(1 + len(retry_delays)):
+                try:
+                    modify_resp = client.modify_order_price(
+                        {
+                            "order_no": order_no,
+                            "order_price": target_price_cents,
+                            "express_fee": express_fee_cents,
+                        }
+                    )
+                    if modify_resp.ok:
+                        logger.info(
+                            "Auto-price-modify: SUCCESS order=%s from=%d to=%d (express=%d)",
+                            order_no,
+                            total_amount,
+                            target_price_cents,
+                            express_fee_cents,
+                        )
+                        self._mark_order_processed_in_poller(order_no)
+                        return
+                    last_exc = None
+                    if not getattr(modify_resp, "retryable", False) or attempt >= len(retry_delays):
+                        break
+                    delay = retry_delays[attempt]
+                    logger.info(
+                        "Auto-price-modify: retry in %ds (attempt %d) order=%s error=%s",
+                        delay,
+                        attempt + 1,
+                        order_no,
+                        modify_resp.error_message,
+                    )
+                    _time.sleep(delay)
+                except Exception as exc:
+                    last_exc = exc
+                    if attempt >= len(retry_delays):
+                        break
+                    from src.integrations.xianguanjia.errors import is_retryable_error
+
+                    if not is_retryable_error(exc):
+                        raise
+                    delay = retry_delays[attempt]
+                    logger.info(
+                        "Auto-price-modify: retry in %ds (attempt %d) order=%s exc=%s",
+                        delay,
+                        attempt + 1,
+                        order_no,
+                        type(exc).__name__,
+                    )
+                    _time.sleep(delay)
+
+            if modify_resp is not None and not modify_resp.ok:
                 logger.warning(
                     "Auto-price-modify: FAILED order=%s error=%s",
                     order_no,
                     modify_resp.error_message,
                 )
+            if last_exc is not None:
+                raise last_exc
 
         except Exception:
             logger.error("Auto-price-modify: unexpected error for order=%s", order_no, exc_info=True)
@@ -2132,6 +2171,64 @@ class MimicOps:
         if not path.is_absolute():
             path = self.project_root / path
         return path
+
+    def get_unmatched_message_stats(self, max_lines: int = 3000, top_n: int = 10) -> dict[str, Any]:
+        """统计 data/unmatched_messages.jsonl 的高频词与趋势。"""
+        from collections import Counter
+
+        path = self.project_root / "data" / "unmatched_messages.jsonl"
+        if not path.exists():
+            return {
+                "ok": True,
+                "total_count": 0,
+                "top_keywords": [],
+                "daily_counts": [],
+            }
+        lines: list[str] = []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    lines.append(line)
+                    if len(lines) > max_lines:
+                        lines.pop(0)
+        except Exception as exc:
+            logger.warning("unmatched_messages read failed: %s", exc)
+            return {"ok": False, "error": str(exc), "total_count": 0, "top_keywords": [], "daily_counts": []}
+        total = len(lines)
+        msgs: list[str] = []
+        daily: dict[str, int] = {}
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                msg = (obj.get("msg") or "").strip()
+                if msg:
+                    msgs.append(msg)
+                ts = obj.get("ts", "")
+                if ts:
+                    day = ts[:10]
+                    daily[day] = daily.get(day, 0) + 1
+            except Exception:
+                continue
+        counter: Counter[str] = Counter()
+        for msg in msgs:
+            for seg in re.findall(r"[\u4e00-\u9fa5]{2,4}", msg):
+                if len(seg) >= 2:
+                    counter[seg] += 1
+            for part in re.split(r"[，。！？、；：\s]+", msg):
+                part = part.strip()
+                if part and len(part) >= 2 and not part.isdigit():
+                    counter[part] += 1
+        top_keywords = [{"word": w, "count": c} for w, c in counter.most_common(top_n)]
+        daily_counts = [{"date": d, "count": daily[d]} for d in sorted(daily.keys(), reverse=True)[:14]]
+        return {
+            "ok": True,
+            "total_count": total,
+            "top_keywords": top_keywords,
+            "daily_counts": daily_counts,
+        }
 
     def _query_message_stats_from_workflow(self) -> dict[str, Any] | None:
         db_path = self._workflow_db_path()

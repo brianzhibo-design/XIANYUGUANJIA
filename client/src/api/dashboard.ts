@@ -8,6 +8,12 @@ export interface DashboardSummary {
   total_sales: number;
   total_orders: number;
   source?: string;
+  // 询盘与成交
+  inquiries?: number;
+  total_replied?: number;
+  reply_rate_pct?: number;
+  paid_order_count?: number | null;
+  conversion_rate_pct?: number | null;
   // legacy fallback fields
   total_operations?: number;
   today_operations?: number;
@@ -49,6 +55,16 @@ export const getTopProducts = (limit = 12): Promise<AxiosResponse<ApiResponse<To
 export const getRecentOperations = (limit = 20): Promise<AxiosResponse> =>
   api.get(`/recent-operations?limit=${limit}`);
 
+export interface UnmatchedStats {
+  ok: boolean;
+  total_count: number;
+  top_keywords: Array<{ word: string; count: number }>;
+  daily_counts: Array<{ date: string; count: number }>;
+}
+
+export const getUnmatchedStats = (): Promise<AxiosResponse<ApiResponse<UnmatchedStats>>> =>
+  api.get('/unmatched-stats').catch(() => ({ data: { ok: true, total_count: 0, top_keywords: [], daily_counts: [] } }) as any);
+
 export const serviceControl = (action: string): Promise<AxiosResponse> =>
   api.post('/service/control', { action });
 
@@ -89,6 +105,20 @@ export interface SliderEvent {
   puzzle_bg_found: boolean;
   puzzle_slice_found: boolean;
 }
+
+export interface RuleSuggestion {
+  name: string;
+  keywords: string[];
+  reply: string;
+  priority: number;
+  reason: string;
+}
+
+export const generateRuleSuggestions = (): Promise<AxiosResponse<{ ok: boolean; suggestions: RuleSuggestion[]; analyzed_count?: number; message?: string }>> =>
+  api.post('/rule-suggestions/generate');
+
+export const applyRuleSuggestion = (rule: Omit<RuleSuggestion, 'reason'>): Promise<AxiosResponse<{ ok: boolean; message: string; rule: any }>> =>
+  api.post('/rule-suggestions/apply', { rule });
 
 export const getSliderStats = (hours = 24): Promise<AxiosResponse<SliderStats>> =>
   api.get(`/slider/stats?hours=${hours}`);

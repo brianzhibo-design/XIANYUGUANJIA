@@ -69,6 +69,13 @@ def handle_dashboard(ctx: RouteContext) -> None:
 # ---------------------------------------------------------------------------
 
 
+@get("/api/unmatched-stats")
+def handle_unmatched_stats(ctx: RouteContext) -> None:
+    """未匹配消息统计：高频词 Top10 + 每日趋势。"""
+    result = ctx.mimic_ops.get_unmatched_message_stats(max_lines=3000, top_n=10)
+    ctx.send_json(result, status=200 if result.get("ok") else 400)
+
+
 @get("/api/logs/files")
 def handle_logs_files(ctx: RouteContext) -> None:
     ctx.send_json(ctx.mimic_ops.list_log_files())
