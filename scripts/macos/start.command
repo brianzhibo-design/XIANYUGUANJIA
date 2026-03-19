@@ -16,10 +16,8 @@ done
 [ -s "$HOME/.nvm/nvm.sh" ] && source "$HOME/.nvm/nvm.sh" 2>/dev/null || true
 
 # 动态读取版本号
-APP_VERSION="unknown"
-if [ -f "src/__init__.py" ]; then
-    APP_VERSION=$(python3 -c "import re; m=re.search(r'__version__\s*=\s*[\"'\''](.*?)[\"'\'']', open('src/__init__.py').read()); print(m.group(1) if m else 'unknown')" 2>/dev/null || echo "unknown")
-fi
+APP_VERSION=$(grep -oE '__version__\s*=\s*"([^"]+)"' src/__init__.py 2>/dev/null | head -1 | sed 's/.*"\(.*\)"/\1/' || echo "unknown")
+[ -z "$APP_VERSION" ] && APP_VERSION="unknown"
 
 echo ""
 echo "========================================="
@@ -32,6 +30,8 @@ if command -v git >/dev/null 2>&1 && [ -d ".git" ]; then
     echo "[*] 拉取最新代码..."
     if git pull --ff-only 2>/dev/null; then
         echo "[OK] 代码已更新"
+        # 更新后重新读取版本号
+        APP_VERSION=$(grep -oE '__version__\s*=\s*"([^"]+)"' src/__init__.py 2>/dev/null | head -1 | sed 's/.*"\(.*\)"/\1/' || echo "$APP_VERSION")
     else
         echo "[!!] git pull 失败（可能有本地修改），使用当前代码继续"
     fi
@@ -79,16 +79,18 @@ check_port() {
 check_port 8091
 check_port 5173
 
-PIDS=()
+BACKEND_PID=""
+FRONTEND_PID=""
 
 # 启动后端 API (8091)
 echo ""
 echo "[*] 启动后端 (端口 8091)..."
 python3 -m src.dashboard_server --port 8091 &
-PIDS+=($!)
-echo "    PID: ${PIDS[-1]}"
+BACKEND_PID=$!
+echo "    PID: $BACKEND_PID"
 
 # 启动前端 vite dev server (5173)
+FRONTEND_URL="http://localhost:8091"
 if [ -d "client" ] && [ -f "client/package.json" ]; then
     echo "[*] 启动前端 (端口 5173)..."
     if [ ! -d "client/node_modules" ]; then
@@ -96,19 +98,18 @@ if [ -d "client" ] && [ -f "client/package.json" ]; then
         (cd client && npm install --silent) || echo "[!!] npm install 失败"
     fi
     (cd client && npx vite --port 5173) &
-    PIDS+=($!)
-    echo "    PID: ${PIDS[-1]}"
+    FRONTEND_PID=$!
+    echo "    PID: $FRONTEND_PID"
     FRONTEND_URL="http://localhost:5173"
 else
     echo "[!!] 未找到 client/ 目录，仅启动后端"
-    FRONTEND_URL="http://localhost:8091"
 fi
 
 sleep 2
 
 echo ""
 echo "========================================="
-echo "  服务已启动!"
+echo "  服务已启动! (v${APP_VERSION})"
 echo "========================================="
 echo ""
 echo "  管理面板: $FRONTEND_URL"
@@ -128,9 +129,8 @@ fi
 cleanup() {
     echo ""
     echo "[*] 正在停止服务..."
-    for pid in "${PIDS[@]}"; do
-        kill "$pid" 2>/dev/null || true
-    done
+    [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
+    [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
     echo "[OK] 服务已停止"
     exit 0
 }
