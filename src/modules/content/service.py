@@ -213,7 +213,7 @@ class ContentService:
             self.logger.error(f"Unexpected AI call error: {e}")
             return None
 
-    _AI_FALLBACK_TASKS = {"quote_extract", "express_reply", "rule_suggestion"}
+    _AI_FALLBACK_TASKS = {"quote_extract", "express_reply", "rule_suggestion", "weight_infer"}
 
     def _should_call_ai(self, task: str, prompt: str) -> bool:
         if self.usage_mode == "always":

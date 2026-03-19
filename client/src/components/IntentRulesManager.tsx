@@ -222,6 +222,17 @@ function EditModal({ rule, isNew, onSave, onClose }: EditModalProps) {
   );
 }
 
+interface SuggestedRule {
+  name: string;
+  keywords: string[];
+  reply: string;
+  priority: number;
+  categories: string[];
+  phase: string;
+  _source_cluster_size?: number;
+  _created_at?: number;
+}
+
 interface IntentRulesManagerProps {
   config: Record<string, any>;
   onConfigChange: (section: string, key: string, value: any) => void;
@@ -238,6 +249,10 @@ export default function IntentRulesManager({ config, onConfigChange, onSave }: I
   const [searchText, setSearchText] = useState('');
   const [testMessage, setTestMessage] = useState('');
   const [testResult, setTestResult] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'rules' | 'suggestions'>('rules');
+  const [suggestions, setSuggestions] = useState<SuggestedRule[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const fetchRules = useCallback(async () => {
     try {
@@ -254,6 +269,58 @@ export default function IntentRulesManager({ config, onConfigChange, onSave }: I
   }, []);
 
   useEffect(() => { fetchRules(); }, [fetchRules]);
+
+  const fetchSuggestions = useCallback(async () => {
+    setSuggestionsLoading(true);
+    try {
+      const res = await api.get('/intent-rules/suggestions');
+      if (res.data?.ok) {
+        setSuggestions(res.data.suggestions || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'suggestions') fetchSuggestions();
+  }, [activeTab, fetchSuggestions]);
+
+  const handleAnalyze = async () => {
+    setAnalyzing(true);
+    try {
+      const res = await api.post('/intent-rules/analyze');
+      if (res.data?.ok) {
+        setSuggestions(res.data.suggestions || []);
+      }
+    } catch {
+      setError('分析失败');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleAdopt = async (name: string) => {
+    if (!confirm(`采纳规则「${name}」？`)) return;
+    try {
+      await api.post(`/intent-rules/suggestions/${encodeURIComponent(name)}/adopt`);
+      setSuggestions(prev => prev.filter(s => s.name !== name));
+      await fetchRules();
+    } catch {
+      setError('采纳失败');
+    }
+  };
+
+  const handleReject = async (name: string) => {
+    try {
+      await api.post(`/intent-rules/suggestions/${encodeURIComponent(name)}/reject`);
+      setSuggestions(prev => prev.filter(s => s.name !== name));
+    } catch {
+      setError('拒绝失败');
+    }
+  };
 
   const customRules: Omit<IntentRule, 'source'>[] = (config.auto_reply?.custom_intent_rules || []);
 
@@ -344,7 +411,27 @@ export default function IntentRulesManager({ config, onConfigChange, onSave }: I
         </div>
       )}
 
-      {/* Toolbar */}
+      {/* Tab Switcher */}
+      <div className="flex gap-1 bg-xy-gray-50 p-1 rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab('rules')}
+          className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${activeTab === 'rules' ? 'bg-white shadow-sm font-medium text-xy-primary' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          意图规则
+        </button>
+        <button
+          onClick={() => setActiveTab('suggestions')}
+          className={`px-4 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1.5 ${activeTab === 'suggestions' ? 'bg-white shadow-sm font-medium text-xy-primary' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          建议规则
+          {suggestions.length > 0 && (
+            <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] rounded-full">{suggestions.length}</span>
+          )}
+        </button>
+      </div>
+
+      {/* Rules Tab */}
+      {activeTab === 'rules' && (
       <div className="flex flex-wrap items-center gap-3">
         <input
           className="xy-input px-3 py-1.5 text-sm flex-1 min-w-[200px]"
@@ -486,6 +573,71 @@ export default function IntentRulesManager({ config, onConfigChange, onSave }: I
         <p>4. 通用报价引导模板（兜底）</p>
         <p className="text-amber-600 mt-1">保存后自动生效，无需重启服务</p>
       </div>
+      )}
+
+      {/* Suggestions Tab */}
+      {activeTab === 'suggestions' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-500">
+              {suggestions.length > 0
+                ? `基于未匹配消息生成 ${suggestions.length} 条建议规则`
+                : '暂无建议规则，请先分析未匹配消息'}
+            </p>
+            <button
+              onClick={handleAnalyze}
+              disabled={analyzing}
+              className="px-4 py-1.5 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {analyzing ? '分析中...' : '分析未匹配消息'}
+            </button>
+          </div>
+
+          {suggestionsLoading ? (
+            <div className="text-center py-8 text-sm text-gray-400">加载中...</div>
+          ) : suggestions.length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-xl">
+              暂无建议。点击「分析未匹配消息」从 data/unmatched_messages.jsonl 生成规则建议。
+            </div>
+          ) : (
+            <div className="border border-xy-border rounded-xl overflow-hidden divide-y divide-xy-border">
+              {suggestions.map((s, i) => (
+                <div key={`${s.name}-${i}`} className="p-3.5 hover:bg-xy-gray-50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono text-gray-500 mb-1">{s.name}</p>
+                      <div className="flex flex-wrap gap-1 mb-1.5">
+                        {(s.keywords || []).map((kw, ki) => (
+                          <span key={ki} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[11px]">{kw}</span>
+                        ))}
+                      </div>
+                      <p className="text-sm text-xy-text-primary line-clamp-2">{s.reply || '(空回复)'}</p>
+                      <div className="flex gap-2 mt-1.5 text-[10px] text-gray-400">
+                        <span>优先级 {s.priority}</span>
+                        {s._source_cluster_size && <span>聚类 {s._source_cluster_size} 条消息</span>}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 flex flex-col gap-1">
+                      <button
+                        onClick={() => handleAdopt(s.name)}
+                        className="px-2.5 py-1 text-[11px] text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      >
+                        采纳
+                      </button>
+                      <button
+                        onClick={() => handleReject(s.name)}
+                        className="px-2.5 py-1 text-[11px] text-gray-400 hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        忽略
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {editingRule && (
         <EditModal

@@ -254,3 +254,47 @@ def handle_manual_mode_post(ctx: RouteContext) -> None:
             "expires_at": state.expires_at,
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# L2 智能学习路由
+# ---------------------------------------------------------------------------
+
+
+@get("/api/intent-rules/suggestions")
+def handle_intent_rules_suggestions(ctx: RouteContext) -> None:
+    from src.modules.messages.rule_suggester import RuleSuggester
+
+    suggester = RuleSuggester()
+    suggestions = suggester.get_suggestions()
+    ctx.send_json({"ok": True, "suggestions": suggestions})
+
+
+@post("/api/intent-rules/analyze")
+def handle_intent_rules_analyze(ctx: RouteContext) -> None:
+    from src.modules.messages.rule_suggester import RuleSuggester
+
+    suggester = RuleSuggester()
+    suggestions = suggester.analyze_and_suggest()
+    ctx.send_json({"ok": True, "suggestions": suggestions})
+
+
+@post("/api/intent-rules/suggestions/{name}/adopt")
+def handle_intent_rules_adopt(ctx: RouteContext, name: str) -> None:
+    from src.modules.messages.rule_suggester import RuleSuggester
+
+    suggester = RuleSuggester()
+    ok = suggester.adopt_suggestion(name)
+    if ok:
+        ctx.send_json({"ok": True, "message": f"Rule '{name}' adopted"})
+    else:
+        ctx.send_json({"ok": False, "error": f"Suggestion '{name}' not found"}, status=404)
+
+
+@post("/api/intent-rules/suggestions/{name}/reject")
+def handle_intent_rules_reject(ctx: RouteContext, name: str) -> None:
+    from src.modules.messages.rule_suggester import RuleSuggester
+
+    suggester = RuleSuggester()
+    suggester.reject_suggestion(name)
+    ctx.send_json({"ok": True, "message": f"Rule '{name}' rejected"})

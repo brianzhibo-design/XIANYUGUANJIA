@@ -938,20 +938,17 @@ class MessagesService:
         self,
         message_text: str,
         session_id: str = "",
+        *,
+        item_title: str = "",
+        chat_history: list[dict[str, str]] | None = None,
     ) -> tuple[QuoteRequest | None, list[str], dict[str, Any], bool]:
-        # 多轮上下文：合并最近 N 条买家消息与当前消息，供地址/重量等提取
-        text_for_extraction = message_text
-        if session_id and getattr(self, "_quote_context_store", None):
-            ctx = self._get_quote_context(session_id)
-            history = ctx.get("chat_history") or []
-            buyer_texts = [h["text"] for h in history if h.get("role") == "buyer"][-self._QUOTE_HISTORY_MERGE_SIZE :]
-            if buyer_texts:
-                text_for_extraction = "\n".join(buyer_texts)
         return self._quote_parser.build_quote_request_with_context(
-            text_for_extraction,
+            message_text,
             session_id,
             get_context=self._get_quote_context,
             update_context=self._update_quote_context,
+            item_title=item_title,
+            chat_history=chat_history,
         )
 
     _POST_ORDER_EXCLUSIONS = re.compile(
@@ -1362,6 +1359,8 @@ class MessagesService:
         request, missing, extracted_fields, memory_hit = self._build_quote_request_with_context(
             message_text,
             session_id=session_id,
+            item_title=item_title,
+            chat_history=context_before.get("chat_history"),
         )
         if (
             missing
