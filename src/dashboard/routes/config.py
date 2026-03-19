@@ -205,6 +205,11 @@ def _save_config(ctx: RouteContext) -> None:
     _write_system_config(current)
     get_config().reload()
     try:
+        from src.dashboard.routes.system import invalidate_health_cache
+        invalidate_health_cache()
+    except Exception:
+        pass
+    try:
         from src.modules.messages.service import _active_service
 
         if _active_service is not None:

@@ -98,11 +98,9 @@ export default function SetupGuide() {
       const d = healthRes.data;
       if (d.xgj) {
         det.xgj = d.xgj.ok ? `连通 (${d.xgj.latency_ms || 0}ms)` : d.xgj.message;
-        if (result.xgjConfigured && !d.xgj.ok) result.xgjConfigured = false;
       }
       if (d.ai) {
         det.ai = d.ai.ok ? `连通 (${d.ai.latency_ms || 0}ms)` : d.ai.message;
-        if (result.aiConfigured && !d.ai.ok) result.aiConfigured = false;
       }
       if (d.cookie && !result.cookieSet) {
         det.cookie = d.cookie.message;

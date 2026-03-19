@@ -34,6 +34,13 @@ _health_cache_lock = threading.Lock()
 _HEALTH_CACHE_TTL = 30.0
 
 
+def invalidate_health_cache() -> None:
+    """Clear cached health check result so the next request fetches fresh data."""
+    global _health_cache
+    with _health_cache_lock:
+        _health_cache = None
+
+
 # ---------------------------------------------------------------------------
 # GET /healthz
 # ---------------------------------------------------------------------------
@@ -103,16 +110,10 @@ def _check_ai_health() -> dict[str, Any]:
         ai_base = os.environ.get("AI_BASE_URL", "")
         ai_model = os.environ.get("AI_MODEL", "")
         if not ai_key or not ai_base:
-            try:
-                _sys_cfg_path = Path(__file__).resolve().parents[3] / "data" / "system_config.json"
-                if _sys_cfg_path.exists():
-                    _sys_cfg = json.loads(_sys_cfg_path.read_text(encoding="utf-8"))
-                    ai_cfg = _sys_cfg.get("ai", {})
-                    ai_key = ai_key or str(ai_cfg.get("api_key", "") or "")
-                    ai_base = ai_base or str(ai_cfg.get("base_url", "") or "")
-                    ai_model = ai_model or str(ai_cfg.get("model", "") or "")
-            except Exception:
-                pass
+            ai_cfg = _read_system_config().get("ai", {})
+            ai_key = ai_key or str(ai_cfg.get("api_key", "") or "")
+            ai_base = ai_base or str(ai_cfg.get("base_url", "") or "")
+            ai_model = ai_model or str(ai_cfg.get("model", "") or "")
         ai_model = ai_model or "qwen-plus"
         if ai_key and ai_base:
             t0 = _time_mod.time()

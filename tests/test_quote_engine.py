@@ -148,7 +148,7 @@ async def test_quote_engine_cost_table_uses_volume_weight_when_higher(tmp_path) 
             "cost_table_patterns": ["*.csv"],
             "pricing_profile": "normal",
             "markup_rules": {"default": {"normal_first_add": 0.0, "normal_extra_add": 0.0}},
-            "volume_divisor_default": 6000,
+            "volume_divisor_default": 8000,
         }
     )
     req = QuoteRequest(

@@ -11,6 +11,7 @@ import json
 import os
 import time
 import threading
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -316,7 +317,7 @@ class Config:
                 "remote_api_key_env": "QUOTE_API_KEY",
                 "api_fallback_to_table_parallel": True,
                 "api_prefer_max_wait_seconds": 1.2,
-                "volume_divisor_default": 6000,
+                "volume_divisor_default": 8000,
                 "providers": {
                     "remote": {
                         "enabled": False,
@@ -340,16 +341,13 @@ class Config:
         """Merge data/system_config.json into runtime config.
 
         Priority: config.yaml defaults < system_config.json < .env overrides.
-        This removes the need for _sync_system_config_to_yaml as the bridging
-        mechanism between Dashboard-persisted config and the runtime.
         """
-        sys_path = os.path.join("data", "system_config.json")
-        if not os.path.exists(sys_path):
+        sys_path = Path(__file__).resolve().parents[1] / "data" / "system_config.json"
+        if not sys_path.exists():
             return
 
         try:
-            with open(sys_path, encoding="utf-8") as f:
-                sys_cfg = json.load(f)
+            sys_cfg = json.loads(sys_path.read_text(encoding="utf-8"))
         except Exception:
             return
 

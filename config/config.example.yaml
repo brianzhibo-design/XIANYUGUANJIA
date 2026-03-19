@@ -1,6 +1,6 @@
 app:
   name: "xianyu-guanjia"
-  version: "4.5.0"
+  version: "9.2.3"
   debug: false
   log_level: "INFO"
   data_dir: "data"
