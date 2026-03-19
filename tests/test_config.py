@@ -43,7 +43,8 @@ class TestConfig:
         """测试获取配置段落"""
         app_config = config.get_section("app")
         assert app_config["name"] == "xianyu-guanjia"
-        assert app_config["version"] == "8.0.0"
+        from src import __version__
+        assert app_config["version"] == __version__
 
     def test_config_get_value(self, config):
         """测试获取配置值"""
