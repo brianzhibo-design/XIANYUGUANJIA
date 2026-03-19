@@ -21,8 +21,6 @@
 
 本项目现推荐由拥有一定开发基础的操作员或 AI 编码 Agent 进行部署。
 
-详细的部署要求请直接参阅根目录下的：[**AGENT_DEPLOYMENT.md**](./AGENT_DEPLOYMENT.md)
-
 ### 快速一览
 
 1. **构建前端**：
