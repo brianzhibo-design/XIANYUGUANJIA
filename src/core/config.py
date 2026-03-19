@@ -337,6 +337,8 @@ class Config:
                     if key not in self._config[section]:
                         self._config[section][key] = value
 
+        self._config.setdefault("app", {})["version"] = __import__("src").__version__
+
     def _merge_system_config(self) -> None:
         """Merge data/system_config.json into runtime config.
 

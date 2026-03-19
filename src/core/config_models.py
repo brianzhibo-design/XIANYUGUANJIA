@@ -12,6 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src import __version__ as _pkg_version
+
 
 class Provider(str, Enum):
     """AI提供商枚举"""
@@ -239,7 +241,7 @@ class AppConfig(BaseModel):
     """应用配置模型"""
 
     name: str = Field(default="xianyu-guanjia", description="应用名称")
-    version: str = Field(default="9.2.3", description="版本号")
+    version: str = Field(default=_pkg_version, description="版本号")
     debug: bool = Field(default=False, description="调试模式")
     log_level: str = Field(default="INFO", description="日志级别")
     data_dir: str = Field(default="data", description="数据目录")
