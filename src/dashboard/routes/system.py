@@ -478,9 +478,11 @@ def _is_update_in_progress() -> bool:
     return s not in ("idle", "error", "done")
 
 
-def _do_update_in_background(latest: str, asset_url: str) -> None:
-    """Download update package and spawn the install script in a background thread."""
+def _do_update_in_background(latest: str, asset_url: str, checksum_url: str = "") -> None:
+    """Download update package, verify SHA256, and spawn the install script."""
     try:
+        import hashlib
+
         _write_update_status("downloading", version=latest)
         dl_headers = _gh_api_headers()
         dl_headers["Accept"] = "application/octet-stream"
@@ -494,6 +496,22 @@ def _do_update_in_background(latest: str, asset_url: str) -> None:
                 with open(tmp_path, "wb") as f:
                     for chunk in stream.iter_bytes(chunk_size=65536):
                         f.write(chunk)
+
+            if checksum_url:
+                _write_update_status("verifying", version=latest)
+                cs_headers = _gh_api_headers()
+                cs_headers["Accept"] = "application/octet-stream"
+                cs_resp = hc.get(checksum_url, headers=cs_headers, follow_redirects=True)
+                if cs_resp.status_code == 200:
+                    expected_hash = cs_resp.text.strip().split()[0].lower()
+                    actual_hash = hashlib.sha256(tmp_path.read_bytes()).hexdigest().lower()
+                    if expected_hash != actual_hash:
+                        tmp_path.unlink(missing_ok=True)
+                        _write_update_status(
+                            "error",
+                            message=f"SHA256 校验失败: 期望 {expected_hash[:16]}…, 实际 {actual_hash[:16]}…",
+                        )
+                        return
 
         _write_update_status("installing", version=latest, package=str(tmp_path))
 
@@ -510,14 +528,19 @@ def _do_update_in_background(latest: str, asset_url: str) -> None:
             )
         else:
             script = str(_PROJECT_ROOT / "scripts" / "update.sh")
-            subprocess.Popen(
-                ["bash", script, str(tmp_path), project_root],
-                cwd=project_root,
-                start_new_session=True,
-                close_fds=True,
-                stdout=open(_PROJECT_ROOT / "logs" / "update.log", "a"),
-                stderr=subprocess.STDOUT,
-            )
+            log_path = _PROJECT_ROOT / "logs" / "update.log"
+            log_fd = open(log_path, "a")
+            try:
+                subprocess.Popen(
+                    ["bash", script, str(tmp_path), project_root],
+                    cwd=project_root,
+                    start_new_session=True,
+                    close_fds=True,
+                    stdout=log_fd,
+                    stderr=subprocess.STDOUT,
+                )
+            finally:
+                log_fd.close()
     except Exception as exc:
         _write_update_status("error", message=str(exc))
 
@@ -535,7 +558,7 @@ def handle_update_apply(ctx: RouteContext) -> None:
 
     try:
         from src import __version__ as current_version
-        from src.core.update_config import UPDATE_ASSET_SUFFIX
+        from src.core.update_config import CHECKSUM_ASSET_SUFFIX, UPDATE_ASSET_SUFFIX
 
         _write_update_status("checking")
 
@@ -562,10 +585,13 @@ def handle_update_apply(ctx: RouteContext) -> None:
             return
 
         asset_url = ""
+        checksum_url = ""
         for asset in release.get("assets", []):
-            if asset.get("name", "").endswith(UPDATE_ASSET_SUFFIX):
+            name = asset.get("name", "")
+            if name.endswith(UPDATE_ASSET_SUFFIX):
                 asset_url = asset.get("url", "")
-                break
+            elif name.endswith(CHECKSUM_ASSET_SUFFIX):
+                checksum_url = asset.get("url", "")
         if not asset_url:
             _write_update_status("error", message="Release 中未找到更新包")
             ctx.send_json({"success": False, "error": "Release 中未找到更新包 (*-update.tar.gz)"})
@@ -573,7 +599,7 @@ def handle_update_apply(ctx: RouteContext) -> None:
 
         threading.Thread(
             target=_do_update_in_background,
-            args=(latest, asset_url),
+            args=(latest, asset_url, checksum_url),
             daemon=True,
         ).start()
 

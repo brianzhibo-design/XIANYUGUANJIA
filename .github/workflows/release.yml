@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_name=xianyu-openclaw-${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build frontend
+        working-directory: client
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package update bundle
+        run: |
+          RELEASE_NAME="${{ steps.version.outputs.release_name }}"
+          STAGING="dist/.staging-update/${RELEASE_NAME}"
+          mkdir -p "${STAGING}/client"
+
+          for dir in src scripts; do
+            [ -d "$dir" ] && cp -a "$dir" "${STAGING}/$dir"
+          done
+
+          for item in client/dist client/src client/package.json client/package-lock.json \
+            client/vite.config.js client/tsconfig.json client/tsconfig.node.json \
+            client/tailwind.config.js client/postcss.config.js client/index.html; do
+            [ -e "$item" ] && cp -a "$item" "${STAGING}/$item"
+          done
+
+          for f in requirements.txt start.sh start.bat quick-start.sh quick-start.bat README.md; do
+            [ -e "$f" ] && cp -a "$f" "${STAGING}/$f"
+          done
+
+          find "${STAGING}" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+          find "${STAGING}" -name "*.pyc" -delete 2>/dev/null || true
+          find "${STAGING}" -name ".DS_Store" -delete 2>/dev/null || true
+          rm -f "${STAGING}/config/config.yaml" 2>/dev/null || true
+
+          (cd dist/.staging-update && tar czf "../${RELEASE_NAME}-update.tar.gz" "${RELEASE_NAME}")
+          rm -rf dist/.staging-update
+
+          ls -lh "dist/${RELEASE_NAME}-update.tar.gz"
+
+      - name: Generate SHA256 checksums
+        run: |
+          RELEASE_NAME="${{ steps.version.outputs.release_name }}"
+          cd dist
+          sha256sum "${RELEASE_NAME}-update.tar.gz" > "${RELEASE_NAME}-checksums.txt"
+          cat "${RELEASE_NAME}-checksums.txt"
+
+      - name: Create Release & upload assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          RELEASE_NAME="${{ steps.version.outputs.release_name }}"
+
+          gh release create "$TAG" \
+            --generate-notes \
+            "dist/${RELEASE_NAME}-update.tar.gz" \
+            "dist/${RELEASE_NAME}-checksums.txt"

@@ -2,7 +2,7 @@
 闲鱼管家 — 闲鱼自动化运营工具
 """
 
-__version__ = "9.2.5"
+__version__ = "9.2.6"
 __author__ = "Project Team"
 
 from .core.config import Config

@@ -9,3 +9,4 @@ GITHUB_TOKEN = os.getenv(
     "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",
 )
 UPDATE_ASSET_SUFFIX = "-update.tar.gz"
+CHECKSUM_ASSET_SUFFIX = "-checksums.txt"

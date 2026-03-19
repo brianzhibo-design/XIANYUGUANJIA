@@ -98,9 +98,18 @@ info "[2/5] 停止运行中的服务..."
 write_status "stopping"
 
 for port in 8091 5173; do
-  if lsof -ti :"$port" >/dev/null 2>&1; then
-    lsof -ti :"$port" | xargs kill -9 2>/dev/null || true
-    ok "已停止端口 $port 上的进程"
+  PIDS=$(lsof -ti :"$port" 2>/dev/null || true)
+  if [ -n "$PIDS" ]; then
+    echo "$PIDS" | xargs kill -TERM 2>/dev/null || true
+    ok "已向端口 $port 发送 SIGTERM"
+  fi
+done
+sleep 3
+for port in 8091 5173; do
+  PIDS=$(lsof -ti :"$port" 2>/dev/null || true)
+  if [ -n "$PIDS" ]; then
+    echo "$PIDS" | xargs kill -9 2>/dev/null || true
+    warn "端口 $port 强制终止 (SIGKILL)"
   fi
 done
 sleep 1
@@ -206,17 +215,33 @@ fi
 cd "$PROJECT_ROOT"
 if [ -f "start.sh" ]; then
   nohup bash start.sh > logs/start.log 2>&1 &
-  sleep 3
-  ok "服务已重启"
+  ok "服务启动中..."
 else
   warn "未找到 start.sh，请手动启动服务"
+  write_status "done" "\"version\": \"$NEW_VERSION\", \"message\": \"更新完成（需手动启动）\""
+  rm -f "$PACKAGE_PATH" 2>/dev/null || true
+  exit 0
 fi
 
-write_status "done" "\"version\": \"$NEW_VERSION\", \"message\": \"更新完成\""
+# ═══════════════ 5.1 健康检查 ═══════════════
+info "等待健康检查..."
+HEALTH_OK=false
+for i in $(seq 1 30); do
+  if curl -sf http://127.0.0.1:8091/api/health >/dev/null 2>&1; then
+    HEALTH_OK=true
+    break
+  fi
+  sleep 1
+done
 
-rm -f "$PACKAGE_PATH" 2>/dev/null || true
-
-echo ""
-info "========================================="
-ok "更新完成! 新版本: v${NEW_VERSION}"
-info "========================================="
+if [ "$HEALTH_OK" = true ]; then
+  write_status "done" "\"version\": \"$NEW_VERSION\", \"message\": \"更新完成\""
+  rm -f "$PACKAGE_PATH" 2>/dev/null || true
+  echo ""
+  info "========================================="
+  ok "更新完成! 新版本: v${NEW_VERSION}"
+  info "========================================="
+else
+  fail "服务未通过健康检查 (30s 超时)，触发回滚"
+  cleanup_on_error "${BACKUP_TAR:-/dev/null}"
+fi
