@@ -570,7 +570,8 @@ class GoofishWsTransport:
 
             changed = self._apply_cookie_text(cookie, reason="cookiecloud_poll")
             if changed:
-                os.environ["XIANYU_COOKIE_1"] = cookie
+                from src.core.cookie_store import save_cookie
+                save_cookie(cookie, persist=True, source="cookiecloud_poll")
                 self._session_peer.clear()
                 self._seen_event.clear()
                 self.logger.info("CookieCloud poll: new cookie applied")
@@ -614,7 +615,8 @@ class GoofishWsTransport:
         changed = self._apply_cookie_text(merged, reason="goofish_im")
         if changed:
             self._last_cookie_applied_at = time.time()
-            os.environ["XIANYU_COOKIE_1"] = merged
+            from src.core.cookie_store import save_cookie
+            save_cookie(merged, persist=True, source="goofish_im")
             self._session_peer.clear()
             self._seen_event.clear()
             ttl = result.get("m_h5_tk_ttl")
@@ -648,7 +650,8 @@ class GoofishWsTransport:
         try:
             changed = self._apply_cookie_text(new_cookie, reason="active_refresh")
             if changed:
-                os.environ["XIANYU_COOKIE_1"] = new_cookie
+                from src.core.cookie_store import save_cookie
+                save_cookie(new_cookie, persist=True, source="active_refresh")
                 self._session_peer.clear()
                 self._seen_event.clear()
                 self.logger.info("Active cookie refresh succeeded, new cookie applied")
@@ -773,7 +776,8 @@ class GoofishWsTransport:
         changed = self._apply_cookie_text(merged, reason="bitbrowser_cdp")
         if changed:
             self._last_cookie_applied_at = time.time()
-            os.environ["XIANYU_COOKIE_1"] = merged
+            from src.core.cookie_store import save_cookie
+            save_cookie(merged, persist=True, source="bitbrowser_cdp")
             self._session_peer.clear()
             self._seen_event.clear()
             self.logger.info(
@@ -921,7 +925,8 @@ class GoofishWsTransport:
             changed = self._apply_cookie_text(merged, reason="slider_recovery")
             if changed:
                 self._last_cookie_applied_at = time.time()
-                os.environ["XIANYU_COOKIE_1"] = merged
+                from src.core.cookie_store import save_cookie
+                save_cookie(merged, persist=True, source="slider_recovery")
                 self._session_peer.clear()
                 self._seen_event.clear()
                 self.logger.info(f"Slider recovery: merged {len(cookie_keys)} browser fields into existing cookie")
@@ -994,7 +999,8 @@ class GoofishWsTransport:
             merged_text = "; ".join(f"{k}={v}" for k, v in merged.items() if str(k).strip() and str(v).strip())
             self._apply_cookie_text(merged_text, reason=reason)
             self._dedup_cookies()
-            os.environ["XIANYU_COOKIE_1"] = self.cookie_text
+            from src.core.cookie_store import save_cookie
+            save_cookie(self.cookie_text, persist=False, source=reason)
             self.logger.debug(f"Absorbed Set-Cookie from {reason}")
         return changed
 
@@ -1014,7 +1020,8 @@ class GoofishWsTransport:
             merged_text = "; ".join(f"{k}={v}" for k, v in merged.items() if str(k).strip() and str(v).strip())
             self._apply_cookie_text(merged_text, reason=reason)
             self._dedup_cookies()
-            os.environ["XIANYU_COOKIE_1"] = self.cookie_text
+            from src.core.cookie_store import save_cookie
+            save_cookie(self.cookie_text, persist=False, source=reason)
             self.logger.debug(f"Absorbed Set-Cookie from response ({reason})")
         return changed
 
@@ -1076,7 +1083,8 @@ class GoofishWsTransport:
                 merged_text = "; ".join(f"{k}={v}" for k, v in merged.items() if str(k).strip() and str(v).strip())
                 self._apply_cookie_text(merged_text, reason="has_login_refresh")
                 self._dedup_cookies()
-                os.environ["XIANYU_COOKIE_1"] = self.cookie_text
+                from src.core.cookie_store import save_cookie
+                save_cookie(self.cookie_text, persist=False, source="has_login_refresh")
             return True
 
     def _m_h5_tk_seconds_until_expiry(self) -> float | None:

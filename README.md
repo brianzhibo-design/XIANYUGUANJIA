@@ -1,4 +1,4 @@
-# Xianyu Guanjia (闲鱼管家)
+# Xianyu Guanjia (闲鱼管家) v9.2.1
 
 > **⚠️ 架构变更通知 (v8.1.0+)**
 >
@@ -9,6 +9,7 @@
 ## 🚀 核心特性
 
 - **多级 Cookie 降级保活体系**：`闲管家 IM 直读 -> CookieCloud 实时同步 -> 本地数据库直读 -> Playwright 硬解滑块`，四级降级策略应对阿里严苛的 Web 端风控。
+- **Cookie 统一持久化**：WS Transport 的所有 cookie 刷新路径均通过 `cookie_store` 原子写入 `.env`，确保进程重启后恢复最新凭证，Dashboard 健康检查始终反映实时状态。
 - **现代化前后端分离**：React + TailwindCSS 构建的现代化 Dashboard 仪表盘，提供直观的状态监控与配置热更新。
 - **AI 智能客服**：接入大语言模型 (DeepSeek等)，实现根据商品信息自动报价、智能上下文回复。
 - **虚拟商品全自动核销**：支持卡密自动发货，自动标记已发货，状态全链路闭环。
