@@ -1,6 +1,6 @@
 [project]
 name = "xianyu-guanjia"
-version = "9.2.0"
+version = "9.2.1"
 
 [tool.black]
 line-length = 100

@@ -897,7 +897,8 @@ class MessagesService:
             ctx_str = f"\n当前会话上下文：{json.dumps(context, ensure_ascii=False, default=str)}"
         prompt = (
             "你是快递代寄服务的客服助手。根据买家消息生成简短友好的回复。\n"
-            "业务信息：我们代理韵达/圆通/中通/申通快递，不支持顺丰和京东。\n"
+            "业务信息：我们代理多家快递（韵达/圆通/中通/申通等），具体可用渠道和价格以小程序为准。"
+            "如买家问某个快递是否可用，引导对方提供路线和重量查价或到小程序查看，不要说'不支持'。\n"
             "术语规范：提及顺丰时用「顺丰到付」不用「顺丰代收」；大件/快运用「中通快运」「德邦快运」等，与「中通快递」「韵达快递」区分。\n"
             "下单流程：闲鱼拍下→改价→付款→收到兑换码→到小程序兑换余额→填地址选快递下单。\n"
             "首单优惠：首次使用新手机号可享首单优惠价，续重不变。如买家问价格，引导提供'寄件城市-收件城市-重量'以便精确报价，严禁自行编造具体金额。\n"
@@ -1029,6 +1030,17 @@ class MessagesService:
             if compact == name:
                 return self._COURIER_ALIASES.get(name, name)
         return None
+
+    def _is_courier_in_cost_table(self, courier: str) -> bool:
+        try:
+            from src.modules.quote.cost_table import normalize_courier_name
+
+            repo = self.quote_engine.cost_table_provider.repo
+            repo._reload_if_needed()
+            normalized = normalize_courier_name(courier)
+            return any(k[0] == normalized for k in repo._index_courier_route)
+        except Exception:
+            return False
 
     @classmethod
     def _is_checkout_followup(cls, message_text: str) -> bool:
@@ -1214,13 +1226,25 @@ class MessagesService:
             lock_reply, matched = self._build_courier_lock_reply(context_after)
             if courier_choice and not matched:
                 lock_reply = (
-                    f"当前线路暂未匹配到{selected_courier}报价。\n{self._build_available_couriers_hint(context_after)}"
+                    f"当前线路{selected_courier}暂无报价，具体价格建议到小程序内查看~\n"
+                    f"{self._build_available_couriers_hint(context_after)}"
                 )
             return self._sanitize_reply(lock_reply), {
                 "is_quote": False,
                 "courier_locked": bool(matched),
                 "selected_courier": selected_courier,
             }
+
+        if courier_choice and not has_quote_rows:
+            if self._is_courier_in_cost_table(courier_choice):
+                return self._sanitize_reply(
+                    f"我们有{courier_choice}哦~ 告诉我寄件城市、收件城市和重量，帮您查价~"
+                ), {"is_quote": False, "phase": "presale"}
+            else:
+                return self._sanitize_reply(
+                    f"{courier_choice}的具体价格建议到小程序内查看哦~ "
+                    "告诉我路线和重量，也可以帮您查其他快递的参考价~"
+                ), {"is_quote": False, "phase": "presale"}
 
         pre_matched = self.reply_engine.find_matching_rule(message_text, item_title)
         if pre_matched:
