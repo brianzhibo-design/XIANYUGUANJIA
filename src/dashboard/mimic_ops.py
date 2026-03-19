@@ -1386,7 +1386,7 @@ class MimicOps:
         }
 
     def get_cookie(self) -> dict[str, Any]:
-        cookie = (os.getenv("XIANYU_COOKIE_1", "") or self._get_env_value("XIANYU_COOKIE_1")).strip()
+        cookie = self._get_env_value("XIANYU_COOKIE_1").strip()
         return {
             "success": bool(cookie),
             "cookie": cookie,
