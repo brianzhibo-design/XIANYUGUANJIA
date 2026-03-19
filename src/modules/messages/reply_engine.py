@@ -47,6 +47,8 @@ DEFAULT_VIRTUAL_PRODUCT_KEYWORDS = [
 ]
 
 _DEFAULT_XIAOCHENGXU_REPLACEMENT = "小丞虚"
+_DEFAULT_MINIAPP_NAME = "商达人快递上门取件"
+_DEFAULT_MINIAPP_SHORT = "商达人"
 
 
 def get_word_replacements() -> dict[str, str]:
@@ -55,13 +57,22 @@ def get_word_replacements() -> dict[str, str]:
         from src.dashboard.config_service import read_system_config
 
         cfg = read_system_config()
-        replacement = cfg.get("sensitive_words", {}).get("xiaochengxu", _DEFAULT_XIAOCHENGXU_REPLACEMENT)
+        sw = cfg.get("sensitive_words", {})
+        replacement = sw.get("xiaochengxu", _DEFAULT_XIAOCHENGXU_REPLACEMENT)
+        miniapp_name = str(sw.get("miniapp_name", "") or "").strip()
     except Exception:
         replacement = _DEFAULT_XIAOCHENGXU_REPLACEMENT
-    return {
+        miniapp_name = ""
+    result = {
         "微信小程序": replacement,
         "小程序": replacement,
     }
+    if miniapp_name and miniapp_name != _DEFAULT_MINIAPP_NAME:
+        short = miniapp_name.replace("快递上门取件", "").replace("上门取件", "").strip() or miniapp_name
+        result[_DEFAULT_MINIAPP_NAME] = miniapp_name
+        if short != miniapp_name:
+            result[_DEFAULT_MINIAPP_SHORT] = short
+    return result
 
 
 DEFAULT_INTENT_RULES: list[dict[str, Any]] = [

@@ -1772,6 +1772,19 @@ export default function SystemConfig() {
                     <p>模板原文：「到小程序下单即可」</p>
                     <p>发送效果：「到{config.sensitive_words?.xiaochengxu || '小丞虚'}下单即可」</p>
                   </div>
+                  <div className="mt-4">
+                    <label className="xy-label">小程序名称（品牌名）</label>
+                    <input
+                      type="text"
+                      className="xy-input px-3 py-2"
+                      placeholder="商达人快递上门取件"
+                      value={config.sensitive_words?.miniapp_name || ''}
+                      onChange={e => handleChange('sensitive_words', 'miniapp_name', e.target.value)}
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      对接不同小程序时修改此项。所有话术中的「商达人快递上门取件」和「商达人」会自动替换为此处设置的名称。留空则使用默认值。
+                    </p>
+                  </div>
                 </div>
               </CollapsibleSection>
             </div>
