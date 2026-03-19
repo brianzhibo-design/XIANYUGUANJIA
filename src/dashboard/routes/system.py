@@ -363,13 +363,25 @@ def _gh_releases_url() -> str:
 
 @get("/api/version/latest")
 def handle_version_latest(ctx: RouteContext) -> None:
-    """Proxy GitHub releases API with 1-hour cache. Uses token for private repos."""
+    """Proxy GitHub releases API with 1-hour cache. Uses gh CLI as fallback."""
     global _latest_version_cache, _latest_version_ts
 
     if _latest_version_cache and (_time_mod.time() - _latest_version_ts) < _LATEST_VERSION_TTL:
         ctx.send_json(_latest_version_cache)
         return
 
+    # Try gh CLI first (authenticated, reliable)
+    try:
+        result = _fetch_latest_via_gh()
+        if result:
+            _latest_version_cache = result
+            _latest_version_ts = _time_mod.time()
+            ctx.send_json(result)
+            return
+    except Exception:
+        pass
+
+    # Fallback to HTTP API
     try:
         import httpx
 
@@ -389,7 +401,7 @@ def handle_version_latest(ctx: RouteContext) -> None:
                     update_asset_url = asset.get("url", "")
                     update_asset_size = asset.get("size", 0)
                     break
-            result: dict[str, Any] = {
+            result = {
                 "latest": latest,
                 "tag": tag,
                 "update_asset_url": update_asset_url,
@@ -403,6 +415,26 @@ def handle_version_latest(ctx: RouteContext) -> None:
             ctx.send_json({"latest": None, "error": f"GitHub API returned {resp.status_code}"})
     except Exception as exc:
         ctx.send_json({"latest": None, "error": str(exc)})
+
+
+def _fetch_latest_via_gh() -> dict[str, Any] | None:
+    """Use gh CLI to fetch latest release (authenticated, bypasses IP rate limits)."""
+    from src.core.update_config import GITHUB_OWNER, GITHUB_REPO
+
+    try:
+        proc = __import__("subprocess").run(
+            ["gh", "api", f"repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest", "--jq", ".tag_name"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            tag = proc.stdout.strip()
+            latest = tag.lstrip("v")
+            return {"latest": latest, "tag": tag, "update_asset_url": "", "update_asset_size": 0, "body": ""}
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
