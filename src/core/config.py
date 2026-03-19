@@ -487,9 +487,7 @@ class Config:
 
     def _record_sys_config_mtime(self) -> None:
         try:
-            self._sys_config_mtime = os.path.getmtime(
-                os.path.join("data", "system_config.json")
-            )
+            self._sys_config_mtime = os.path.getmtime(os.path.join("data", "system_config.json"))
         except OSError:
             self._sys_config_mtime = 0.0
 

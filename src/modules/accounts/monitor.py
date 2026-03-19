@@ -420,6 +420,7 @@ class HealthChecker:
         """检查浏览器驱动可用性（DrissionPage）"""
         try:
             import importlib
+
             if importlib.util.find_spec("DrissionPage"):
                 return True
             await self.monitor.raise_alert(

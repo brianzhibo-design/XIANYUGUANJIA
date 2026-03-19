@@ -116,13 +116,15 @@ def _parse_llm_suggestions(raw: str) -> list[dict[str, Any]]:
         reply = str(item.get("reply", "")).strip()
         if not name or not keywords or not reply:
             continue
-        result.append({
-            "name": name,
-            "keywords": keywords if isinstance(keywords, list) else [str(keywords)],
-            "reply": reply,
-            "priority": int(item.get("priority", 100)),
-            "reason": str(item.get("reason", "")),
-        })
+        result.append(
+            {
+                "name": name,
+                "keywords": keywords if isinstance(keywords, list) else [str(keywords)],
+                "reply": reply,
+                "priority": int(item.get("priority", 100)),
+                "reason": str(item.get("reason", "")),
+            }
+        )
     return result
 
 
@@ -141,6 +143,7 @@ def handle_generate_suggestions(ctx: RouteContext) -> None:
 
     try:
         from src.modules.content.service import ContentService
+
         svc = ContentService()
         raw = svc._call_ai(prompt, max_tokens=2000, task="rule_suggestion")
     except Exception as exc:
@@ -153,11 +156,13 @@ def handle_generate_suggestions(ctx: RouteContext) -> None:
         return
 
     suggestions = _parse_llm_suggestions(raw)
-    ctx.send_json({
-        "ok": True,
-        "suggestions": suggestions,
-        "analyzed_count": len(msgs),
-    })
+    ctx.send_json(
+        {
+            "ok": True,
+            "suggestions": suggestions,
+            "analyzed_count": len(msgs),
+        }
+    )
 
 
 @post("/api/rule-suggestions/apply")
@@ -194,20 +199,24 @@ def handle_apply_suggestion(ctx: RouteContext) -> None:
 
     try:
         from src.core.config import get_config
+
         get_config().reload()
     except Exception:
         pass
 
     try:
         from src.modules.messages.service import _active_service
+
         if _active_service is not None:
             _active_service.reload_rules()
             logger.info("Hot-reloaded reply rules after applying suggestion: %s", new_rule["name"])
     except Exception as exc:
         logger.warning("Failed to hot-reload rules: %s", exc)
 
-    ctx.send_json({
-        "ok": True,
-        "message": f"规则 '{new_rule['name']}' 已添加并生效",
-        "rule": new_rule,
-    })
+    ctx.send_json(
+        {
+            "ok": True,
+            "message": f"规则 '{new_rule['name']}' 已添加并生效",
+            "rule": new_rule,
+        }
+    )

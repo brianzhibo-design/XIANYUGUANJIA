@@ -16,16 +16,12 @@ async def create_browser_client(config: dict[str, Any] | None = None):
     try:
         from src.core.drissionpage_client import DrissionPageBrowserClient
     except Exception as exc:
-        raise BrowserError(
-            "DrissionPage is required. Install with: pip install DrissionPage"
-        ) from exc
+        raise BrowserError("DrissionPage is required. Install with: pip install DrissionPage") from exc
 
     client = DrissionPageBrowserClient(config)
     connected = await client.connect()
     if not connected:
-        raise BrowserError(
-            "Failed to start DrissionPage browser. Run: pip install DrissionPage"
-        )
+        raise BrowserError("Failed to start DrissionPage browser. Run: pip install DrissionPage")
     return client
 
 

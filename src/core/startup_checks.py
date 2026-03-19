@@ -31,11 +31,7 @@ class StartupCheckResult:
 def resolve_runtime_mode() -> str:
     # Ensure `.env` values are visible before runtime resolution.
     load_dotenv(override=False)
-    env_runtime = (
-        str(os.getenv("APP_RUNTIME") or os.getenv("BROWSER_RUNTIME_MODE") or "")
-        .strip()
-        .lower()
-    )
+    env_runtime = str(os.getenv("APP_RUNTIME") or os.getenv("BROWSER_RUNTIME_MODE") or "").strip().lower()
     if env_runtime in {"auto", "lite", "pro"}:
         return env_runtime
 
@@ -167,16 +163,21 @@ def check_drissionpage_dependency() -> StartupCheckResult:
     """Check if DrissionPage is installed (optional, for improved slider solving)."""
     try:
         import importlib
+
         if importlib.util.find_spec("DrissionPage"):
             return StartupCheckResult(
-                "DrissionPage 滑块驱动", True,
-                "DrissionPage 已安装（提高滑块通过率）", critical=False,
+                "DrissionPage 滑块驱动",
+                True,
+                "DrissionPage 已安装（提高滑块通过率）",
+                critical=False,
             )
     except Exception:
         pass
     return StartupCheckResult(
-        "DrissionPage 滑块驱动", True,
-        "未安装（可选）。安装: pip install DrissionPage", critical=False,
+        "DrissionPage 滑块驱动",
+        True,
+        "未安装（可选）。安装: pip install DrissionPage",
+        critical=False,
     )
 
 

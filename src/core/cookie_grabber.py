@@ -360,7 +360,6 @@ class CookieGrabber:
             logger.debug(f"Firefox rookiepy: {exc}")
             return None
 
-
     # ------------------------------------------------------------------
     # Cookie extraction & login detection helpers
     # ------------------------------------------------------------------

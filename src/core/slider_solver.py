@@ -890,8 +890,6 @@ def _has_login_cookies(cookies: list[dict[str, Any]]) -> bool:
     return bool(names & _AUTH_COOKIES)
 
 
-
-
 def _dismiss_popups_dp(tab: Any, _log: Any) -> None:
     """关闭遮挡滑块的弹窗（关闭按钮、跳过按钮等）。"""
     dismiss_selectors = [
@@ -966,7 +964,9 @@ def _try_slider_drissionpage(
     api_url = fp_cfg.get("api_url", "")
     browser_id = fp_cfg.get("browser_id", "")
     if not api_url or not browser_id:
-        _log.warning("DrissionPage: fingerprint_browser config incomplete (api_url=%s, browser_id=%s)", api_url, bool(browser_id))
+        _log.warning(
+            "DrissionPage: fingerprint_browser config incomplete (api_url=%s, browser_id=%s)", api_url, bool(browser_id)
+        )
         return None
 
     import httpx as _httpx
@@ -1055,8 +1055,11 @@ def _try_slider_drissionpage(
             search_targets = [captcha_iframe, tab] if captcha_iframe else [tab]
 
             nc_selectors = [
-                "#nc_1_n1z", ".btn_slide", "#aliyunCaptcha-sliding-btn",
-                ".slide-btn", "span[aria-label='滑块']",
+                "#nc_1_n1z",
+                ".btn_slide",
+                "#aliyunCaptcha-sliding-btn",
+                ".slide-btn",
+                "span[aria-label='滑块']",
                 "xpath://span[@aria-label='滑块']",
             ]
             for target in search_targets:
@@ -1091,7 +1094,9 @@ def _try_slider_drissionpage(
                 attempt_data["fail_reason"] = "no_slider_found"
                 _log.info("DrissionPage: no slider element found")
                 try:
-                    ss_path = os.path.join(_SCREENSHOT_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_dp_no_slider.png")
+                    ss_path = os.path.join(
+                        _SCREENSHOT_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_dp_no_slider.png"
+                    )
                     os.makedirs(_SCREENSHOT_DIR, exist_ok=True)
                     tab.get_screenshot(path=ss_path)
                     attempt_data["screenshot_path"] = ss_path
@@ -1106,8 +1111,10 @@ def _try_slider_drissionpage(
                 try:
                     track_el = None
                     track_selectors = [
-                        "#nc_1__scale_text", ".nc_scale",
-                        "#aliyunCaptcha-sliding-track", ".slide-track",
+                        "#nc_1__scale_text",
+                        ".nc_scale",
+                        "#aliyunCaptcha-sliding-track",
+                        ".slide-track",
                         "div.nc_scale",
                         "xpath://span[@aria-label='滑块']/ancestor::div[@class='nc_scale'][1]",
                     ]
@@ -1199,7 +1206,9 @@ def _try_slider_drissionpage(
                     except Exception:
                         pass
                     try:
-                        ss_path = os.path.join(_SCREENSHOT_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_dp_nc_fail.png")
+                        ss_path = os.path.join(
+                            _SCREENSHOT_DIR, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_dp_nc_fail.png"
+                        )
                         tab.get_screenshot(path=ss_path)
                         attempt_data["screenshot_path"] = ss_path
                     except Exception:
@@ -1219,9 +1228,11 @@ def _try_slider_drissionpage(
         time.sleep(2)
 
         import asyncio as _aio
+
         cookie_str = None
         try:
             from src.core.bitbrowser_cdp import read_cookies_via_cdp
+
             loop = _aio.new_event_loop()
             try:
                 cookie_str = loop.run_until_complete(read_cookies_via_cdp(ws_url))
@@ -1277,6 +1288,4 @@ async def try_slider_recovery(
         return None
 
     _log.info("Slider recovery: using DrissionPage (fingerprint_browser enabled)")
-    return await asyncio.to_thread(
-        _try_slider_drissionpage, fp_cfg, cookie_text, max_attempts, _log
-    )
+    return await asyncio.to_thread(_try_slider_drissionpage, fp_cfg, cookie_text, max_attempts, _log)

@@ -7,9 +7,9 @@ import logging
 import re
 from pathlib import Path
 
-_SUFFIXES: tuple[str, ...] = tuple(sorted(
-    ("特别行政区", "自治区", "自治州", "地区", "省", "市", "盟", "区", "县"), key=len, reverse=True
-))
+_SUFFIXES: tuple[str, ...] = tuple(
+    sorted(("特别行政区", "自治区", "自治州", "地区", "省", "市", "盟", "区", "县"), key=len, reverse=True)
+)
 
 _logger = logging.getLogger(__name__)
 

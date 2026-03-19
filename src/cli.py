@@ -234,9 +234,7 @@ def _module_check_summary(target: str, doctor_report: dict[str, Any]) -> dict[st
                     "passed": False,
                     "critical": True,
                     "message": "auto 模式下 Lite 驱动不可用",
-                    "suggestion": (
-                        "请执行 ./start.sh 或安装 DrissionPage（pip install DrissionPage）。"
-                    ),
+                    "suggestion": ("请执行 ./start.sh 或安装 DrissionPage（pip install DrissionPage）。"),
                     "meta": {"runtime": runtime},
                 }
             )

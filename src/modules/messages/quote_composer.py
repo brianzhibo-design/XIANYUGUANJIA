@@ -165,7 +165,9 @@ class QuoteReplyComposer:
         seg1_lines: list[str] = []
         weight_str = f"{float(billing_w or actual_w or 0):.1f}"
         header = random.choice(self._HEADER_VARIANTS).format(
-            origin=origin, dest=destination, weight=weight_str,
+            origin=origin,
+            dest=destination,
+            weight=weight_str,
         )
         seg1_lines.append(header)
 
@@ -265,9 +267,7 @@ class QuoteReplyComposer:
                     if self.volume_divisor_default == int(self.volume_divisor_default)
                     else self.volume_divisor_default
                 )
-            tips_lines.append(
-                f"温馨提示：体积较大的包裹按体积重计费（长×宽×高/{div_val}），届时可能需补差价~"
-            )
+            tips_lines.append(f"温馨提示：体积较大的包裹按体积重计费（长×宽×高/{div_val}），届时可能需补差价~")
 
         for _, r in quote_rows:
             exp = r.explain if isinstance(r.explain, dict) else {}
@@ -276,8 +276,7 @@ class QuoteReplyComposer:
                 threshold = exp.get("oversize_threshold_cm", 120)
                 svc_label = "快运" if exp.get("service_type") == "freight" else "快递"
                 tips_lines.append(
-                    f"超长提醒：最长边约{max_dim:.0f}cm，超出{svc_label}标准（{threshold:.0f}cm），"
-                    "可能收取超长费~"
+                    f"超长提醒：最长边约{max_dim:.0f}cm，超出{svc_label}标准（{threshold:.0f}cm），可能收取超长费~"
                 )
                 break
 

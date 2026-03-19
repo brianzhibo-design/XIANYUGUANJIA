@@ -53,10 +53,7 @@ class RuleSuggester:
         """对同类消息调用 LLM 生成规则。"""
         from src.modules.content.service import ContentService
 
-        texts = [
-            str(m.get("message_text", "") or m.get("text", ""))[:100]
-            for m in cluster
-        ]
+        texts = [str(m.get("message_text", "") or m.get("text", ""))[:100] for m in cluster]
         prompt = (
             "你是一个快递客服规则引擎专家。以下是用户发送的几条未被识别的消息：\n"
             + "\n".join(f"- {t}" for t in texts)

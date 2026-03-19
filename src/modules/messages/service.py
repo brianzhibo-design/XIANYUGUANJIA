@@ -1422,13 +1422,9 @@ class MessagesService:
                         "ai_generated": True,
                         "quote_context_enabled": bool(self.context_memory_enabled),
                     }
-                self._log_unmatched_message(
-                    message_text, session_id=session_id or None, item_title=item_title or None
-                )
+                self._log_unmatched_message(message_text, session_id=session_id or None, item_title=item_title or None)
             elif is_default:
-                self._log_unmatched_message(
-                    message_text, session_id=session_id or None, item_title=item_title or None
-                )
+                self._log_unmatched_message(message_text, session_id=session_id or None, item_title=item_title or None)
             return self._sanitize_reply(reply), {
                 "is_quote": False,
                 "quote_context_enabled": bool(self.context_memory_enabled),
@@ -1444,7 +1440,8 @@ class MessagesService:
                     "quote_context_enabled": bool(self.context_memory_enabled),
                 }
             prompt = self._build_natural_missing_prompt(
-                ["origin", "destination", "weight"], extracted_fields,
+                ["origin", "destination", "weight"],
+                extracted_fields,
             )
             return self._sanitize_reply(prompt), {
                 "is_quote": True,

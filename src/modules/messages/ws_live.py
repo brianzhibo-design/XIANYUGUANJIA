@@ -479,6 +479,7 @@ class GoofishWsTransport:
 
         try:
             from src.core.bitbrowser_cdp import get_fp_config
+
             fp_cfg = get_fp_config(self.config)
             fp_enabled = fp_cfg.get("enabled", False)
         except ImportError:
@@ -528,14 +529,9 @@ class GoofishWsTransport:
             if (now - im_last_poll) >= im_poll_interval:
                 im_last_poll = now
                 if await self._try_goofish_im_refresh(urgent=True):
-                    has_unb = bool(
-                        self.cookies.get("unb")
-                        or "unb=" in os.environ.get("XIANYU_COOKIE_1", "")
-                    )
+                    has_unb = bool(self.cookies.get("unb") or "unb=" in os.environ.get("XIANYU_COOKIE_1", ""))
                     if is_rgv587 and not has_unb:
-                        self.logger.warning(
-                            "Cookie wait: IM刷新成功但unb仍缺失，不触发重连"
-                        )
+                        self.logger.warning("Cookie wait: IM刷新成功但unb仍缺失，不触发重连")
                     else:
                         self.logger.info("Cookie wait: 闲管家IM刷新成功")
                         return True
@@ -689,6 +685,7 @@ class GoofishWsTransport:
             slider_on = bool(slider_cfg.get("enabled")) if isinstance(slider_cfg, dict) else False
             try:
                 from src.core.cookie_grabber import CookieGrabber
+
                 cc_on = CookieGrabber().is_cookiecloud_configured()
             except Exception:
                 cc_on = False
@@ -699,6 +696,7 @@ class GoofishWsTransport:
             ]
             try:
                 from src.core.bitbrowser_cdp import get_fp_config as _gfp
+
                 _fp_on = _gfp(self.config).get("enabled", False)
             except ImportError:
                 _fp_on = False
@@ -926,9 +924,7 @@ class GoofishWsTransport:
                 os.environ["XIANYU_COOKIE_1"] = merged
                 self._session_peer.clear()
                 self._seen_event.clear()
-                self.logger.info(
-                    f"Slider recovery: merged {len(cookie_keys)} browser fields into existing cookie"
-                )
+                self.logger.info(f"Slider recovery: merged {len(cookie_keys)} browser fields into existing cookie")
                 try:
                     from src.core.notify import send_system_notification
 
@@ -1497,6 +1493,7 @@ class GoofishWsTransport:
                     _cdp_preloaded = True
                     try:
                         from src.core.bitbrowser_cdp import get_fp_config
+
                         fp_cfg = get_fp_config(self.config)
                         if fp_cfg.get("enabled"):
                             if await self._try_bitbrowser_cookie_refresh():
@@ -1623,6 +1620,7 @@ class GoofishWsTransport:
 
                 try:
                     from src.core.bitbrowser_cdp import get_fp_config as _get_fp_cfg
+
                     _fp_enabled = _get_fp_cfg(self.config).get("enabled", False)
                 except ImportError:
                     _fp_enabled = False
@@ -1705,8 +1703,7 @@ class GoofishWsTransport:
                             continue
 
                         self.logger.warning(
-                            "RGV587 风控持续触发（slider %d/%d 次已耗尽），"
-                            "暂停自动重连，等待 Cookie 更新...",
+                            "RGV587 风控持续触发（slider %d/%d 次已耗尽），暂停自动重连，等待 Cookie 更新...",
                             self._slider_recovery_attempts,
                             self._SLIDER_MAX_ATTEMPTS_PER_CYCLE,
                         )
@@ -2057,6 +2054,7 @@ async def run_cascade_cookie_refresh(transport: GoofishWsTransport) -> bool:
         return True
     try:
         from src.core.bitbrowser_cdp import get_fp_config
+
         fp_cfg = get_fp_config(transport.config)
         if fp_cfg.get("enabled"):
             if await transport._try_bitbrowser_cookie_refresh():

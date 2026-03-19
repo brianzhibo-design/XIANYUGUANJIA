@@ -95,9 +95,7 @@ class DrissionPageBrowserClient:
 
     async def connect(self) -> bool:
         if Chromium is None:
-            self.logger.error(
-                "DrissionPage is not installed. Run: pip install DrissionPage"
-            )
+            self.logger.error("DrissionPage is not installed. Run: pip install DrissionPage")
             return False
 
         if self._browser is not None:
@@ -114,7 +112,7 @@ class DrissionPageBrowserClient:
                     co.set_user_agent(self.user_agent)
                 co.set_argument(
                     "--window-size",
-                    f'{self.viewport["width"]},{self.viewport["height"]}',
+                    f"{self.viewport['width']},{self.viewport['height']}",
                 )
                 exe = os.getenv("CHROME_EXECUTABLE_PATH", "").strip()
                 if exe:
@@ -253,9 +251,7 @@ class DrissionPageBrowserClient:
     # queries
     # ------------------------------------------------------------------
 
-    async def find_elements(
-        self, page_id: str, selector: str
-    ) -> list[dict[str, Any]]:
+    async def find_elements(self, page_id: str, selector: str) -> list[dict[str, Any]]:
         tab = self._get_tab(page_id)
         dp_sel = _css(selector)
         try:
@@ -268,9 +264,7 @@ class DrissionPageBrowserClient:
         except Exception:
             return []
 
-    async def find_element(
-        self, page_id: str, selector: str
-    ) -> dict[str, Any] | None:
+    async def find_element(self, page_id: str, selector: str) -> dict[str, Any] | None:
         items = await self.find_elements(page_id, selector)
         return items[0] if items else None
 
@@ -323,9 +317,7 @@ class DrissionPageBrowserClient:
         except Exception:
             return False
 
-    async def wait_for_url(
-        self, page_id: str, pattern: str, timeout: int = 30000
-    ) -> bool:
+    async def wait_for_url(self, page_id: str, pattern: str, timeout: int = 30000) -> bool:
         tab = self._get_tab(page_id)
         deadline = asyncio.get_event_loop().time() + timeout / 1000
         while asyncio.get_event_loop().time() < deadline:
@@ -341,14 +333,10 @@ class DrissionPageBrowserClient:
     # file upload
     # ------------------------------------------------------------------
 
-    async def upload_file(
-        self, page_id: str, selector: str, file_path: str
-    ) -> bool:
+    async def upload_file(self, page_id: str, selector: str, file_path: str) -> bool:
         return await self.upload_files(page_id, selector, [file_path])
 
-    async def upload_files(
-        self, page_id: str, selector: str, file_paths: list[str]
-    ) -> bool:
+    async def upload_files(self, page_id: str, selector: str, file_paths: list[str]) -> bool:
         tab = self._get_tab(page_id)
         dp_sel = _css(selector)
         normalized = [str(Path(p).resolve()) for p in file_paths if str(p).strip()]
@@ -395,18 +383,10 @@ class DrissionPageBrowserClient:
         return await self.execute_script(page_id, "window.scrollTo(0, 0); true;") is True
 
     async def scroll_to_bottom(self, page_id: str) -> bool:
-        return (
-            await self.execute_script(
-                page_id, "window.scrollTo(0, document.body.scrollHeight); true;"
-            )
-            is True
-        )
+        return await self.execute_script(page_id, "window.scrollTo(0, document.body.scrollHeight); true;") is True
 
     async def scroll_by(self, page_id: str, x: int, y: int) -> bool:
-        return (
-            await self.execute_script(page_id, f"window.scrollBy({x}, {y}); true;")
-            is True
-        )
+        return await self.execute_script(page_id, f"window.scrollBy({x}, {y}); true;") is True
 
     # ------------------------------------------------------------------
     # JS execution
@@ -476,9 +456,7 @@ class DrissionPageBrowserClient:
         except Exception:
             return False
 
-    async def delete_cookies(
-        self, page_id: str = "", name: str | None = None
-    ) -> bool:
+    async def delete_cookies(self, page_id: str = "", name: str | None = None) -> bool:
         if self._browser is None:
             return False
         try:
@@ -492,9 +470,7 @@ class DrissionPageBrowserClient:
         except Exception:
             return False
 
-    async def set_cookies_for_domain(
-        self, cookies_str: str, domain: str = ".goofish.com"
-    ) -> None:
+    async def set_cookies_for_domain(self, cookies_str: str, domain: str = ".goofish.com") -> None:
         if self._browser is None:
             return
 
@@ -519,9 +495,7 @@ class DrissionPageBrowserClient:
                 parsed[k] = v
 
         if not parsed:
-            self.logger.warning(
-                "No valid cookies parsed from seed; skip cookie seeding"
-            )
+            self.logger.warning("No valid cookies parsed from seed; skip cookie seeding")
             return
 
         tab = self._browser.latest_tab
@@ -544,6 +518,4 @@ class DrissionPageBrowserClient:
 
         accepted = await asyncio.to_thread(_inject)
         if accepted < len(parsed):
-            self.logger.warning(
-                f"Partially accepted cookies for {domain}: {accepted}/{len(parsed)}"
-            )
+            self.logger.warning(f"Partially accepted cookies for {domain}: {accepted}/{len(parsed)}")

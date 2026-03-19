@@ -370,9 +370,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             today_replied = int(msg.get("today_replied", 0) or 0)
             result["inquiries"] = today_inquiries
             result["total_replied"] = today_replied
-            result["reply_rate_pct"] = (
-                round(100.0 * today_replied / today_inquiries, 1) if today_inquiries else 0.0
-            )
+            result["reply_rate_pct"] = round(100.0 * today_replied / today_inquiries, 1) if today_inquiries else 0.0
             result["total_inquiries"] = int(msg.get("total_conversations", 0) or 0)
             result["total_replied_all"] = int(msg.get("total_replied", 0) or 0)
         except Exception:

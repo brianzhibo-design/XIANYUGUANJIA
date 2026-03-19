@@ -90,10 +90,7 @@ async def _render_html_to_png(
     try:
         from DrissionPage import Chromium, ChromiumOptions
     except ImportError as exc:
-        raise RuntimeError(
-            "DrissionPage is required for image generation. "
-            "Install: pip install DrissionPage"
-        ) from exc
+        raise RuntimeError("DrissionPage is required for image generation. Install: pip install DrissionPage") from exc
 
     vp = viewport or VIEWPORT
 
@@ -101,14 +98,12 @@ async def _render_html_to_png(
         co = ChromiumOptions()
         co.auto_port()
         co.headless()
-        co.set_argument("--window-size", f'{vp["width"]},{vp["height"]}')
+        co.set_argument("--window-size", f"{vp['width']},{vp['height']}")
         co.set_argument("--hide-scrollbars")
         browser = Chromium(co)
         try:
             tab = browser.latest_tab
-            with tempfile.NamedTemporaryFile(
-                suffix=".html", delete=False, mode="w", encoding="utf-8"
-            ) as f:
+            with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as f:
                 f.write(html)
                 tmp_path = f.name
             try:

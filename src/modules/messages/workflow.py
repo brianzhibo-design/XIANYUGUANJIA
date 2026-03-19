@@ -234,9 +234,7 @@ class WorkflowStore:
     def set_manual_takeover(self, session_id: str, enabled: bool) -> bool:
         now = self._now()
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT state FROM session_tasks WHERE session_id=?", (session_id,)
-            ).fetchone()
+            row = conn.execute("SELECT state FROM session_tasks WHERE session_id=?", (session_id,)).fetchone()
             if row is None:
                 conn.execute(
                     """
@@ -760,9 +758,7 @@ class WorkflowWorker:
         db_path = self.config.get("db_path")
         self.store = store or WorkflowStore(db_path=db_path)
 
-        manual_timeout = int(
-            self.config.get("manual_mode_timeout", messages_cfg.get("manual_mode_timeout", 600))
-        )
+        manual_timeout = int(self.config.get("manual_mode_timeout", messages_cfg.get("manual_mode_timeout", 600)))
         manual_resume = int(
             self.config.get("manual_mode_resume_seconds", messages_cfg.get("manual_mode_resume_seconds", 300))
         )

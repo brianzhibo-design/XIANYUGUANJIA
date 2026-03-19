@@ -248,6 +248,7 @@ def _extra_checks(skip_quote: bool = False) -> list[dict[str, Any]]:
     dp_required = fp_enabled and slider_enabled
     try:
         import importlib
+
         dp_spec = importlib.util.find_spec("DrissionPage")
         if dp_spec:
             _append_check(
