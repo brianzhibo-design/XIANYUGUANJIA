@@ -86,10 +86,7 @@ async def test_examples_demo_module_smoke(monkeypatch, capsys):
 
 @pytest.mark.asyncio
 async def test_examples_demo_browser_smoke(monkeypatch, capsys):
-    try:
-        import examples.demo_browser as mod
-    except ImportError:
-        pytest.skip("examples.demo_browser not available")
+    import examples.demo_browser as mod
 
     class DummyController:
         async def connect(self):

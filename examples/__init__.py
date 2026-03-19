@@ -8,14 +8,18 @@ Examples
 from .demo import demo_listing_creation, demo_batch_publish
 from .demo import demo_content_generation, demo_media_processing
 from .demo import demo_operations, demo_data_analytics, demo_accounts
-from .demo_browser import (
-    demo_browser_connection,
-    demo_publish_flow,
-    demo_polish_flow,
-    demo_price_update,
-    demo_navigation,
-    demo_element_operations
-)
+
+try:
+    from .demo_browser import (
+        demo_browser_connection,
+        demo_publish_flow,
+        demo_polish_flow,
+        demo_price_update,
+        demo_navigation,
+        demo_element_operations,
+    )
+except ImportError:
+    pass
 
 __all__ = [
     "demo_listing_creation",
