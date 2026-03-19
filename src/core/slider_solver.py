@@ -252,7 +252,7 @@ def load_recorded_trajectories() -> list[dict[str, Any]]:
     pattern = os.path.join(_TRAJECTORY_DIR, "traj_*.json")
     for fp in glob.glob(pattern):
         try:
-            with open(fp, "r", encoding="utf-8") as f:
+            with open(fp, encoding="utf-8") as f:
                 data = json.load(f)
             steps = data.get("steps", [])
             if len(steps) >= 3:
@@ -1189,7 +1189,7 @@ def _try_slider_drissionpage(
                     _handle_post_captcha_dp(tab, _log)
                 else:
                     attempt_data["fail_reason"] = "no_success_marker"
-                    _log.info(f"DrissionPage: checking error indicator...")
+                    _log.info("DrissionPage: checking error indicator...")
                     try:
                         err_el = tab.ele("xpath://div[@class='errloading']", timeout=1)
                         if err_el:

@@ -27,7 +27,7 @@ def _read_recent_unmatched(project_root: Path, max_lines: int = 500) -> list[str
         return []
     lines: list[str] = []
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 lines.append(line)
                 if len(lines) > max_lines:
