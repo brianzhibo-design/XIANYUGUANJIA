@@ -21,11 +21,7 @@ echo "  [OK] client/package.json"
 sed -i '' "s/^  version: \".*\"/  version: \"${NEW_VERSION}\"/" config/config.example.yaml
 echo "  [OK] config/config.example.yaml"
 
-# 4. README.md title
-sed -i '' "s/闲鱼管家) v[0-9][0-9.]*/闲鱼管家) v${NEW_VERSION}/" README.md
-echo "  [OK] README.md"
-
-# 5. config/config.yaml (local user config, if exists)
+# 4. config/config.yaml (local user config, if exists)
 if [ -f config/config.yaml ]; then
     sed -i '' "s/^  version: .*/  version: \"${NEW_VERSION}\"/" config/config.yaml
     echo "  [OK] config/config.yaml"

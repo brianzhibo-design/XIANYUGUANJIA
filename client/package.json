@@ -1,6 +1,6 @@
 {
   "name": "xianyu-guanjia-client",
-  "version": "9.2.6",
+  "version": "9.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
