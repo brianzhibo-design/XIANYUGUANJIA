@@ -2282,6 +2282,12 @@ class MimicOps:
                 )
 
                 total_conversations = int(conn.execute("SELECT COUNT(*) AS c FROM session_tasks").fetchone()["c"])
+                today_conversations = int(
+                    conn.execute(
+                        """SELECT COUNT(*) AS c FROM session_tasks
+                           WHERE date(datetime(created_at), 'localtime') = date('now', 'localtime')""",
+                    ).fetchone()["c"]
+                )
                 total_messages = int(conn.execute("SELECT COUNT(*) AS c FROM workflow_jobs").fetchone()["c"])
 
                 hourly_rows = conn.execute(
@@ -2315,6 +2321,7 @@ class MimicOps:
                 "today_replied": today_replied,
                 "recent_replied": recent_replied,
                 "total_conversations": total_conversations,
+                "today_conversations": today_conversations,
                 "total_messages": total_messages,
                 "hourly_replies": hourly,
                 "daily_replies": daily,
@@ -4006,6 +4013,7 @@ class MimicOps:
             "today_replied": fallback_total_replied,
             "recent_replied": int(presales_sla.get("event_count", 0) or 0),
             "total_conversations": fallback_total_conversations,
+            "today_conversations": fallback_total_conversations,
             "total_messages": fallback_total_messages,
             "hourly_replies": {},
             "daily_replies": {},

@@ -200,7 +200,7 @@ def handle_virtual_goods_inspect_order_post(ctx: RouteContext) -> None:
 
 @post("/api/xgj/test-connection")
 def handle_xgj_test_connection(ctx: RouteContext) -> None:
-    from src.dashboard_server import _test_xgj_connection
+    from src.dashboard.mimic_ops import _test_xgj_connection
 
     body = ctx.json_body()
     app_key = str(body.get("app_key", ""))

@@ -366,13 +366,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
         try:
             status = self.mimic_ops.service_status()
             msg = status.get("message_stats") or {}
-            inquiries = int(msg.get("total_conversations", 0) or 0)
-            total_replied = int(msg.get("total_replied", 0) or 0)
-            result["inquiries"] = inquiries
-            result["total_replied"] = total_replied
+            today_inquiries = int(msg.get("today_conversations", 0) or 0)
+            today_replied = int(msg.get("today_replied", 0) or 0)
+            result["inquiries"] = today_inquiries
+            result["total_replied"] = today_replied
             result["reply_rate_pct"] = (
-                round(100.0 * total_replied / inquiries, 1) if inquiries else 0.0
+                round(100.0 * today_replied / today_inquiries, 1) if today_inquiries else 0.0
             )
+            result["total_inquiries"] = int(msg.get("total_conversations", 0) or 0)
+            result["total_replied_all"] = int(msg.get("total_replied", 0) or 0)
         except Exception:
             result.setdefault("inquiries", 0)
             result.setdefault("total_replied", 0)
@@ -435,6 +437,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if path == "/api/trend":
             metric = (query.get("metric") or ["views"])[0]
             days = _safe_int((query.get("days") or ["30"])[0], default=30, min_value=1, max_value=120)
+            if metric == "replies":
+                try:
+                    status = self.mimic_ops.service_status()
+                    daily = (status.get("message_stats") or {}).get("daily_replies", {})
+                    trend = [{"date": d, "value": c} for d, c in sorted(daily.items())]
+                    return {"trend": trend, "source": "workflow_db"}
+                except Exception:
+                    return {"trend": [], "source": "workflow_db"}
             return self.repo.get_trend(metric=metric, days=days)
         if path == "/api/recent-operations":
             limit = _safe_int((query.get("limit") or ["20"])[0], default=20, min_value=1, max_value=200)

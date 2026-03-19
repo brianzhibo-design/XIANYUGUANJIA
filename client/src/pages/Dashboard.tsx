@@ -151,7 +151,7 @@ function SliderStatsCard() {
         )}
       </div>
 
-      {stats.screenshots.length > 0 && (
+      {(stats.screenshots?.length ?? 0) > 0 && (
         <details className="mt-3">
           <summary className="text-xs text-xy-text-secondary cursor-pointer hover:text-xy-text-primary">
             查看失败截图 ({stats.screenshots.length})
@@ -667,7 +667,7 @@ const Dashboard = () => {
               <div className="flex justify-between items-center mb-6">
                 <h3 className="font-bold text-xy-text-primary">核心指标趋势</h3>
                 <div className="flex bg-xy-gray-100 p-1 rounded-lg">
-                  {[{ id: 'orders', label: '订单量' }, { id: 'completed', label: '成交量' }, { id: 'sales', label: '累计销量' }].map(m => (
+                  {[{ id: 'orders', label: '订单量' }, { id: 'completed', label: '成交量' }, { id: 'sales', label: '累计销量' }, { id: 'replies', label: '回复量' }].map(m => (
                     <button key={m.id} onClick={() => setMetric(m.id)} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${metric === m.id ? 'bg-white shadow-sm text-xy-text-primary' : 'text-xy-text-secondary hover:text-xy-text-primary'}`}>
                       {m.label}
                     </button>
@@ -688,7 +688,7 @@ const Dashboard = () => {
                       <XAxis dataKey="date" tickFormatter={v => v.slice(5)} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                       <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                       <Tooltip labelFormatter={v => `日期: ${v}`} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }} />
-                      <Bar dataKey="value" fill="#f97316" radius={[4, 4, 0, 0]} name={metric === 'orders' ? '订单量' : metric === 'completed' ? '成交量' : '累计销量'} />
+                      <Bar dataKey="value" fill="#f97316" radius={[4, 4, 0, 0]} name={metric === 'orders' ? '订单量' : metric === 'completed' ? '成交量' : metric === 'replies' ? '回复量' : '累计销量'} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
