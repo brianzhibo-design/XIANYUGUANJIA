@@ -104,8 +104,7 @@ class MessageSelectors:
 
 DEFAULT_WEIGHT_REPLY_TEMPLATE = (
     "{origin_province}到{dest_province} {billing_weight}kg 参考价格\n"
-    "{courier}: {price} 元\n"
-    "温馨提示：如包裹体积较大，快递会按体积重计费（{volume_formula}），届时可能需要补差价哦~"
+    "{courier}: {price} 元"
 )
 
 DEFAULT_VOLUME_REPLY_TEMPLATE = (
