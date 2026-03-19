@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import json
-import time
 import threading
+import time
 
 from src.dashboard.router import RouteContext, get, post
-
 
 # ---------------------------------------------------------------------------
 # GET /api/get-cookie

@@ -1,8 +1,10 @@
 """宝丽来相纸风格 — 灰色背景，白边宽下边距，微旋转，标签框。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "polaroid",

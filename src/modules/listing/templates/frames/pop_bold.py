@@ -1,8 +1,10 @@
 """3D立体漫画风格 — 白色背景，超大描边阴影文字，气泡标签，箭头分隔线。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "pop_bold",

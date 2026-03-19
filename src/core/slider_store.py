@@ -12,7 +12,6 @@ import threading
 from datetime import datetime, timezone
 from typing import Any
 
-
 _DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "slider_events.db")
 
 _SCHEMA = """
@@ -112,6 +111,7 @@ class SliderEventStore:
             return cur.lastrowid or 0
         except sqlite3.Error as exc:
             import logging
+
             logging.getLogger(__name__).warning("slider_store record_event failed: %s", exc)
             return 0
 

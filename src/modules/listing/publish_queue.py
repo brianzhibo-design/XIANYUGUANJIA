@@ -351,8 +351,8 @@ class PublishQueue:
 
         cat_counts = self._split_count(total_count, len(cats))
 
-        from .brand_assets import BrandAssetManager
         from .auto_publish import AutoPublishService
+        from .brand_assets import BrandAssetManager
 
         mgr = BrandAssetManager()
         svc = AutoPublishService()

@@ -4,6 +4,7 @@ line-length = 120
 [lint]
 select = ["E", "F", "W", "UP", "B", "I", "RUF"]
 ignore = [
+    "E501",    # line too long (SQL literals and long strings are intentional)
     "RUF001",  # ambiguous unicode chars in strings (Chinese punctuation)
     "RUF002",  # ambiguous unicode chars in docstrings
     "RUF003",  # ambiguous unicode chars in comments

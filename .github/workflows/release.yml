@@ -29,11 +29,7 @@ jobs:
 
       - name: Verify tag matches source version
         run: |
-          CODE_VERSION=$(python3 -c "
-          import re, pathlib
-          m = re.search(r'__version__\s*=\s*[\"'"'"'](.*?)[\"'"'"']', pathlib.Path('src/__init__.py').read_text())
-          print(m.group(1) if m else '')
-          ")
+          CODE_VERSION=$(python3 -c 'import re,pathlib; m=re.search(r"__version__\s*=\s*\"([^\"]+)\"", pathlib.Path("src/__init__.py").read_text()); print(m.group(1) if m else "")')
           TAG_VERSION="${{ steps.version.outputs.version }}"
           if [ "$CODE_VERSION" != "$TAG_VERSION" ]; then
             echo "::error::Tag version ($TAG_VERSION) does not match src/__init__.py ($CODE_VERSION)"

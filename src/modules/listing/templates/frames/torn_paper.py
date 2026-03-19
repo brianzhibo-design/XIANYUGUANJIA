@@ -1,8 +1,10 @@
 """撕纸拼接风格 — 深蓝色背景，倾斜白纸，黄色胶带装饰，圆角标签。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "torn_paper",

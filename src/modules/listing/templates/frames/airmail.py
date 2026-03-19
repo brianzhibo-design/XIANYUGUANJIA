@@ -1,8 +1,10 @@
 """国际航空信风格 — 红蓝斜条边框，圆形邮戳印章，PARCEL SERVICE标题。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "airmail",

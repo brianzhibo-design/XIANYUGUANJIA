@@ -8,11 +8,17 @@ from typing import Any
 
 from src.core.config import get_config
 from src.dashboard.config_service import (
-    read_system_config as _read_system_config,
-    write_system_config as _write_system_config,
-    CONFIG_SECTIONS as _CONFIG_SECTIONS,
     _ALLOWED_CONFIG_SECTIONS,
     _SENSITIVE_CONFIG_KEYS,
+)
+from src.dashboard.config_service import (
+    CONFIG_SECTIONS as _CONFIG_SECTIONS,
+)
+from src.dashboard.config_service import (
+    read_system_config as _read_system_config,
+)
+from src.dashboard.config_service import (
+    write_system_config as _write_system_config,
 )
 from src.dashboard.router import RouteContext, get, post, put
 
@@ -206,6 +212,7 @@ def _save_config(ctx: RouteContext) -> None:
     get_config().reload()
     try:
         from src.dashboard.routes.system import invalidate_health_cache
+
         invalidate_health_cache()
     except Exception:
         pass

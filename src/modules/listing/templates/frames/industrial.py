@@ -1,8 +1,10 @@
 """工业硬核风格 — 黄黑斜纹警示带，钢板灰背景，铆钉四角，CAUTION标语。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "industrial",

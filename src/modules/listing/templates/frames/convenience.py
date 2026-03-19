@@ -1,8 +1,10 @@
 """日系便利店风格 — 三色条幅，粗圆角边框，EXPRESS SERVICE徽章。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "convenience",

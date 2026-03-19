@@ -102,10 +102,7 @@ class MessageSelectors:
     SEND_BUTTON = "button:has-text('发送'), button:has-text('Send'), [class*='send']"
 
 
-DEFAULT_WEIGHT_REPLY_TEMPLATE = (
-    "{origin_province}到{dest_province} {billing_weight}kg 参考价格\n"
-    "{courier}: {price} 元"
-)
+DEFAULT_WEIGHT_REPLY_TEMPLATE = "{origin_province}到{dest_province} {billing_weight}kg 参考价格\n{courier}: {price} 元"
 
 DEFAULT_VOLUME_REPLY_TEMPLATE = (
     "{origin_province}到{dest_province} {billing_weight}kg 参考价格\n"
@@ -356,6 +353,7 @@ class MessagesService:
 
         try:
             from src.modules.messages.dedup import MessageDedup
+
             self._dedup: MessageDedup | None = MessageDedup()
         except Exception:
             self._dedup = None
@@ -1242,13 +1240,13 @@ class MessagesService:
 
         if courier_choice and not has_quote_rows:
             if self._is_courier_in_cost_table(courier_choice):
-                return self._sanitize_reply(
-                    f"我们有{courier_choice}哦~ 告诉我寄件城市、收件城市和重量，帮您查价~"
-                ), {"is_quote": False, "phase": "presale"}
+                return self._sanitize_reply(f"我们有{courier_choice}哦~ 告诉我寄件城市、收件城市和重量，帮您查价~"), {
+                    "is_quote": False,
+                    "phase": "presale",
+                }
             else:
                 return self._sanitize_reply(
-                    f"{courier_choice}的具体价格建议到小程序内查看哦~ "
-                    "告诉我路线和重量，也可以帮您查其他快递的参考价~"
+                    f"{courier_choice}的具体价格建议到小程序内查看哦~ 告诉我路线和重量，也可以帮您查其他快递的参考价~"
                 ), {"is_quote": False, "phase": "presale"}
 
         pre_matched = self.reply_engine.find_matching_rule(message_text, item_title)

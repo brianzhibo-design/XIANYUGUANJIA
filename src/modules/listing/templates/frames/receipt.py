@@ -1,8 +1,10 @@
 """小票收据风格 — 窄纸居中，锯齿边缘，等宽字体，条形码装饰。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "receipt",

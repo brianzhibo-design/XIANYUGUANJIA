@@ -1,8 +1,10 @@
 """活页板夹风格 — 浅绿格子底纹，白色圆角夹板，金属夹子+粉色标签胶囊，粗体分区框。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "clipboard",

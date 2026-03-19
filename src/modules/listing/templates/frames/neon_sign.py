@@ -1,8 +1,10 @@
 """荧光极客风格 — 深色背景，终端命令行风格，绿色荧光文字，网格细线。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "neon_sign",

@@ -1,8 +1,10 @@
 """官方正规蓝风格 — 浅蓝背景，白色圆角卡片，蓝色信息栏，虚线框Logo区。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "official_blue",

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from src.dashboard.router import RouteContext, get, post
 
-
 # ---------------------------------------------------------------------------
 # GET routes
 # ---------------------------------------------------------------------------

@@ -322,9 +322,10 @@ def _extra_checks(skip_quote: bool = False) -> list[dict[str, Any]]:
                 body = json.loads(resp.read().decode("utf-8", errors="ignore"))
             encrypted = body.get("encrypted")
             if encrypted:
-                from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-                from cryptography.hazmat.primitives import padding as sym_padding
                 import base64
+
+                from cryptography.hazmat.primitives import padding as sym_padding
+                from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
                 key_raw = f"{cc_uuid}-{cc_pwd}"
                 key_hash = hashlib.md5(key_raw.encode("utf-8")).hexdigest()[:16]

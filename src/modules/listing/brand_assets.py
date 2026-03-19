@@ -17,7 +17,6 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 # 允许的图片扩展名，防止任意文件上传
 ALLOWED_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "gif", "webp", "svg"})
 

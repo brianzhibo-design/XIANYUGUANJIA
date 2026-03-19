@@ -1,8 +1,10 @@
 """现代毛玻璃风格 — 紫粉渐变背景，模糊光斑，半透明圆角卡片。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "glassmorphism",

@@ -1,8 +1,10 @@
 """螺旋笔记本风格 — 浅蓝背景，白色笔记本，左侧线圈，右上回形针，横线纹理。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "spiral_notebook",

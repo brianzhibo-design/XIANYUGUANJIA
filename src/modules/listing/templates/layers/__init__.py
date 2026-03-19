@@ -10,10 +10,10 @@ from .base import (
     MODIFIER_REGISTRY,
     LayoutOutput,
     ModifierOutput,
-    list_layouts,
-    list_modifiers,
     get_layout,
     get_modifier,
+    list_layouts,
+    list_modifiers,
 )
 
 __all__ = [
@@ -27,7 +27,7 @@ __all__ = [
     "list_modifiers",
 ]
 
-from . import layouts as _layouts  # noqa: F401  trigger registration
 from . import color_schemes as _cs  # noqa: F401
 from . import decorations as _deco  # noqa: F401
+from . import layouts as _layouts  # noqa: F401  trigger registration
 from . import title_styles as _ts  # noqa: F401

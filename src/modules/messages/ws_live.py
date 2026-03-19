@@ -571,6 +571,7 @@ class GoofishWsTransport:
             changed = self._apply_cookie_text(cookie, reason="cookiecloud_poll")
             if changed:
                 from src.core.cookie_store import save_cookie
+
                 save_cookie(cookie, persist=True, source="cookiecloud_poll")
                 self._session_peer.clear()
                 self._seen_event.clear()
@@ -616,6 +617,7 @@ class GoofishWsTransport:
         if changed:
             self._last_cookie_applied_at = time.time()
             from src.core.cookie_store import save_cookie
+
             save_cookie(merged, persist=True, source="goofish_im")
             self._session_peer.clear()
             self._seen_event.clear()
@@ -651,6 +653,7 @@ class GoofishWsTransport:
             changed = self._apply_cookie_text(new_cookie, reason="active_refresh")
             if changed:
                 from src.core.cookie_store import save_cookie
+
                 save_cookie(new_cookie, persist=True, source="active_refresh")
                 self._session_peer.clear()
                 self._seen_event.clear()
@@ -777,6 +780,7 @@ class GoofishWsTransport:
         if changed:
             self._last_cookie_applied_at = time.time()
             from src.core.cookie_store import save_cookie
+
             save_cookie(merged, persist=True, source="bitbrowser_cdp")
             self._session_peer.clear()
             self._seen_event.clear()
@@ -926,6 +930,7 @@ class GoofishWsTransport:
             if changed:
                 self._last_cookie_applied_at = time.time()
                 from src.core.cookie_store import save_cookie
+
                 save_cookie(merged, persist=True, source="slider_recovery")
                 self._session_peer.clear()
                 self._seen_event.clear()
@@ -1000,6 +1005,7 @@ class GoofishWsTransport:
             self._apply_cookie_text(merged_text, reason=reason)
             self._dedup_cookies()
             from src.core.cookie_store import save_cookie
+
             save_cookie(self.cookie_text, persist=False, source=reason)
             self.logger.debug(f"Absorbed Set-Cookie from {reason}")
         return changed
@@ -1021,6 +1027,7 @@ class GoofishWsTransport:
             self._apply_cookie_text(merged_text, reason=reason)
             self._dedup_cookies()
             from src.core.cookie_store import save_cookie
+
             save_cookie(self.cookie_text, persist=False, source=reason)
             self.logger.debug(f"Absorbed Set-Cookie from response ({reason})")
         return changed
@@ -1084,6 +1091,7 @@ class GoofishWsTransport:
                 self._apply_cookie_text(merged_text, reason="has_login_refresh")
                 self._dedup_cookies()
                 from src.core.cookie_store import save_cookie
+
                 save_cookie(self.cookie_text, persist=False, source="has_login_refresh")
             return True
 

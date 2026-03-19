@@ -1,8 +1,10 @@
 """大红喜庆促销风格 — 红色渐变背景，放射线纹理，金色边框，限时特惠徽章。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "coupon_red",

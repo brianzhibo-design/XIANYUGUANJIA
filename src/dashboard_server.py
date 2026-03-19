@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import gzip as _gzip_mod
+import hashlib
 import json
 import logging
 import mimetypes
 import os
+import re
 import sqlite3
 import sys
 import threading
@@ -17,17 +20,11 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from src.core.config import get_config
+from src.dashboard.config_service import read_system_config as _read_system_config
+from src.dashboard.mimic_ops import MimicOps, _error_payload, _safe_int
 from src.dashboard.module_console import ModuleConsole
 from src.dashboard.repository import DashboardRepository, LiveDashboardDataSource
 from src.dashboard.router import RouteContext, dispatch_delete, dispatch_get, dispatch_post, dispatch_put
-from src.dashboard.mimic_ops import MimicOps, _error_payload
-
-import hashlib
-import re
-import gzip as _gzip_mod
-
-from src.dashboard.config_service import read_system_config as _read_system_config
-from src.dashboard.mimic_ops import _safe_int
 
 logger = logging.getLogger(__name__)
 
@@ -915,7 +912,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
     _HK_INTERVAL_SLOW = 24 * 3600  # 24h for heavy purge
     _project_root = Path(__file__).resolve().parents[1]
 
-    def _housekeeping_loop() -> None:  # noqa: C901
+    def _housekeeping_loop() -> None:
         shutdown_event.wait(300)  # initial delay 5 min
         last_fast = 0.0
         last_slow = 0.0
@@ -930,6 +927,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
                 _data = _project_root / "data"
                 try:
                     from src.core.slider_store import SliderEventStore
+
                     n = SliderEventStore.get_instance().cleanup_old(days=30)
                     if n:
                         logger.info("Housekeeping: slider_events purged %d rows", n)
@@ -937,16 +935,19 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
                     logger.debug("Housekeeping slider cleanup error: %s", e)
                 try:
                     from src.modules.messages.dedup import MessageDedup
+
                     n = MessageDedup(db_path=str(_data / "message_dedup.db")).cleanup(days=30)
                 except Exception as e:
                     logger.debug("Housekeeping dedup cleanup error: %s", e)
                 try:
                     from src.modules.messages.bargain_tracker import BargainTracker
+
                     n = BargainTracker(db_path=str(_data / "bargain_tracker.db")).cleanup(days=30)
                 except Exception as e:
                     logger.debug("Housekeeping bargain cleanup error: %s", e)
                 try:
                     from src.modules.quote.ledger import QuoteLedger
+
                     n = QuoteLedger(db_path=str(_data / "quote_ledger.db")).cleanup(max_age_seconds=86400)
                     if n:
                         logger.info("Housekeeping: quote_ledger purged %d rows", n)
@@ -954,6 +955,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
                     logger.debug("Housekeeping quote cleanup error: %s", e)
                 try:
                     from src.modules.messages.bot_sig_store import BotSigStore
+
                     BotSigStore(db_path=str(_data / "bot_sigs.db")).cleanup()
                 except Exception as e:
                     logger.debug("Housekeeping bot_sig cleanup error: %s", e)
@@ -962,6 +964,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
                 last_slow = now_ts
                 try:
                     from src.modules.messages.workflow import WorkflowStore
+
                     wf_db = str(_data / "workflow.db")
                     counts = WorkflowStore(wf_db).purge_old(days=90)
                     total = sum(counts.values())
@@ -971,6 +974,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
                     logger.debug("Housekeeping workflow purge error: %s", e)
                 try:
                     from src.core.slider_solver import cleanup_old_screenshots
+
                     n = cleanup_old_screenshots(max_age_days=7)
                     if n:
                         logger.info("Housekeeping: removed %d old screenshots", n)
@@ -981,6 +985,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
     hk_thread.start()
 
     from loguru import logger as _loguru
+
     from src.dashboard.router import all_routes
 
     routes = all_routes()

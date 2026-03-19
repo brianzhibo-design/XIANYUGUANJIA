@@ -1,8 +1,10 @@
 """牛皮纸包裹风格 — 牛皮纸底色，虚线裁切框，红色橡皮章，寄件单标题。"""
 
 from __future__ import annotations
+
 from typing import Any
-from ._common import e, brand_grid_html, wrap_page
+
+from ._common import brand_grid_html, e, wrap_page
 
 FRAME_META = {
     "id": "package_box",

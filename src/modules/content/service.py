@@ -93,8 +93,8 @@ class ContentService:
 
         if not self.api_key:
             try:
-                from pathlib import Path
                 import json as _json
+                from pathlib import Path
 
                 _sys_path = Path("data/system_config.json")
                 if _sys_path.exists():

@@ -19,11 +19,11 @@ import asyncio
 import os
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 from src.core.logger import get_logger
 
@@ -198,6 +198,7 @@ class CookieGrabber:
         try:
             import hashlib
             import json
+
             import httpx
 
             url = f"{host.rstrip('/')}/get/{uuid}"
@@ -267,8 +268,8 @@ class CookieGrabber:
             import json
             from hashlib import md5 as _md5
 
-            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
             from cryptography.hazmat.primitives import padding as sym_padding
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
             raw = base64.b64decode(encrypted)
 
@@ -576,7 +577,7 @@ class CookieAutoRefresher:
 
         # Level IM: 闲管家IM直读（最可靠来源）
         try:
-            from src.core.goofish_im_cookie import read_goofish_im_cookies, merge_cookies
+            from src.core.goofish_im_cookie import merge_cookies, read_goofish_im_cookies
 
             im_result = read_goofish_im_cookies(min_ttl=60)
             if im_result:

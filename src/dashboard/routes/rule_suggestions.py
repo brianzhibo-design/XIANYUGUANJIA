@@ -10,6 +10,8 @@ from typing import Any
 
 from src.dashboard.config_service import (
     read_system_config as _read_system_config,
+)
+from src.dashboard.config_service import (
     write_system_config as _write_system_config,
 )
 from src.dashboard.router import RouteContext, post
