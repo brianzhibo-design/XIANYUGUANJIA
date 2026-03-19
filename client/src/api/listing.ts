@@ -60,7 +60,7 @@ export const getPublishQueue = (date?: string): Promise<AxiosResponse<{ ok: bool
   api.get('/publish-queue', { params: date ? { date } : {} });
 
 export const generateDailyQueue = (categories?: string[]): Promise<AxiosResponse<{ ok: boolean; items: QueueItem[] }>> =>
-  api.post('/publish-queue/generate', categories ? { categories } : {});
+  api.post('/publish-queue/generate', categories ? { categories } : {}, { timeout: 60000 });
 
 export const updateQueueItem = (id: string, updates: Record<string, any>): Promise<AxiosResponse<{ ok: boolean; item: QueueItem }>> =>
   api.put(`/publish-queue/${id}`, updates);

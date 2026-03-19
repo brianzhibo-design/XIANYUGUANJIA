@@ -2246,7 +2246,7 @@ class MimicOps:
                 total_replied = int(
                     conn.execute(
                         """
-                        SELECT COUNT(*) AS c
+                        SELECT COUNT(DISTINCT session_id) AS c
                         FROM session_state_transitions
                         WHERE status IN (?, ?)
                           AND to_state IN (?, ?)
@@ -2258,7 +2258,7 @@ class MimicOps:
                 today_replied = int(
                     conn.execute(
                         """
-                        SELECT COUNT(*) AS c
+                        SELECT COUNT(DISTINCT session_id) AS c
                         FROM session_state_transitions
                         WHERE status IN (?, ?)
                           AND to_state IN (?, ?)
@@ -2271,7 +2271,7 @@ class MimicOps:
                 recent_replied = int(
                     conn.execute(
                         """
-                        SELECT COUNT(*) AS c
+                        SELECT COUNT(DISTINCT session_id) AS c
                         FROM session_state_transitions
                         WHERE status IN (?, ?)
                           AND to_state IN (?, ?)
