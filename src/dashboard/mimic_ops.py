@@ -2263,6 +2263,10 @@ class MimicOps:
                         WHERE status IN (?, ?)
                           AND to_state IN (?, ?)
                           AND date(datetime(created_at), 'localtime') = date('now', 'localtime')
+                          AND session_id IN (
+                              SELECT session_id FROM session_tasks
+                              WHERE date(datetime(created_at), 'localtime') = date('now', 'localtime')
+                          )
                         """,
                         (ok_status[0], ok_status[1], reply_states[0], reply_states[1]),
                     ).fetchone()["c"]
@@ -4010,10 +4014,10 @@ class MimicOps:
         fallback_total_messages = sum(int(v or 0) for v in workflow_jobs.values())
         message_stats = self._query_message_stats_from_workflow() or {
             "total_replied": fallback_total_replied,
-            "today_replied": fallback_total_replied,
+            "today_replied": 0,
             "recent_replied": int(presales_sla.get("event_count", 0) or 0),
             "total_conversations": fallback_total_conversations,
-            "today_conversations": fallback_total_conversations,
+            "today_conversations": 0,
             "total_messages": fallback_total_messages,
             "hourly_replies": {},
             "daily_replies": {},

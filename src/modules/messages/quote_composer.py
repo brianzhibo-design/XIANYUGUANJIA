@@ -255,19 +255,18 @@ class QuoteReplyComposer:
 
         # --- Segment 3 (conditional): tips ---
         tips_lines: list[str] = []
-        if volume_w and float(volume_w) > 0:
-            tips_lines.append("本次已按体积重与实际重量中较大值计费，实际体积有出入可能需补差价~")
-        else:
+        vol_w_val = float(volume_w or 0)
+        actual_w_val = float(actual_w or 0)
+        if vol_w_val > 0 and vol_w_val > actual_w_val:
             divisor = first_explain.get("volume_divisor")
             if divisor is not None and float(divisor) > 0:
-                div_val = int(divisor) if float(divisor) == int(float(divisor)) else float(divisor)
-            else:
-                div_val = (
-                    int(self.volume_divisor_default)
-                    if self.volume_divisor_default == int(self.volume_divisor_default)
-                    else self.volume_divisor_default
+                div_int = int(float(divisor))
+                tips_lines.append(
+                    f"温馨提示：本次按体积重计费（长×宽×高/{div_int}={vol_w_val:.1f}kg > 实重{actual_w_val:.1f}kg），"
+                    "实际体积有出入可能需补差价~"
                 )
-            tips_lines.append(f"温馨提示：体积较大的包裹按体积重计费（长×宽×高/{div_val}），届时可能需补差价~")
+            else:
+                tips_lines.append("温馨提示：本次按体积重计费，实际体积有出入可能需补差价~")
 
         for _, r in quote_rows:
             exp = r.explain if isinstance(r.explain, dict) else {}
