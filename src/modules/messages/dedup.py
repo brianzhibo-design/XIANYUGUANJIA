@@ -112,6 +112,7 @@ class MessageDedup:
 
         conn = sqlite3.connect(self.db_path)
         try:
+            conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 "INSERT OR IGNORE INTO message_replies (message_hash, chat_id, content, create_time, reply, replied_at) VALUES (?,?,?,?,?,?)",
                 (msg_h, chat_id, norm, create_time, reply, now),

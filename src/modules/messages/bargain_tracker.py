@@ -79,6 +79,7 @@ class BargainTracker:
         now = datetime.utcnow().isoformat()
         conn = sqlite3.connect(self.db_path)
         try:
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute("SELECT count FROM bargain_counts WHERE chat_id = ?", (chat_id,)).fetchone()
             if row:
                 new_count = row[0] + 1

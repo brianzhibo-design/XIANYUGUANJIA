@@ -55,6 +55,9 @@ class VirtualGoodsStore:
 
     def _init_db(self) -> None:
         with closing(self._connect()) as conn, conn:
+            ver = conn.execute("PRAGMA user_version").fetchone()[0]
+            if ver >= 1:
+                return
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS virtual_goods_products (
@@ -269,6 +272,7 @@ class VirtualGoodsStore:
                 ON ops_fulfillment_eff_daily(stat_date DESC);
                 """
             )
+            conn.execute("PRAGMA user_version = 1")
 
     def upsert_order(
         self,

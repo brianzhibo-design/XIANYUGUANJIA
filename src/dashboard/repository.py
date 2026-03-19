@@ -128,11 +128,19 @@ class LiveDashboardDataSource:
         _, total_order_count = self._fetch_orders(page_size=1)
         _, pending_count = self._fetch_orders(page_size=1, status=11)
 
+        _, delivered_count = self._fetch_orders(page_size=1, status=12)
+        _, shipped_count = self._fetch_orders(page_size=1, status=21)
+        _, done_count = self._fetch_orders(page_size=1, status=22)
+        paid_order_count = delivered_count + shipped_count + done_count
+        conversion_rate_pct = round(paid_order_count / total_order_count * 100, 2) if total_order_count > 0 else 0.0
+
         return {
             "active_products": active,
             "pending_orders": pending_count,
             "total_sales": total_sold,
             "total_orders": total_order_count,
+            "paid_order_count": paid_order_count,
+            "conversion_rate_pct": conversion_rate_pct,
             "source": "xianguanjia_api",
         }
 
@@ -278,25 +286,28 @@ class DashboardRepository:
 
     def _ensure_tables(self) -> None:
         with self._connect() as conn:
-            conn.execute("""CREATE TABLE IF NOT EXISTS operation_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT DEFAULT (datetime('now','localtime')),
-                operation TEXT, operation_type TEXT,
-                product_id TEXT, account_id TEXT,
-                status TEXT, details TEXT
-            )""")
-            conn.execute("""CREATE TABLE IF NOT EXISTS products (
-                product_id TEXT PRIMARY KEY, title TEXT,
-                status TEXT DEFAULT 'active', price REAL, stock INTEGER DEFAULT 0,
-                pic_url TEXT, created_at TEXT DEFAULT (datetime('now','localtime'))
-            )""")
-            conn.execute("""CREATE TABLE IF NOT EXISTS product_metrics (
-                product_id TEXT PRIMARY KEY, views INTEGER DEFAULT 0,
-                wants INTEGER DEFAULT 0, sales INTEGER DEFAULT 0,
-                inquiries INTEGER DEFAULT 0,
-                timestamp TEXT DEFAULT (datetime('now','localtime')),
-                updated_at TEXT DEFAULT (datetime('now','localtime'))
-            )""")
+            ver = conn.execute("PRAGMA user_version").fetchone()[0]
+            if ver < 1:
+                conn.execute("""CREATE TABLE IF NOT EXISTS operation_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT DEFAULT (datetime('now','localtime')),
+                    operation TEXT, operation_type TEXT,
+                    product_id TEXT, account_id TEXT,
+                    status TEXT, details TEXT
+                )""")
+                conn.execute("""CREATE TABLE IF NOT EXISTS products (
+                    product_id TEXT PRIMARY KEY, title TEXT,
+                    status TEXT DEFAULT 'active', price REAL, stock INTEGER DEFAULT 0,
+                    pic_url TEXT, created_at TEXT DEFAULT (datetime('now','localtime'))
+                )""")
+                conn.execute("""CREATE TABLE IF NOT EXISTS product_metrics (
+                    product_id TEXT PRIMARY KEY, views INTEGER DEFAULT 0,
+                    wants INTEGER DEFAULT 0, sales INTEGER DEFAULT 0,
+                    inquiries INTEGER DEFAULT 0,
+                    timestamp TEXT DEFAULT (datetime('now','localtime')),
+                    updated_at TEXT DEFAULT (datetime('now','localtime'))
+                )""")
+                conn.execute("PRAGMA user_version = 1")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -330,6 +341,9 @@ class DashboardRepository:
         }
 
     def get_trend(self, metric: str, days: int) -> list[dict[str, Any]]:
+        if metric in ("orders", "completed"):
+            return self._trend_from_operation_logs(metric, days)
+
         allowed = {"views", "wants", "sales", "inquiries"}
         if metric not in allowed:
             metric = "views"
@@ -352,6 +366,29 @@ class DashboardRepository:
             for row in conn.execute(sql, (start_date,)).fetchall():
                 rows_by_day[str(row["d"])] = int(row["v"])
 
+        result = []
+        for i in range(days):
+            d = (datetime.now() - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+            result.append({"date": d, "value": rows_by_day.get(d, 0)})
+        return result
+
+    def _trend_from_operation_logs(self, metric: str, days: int) -> list[dict[str, Any]]:
+        start_date = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+        if metric == "completed":
+            where = "AND (operation_type LIKE '%已完成%' OR operation_type LIKE '%已发货%' OR status = 'success')"
+        else:
+            where = ""
+        sql = f"""
+            SELECT date(timestamp) AS d, COUNT(*) AS v
+            FROM operation_logs
+            WHERE date(timestamp) >= ? {where}
+            GROUP BY date(timestamp)
+            ORDER BY d ASC
+        """
+        rows_by_day: dict[str, int] = {}
+        with self._connect() as conn:
+            for row in conn.execute(sql, (start_date,)).fetchall():
+                rows_by_day[str(row["d"])] = int(row["v"])
         result = []
         for i in range(days):
             d = (datetime.now() - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")

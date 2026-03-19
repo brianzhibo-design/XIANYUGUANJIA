@@ -83,6 +83,7 @@ class SliderEventStore:
             conn = sqlite3.connect(self._db_path, timeout=10)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
             self._local.conn = conn
         return conn
 
@@ -101,13 +102,18 @@ class SliderEventStore:
         col_str = ", ".join(columns)
         values = [kwargs[c] for c in columns]
 
-        conn = self._conn
-        cur = conn.execute(
-            f"INSERT INTO slider_events ({col_str}) VALUES ({placeholders})",
-            values,
-        )
-        conn.commit()
-        return cur.lastrowid or 0
+        try:
+            conn = self._conn
+            cur = conn.execute(
+                f"INSERT INTO slider_events ({col_str}) VALUES ({placeholders})",
+                values,
+            )
+            conn.commit()
+            return cur.lastrowid or 0
+        except sqlite3.Error as exc:
+            import logging
+            logging.getLogger(__name__).warning("slider_store record_event failed: %s", exc)
+            return 0
 
     def get_last_cookie_apply_ts(self) -> str | None:
         """Get the trigger_ts of the last event where cookie was applied."""

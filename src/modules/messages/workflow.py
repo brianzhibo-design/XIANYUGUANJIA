@@ -116,81 +116,109 @@ class WorkflowStore:
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS session_tasks (
-                    session_id TEXT PRIMARY KEY,
-                    state TEXT NOT NULL,
-                    manual_takeover INTEGER NOT NULL DEFAULT 0,
-                    last_message_hash TEXT,
-                    last_peer_name TEXT,
-                    last_item_title TEXT,
-                    last_error TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
+            ver = conn.execute("PRAGMA user_version").fetchone()[0]
+            if ver < 1:
+                conn.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS session_tasks (
+                        session_id TEXT PRIMARY KEY,
+                        state TEXT NOT NULL,
+                        manual_takeover INTEGER NOT NULL DEFAULT 0,
+                        last_message_hash TEXT,
+                        last_peer_name TEXT,
+                        last_item_title TEXT,
+                        last_error TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
 
-                CREATE TABLE IF NOT EXISTS session_state_transitions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    from_state TEXT,
-                    to_state TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    reason TEXT,
-                    metadata TEXT,
-                    error TEXT,
-                    created_at TEXT NOT NULL
-                );
+                    CREATE TABLE IF NOT EXISTS session_state_transitions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id TEXT NOT NULL,
+                        from_state TEXT,
+                        to_state TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        reason TEXT,
+                        metadata TEXT,
+                        error TEXT,
+                        created_at TEXT NOT NULL
+                    );
 
-                CREATE INDEX IF NOT EXISTS idx_transitions_session_time
-                ON session_state_transitions(session_id, created_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_transitions_session_time
+                    ON session_state_transitions(session_id, created_at DESC);
 
-                CREATE TABLE IF NOT EXISTS workflow_jobs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dedupe_key TEXT NOT NULL UNIQUE,
-                    session_id TEXT NOT NULL,
-                    stage TEXT NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    attempts INTEGER NOT NULL DEFAULT 0,
-                    next_run_at TEXT NOT NULL,
-                    lease_until TEXT,
-                    last_error TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
+                    CREATE TABLE IF NOT EXISTS workflow_jobs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        dedupe_key TEXT NOT NULL UNIQUE,
+                        session_id TEXT NOT NULL,
+                        stage TEXT NOT NULL,
+                        payload_json TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        attempts INTEGER NOT NULL DEFAULT 0,
+                        next_run_at TEXT NOT NULL,
+                        lease_until TEXT,
+                        last_error TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
 
-                CREATE INDEX IF NOT EXISTS idx_workflow_jobs_pending
-                ON workflow_jobs(status, next_run_at);
+                    CREATE INDEX IF NOT EXISTS idx_workflow_jobs_pending
+                    ON workflow_jobs(status, next_run_at);
 
-                CREATE TABLE IF NOT EXISTS sla_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    stage TEXT NOT NULL,
-                    outcome TEXT NOT NULL,
-                    latency_ms INTEGER NOT NULL,
-                    quote_fallback INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL
-                );
+                    CREATE TABLE IF NOT EXISTS sla_events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id TEXT NOT NULL,
+                        stage TEXT NOT NULL,
+                        outcome TEXT NOT NULL,
+                        latency_ms INTEGER NOT NULL,
+                        quote_fallback INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL
+                    );
 
-                CREATE INDEX IF NOT EXISTS idx_sla_events_time
-                ON sla_events(created_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_sla_events_time
+                    ON sla_events(created_at DESC);
 
-                CREATE TABLE IF NOT EXISTS sla_alerts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    alert_type TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    resolved_at TEXT
-                );
-                """
-            )
-            try:
-                conn.execute("ALTER TABLE sla_events ADD COLUMN intent TEXT DEFAULT ''")
-            except sqlite3.OperationalError:
-                pass
+                    CREATE TABLE IF NOT EXISTS sla_alerts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        alert_type TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        resolved_at TEXT
+                    );
+                    """
+                )
+                conn.execute("PRAGMA user_version = 1")
+            if ver < 2:
+                try:
+                    conn.execute("ALTER TABLE sla_events ADD COLUMN intent TEXT DEFAULT ''")
+                except sqlite3.OperationalError:
+                    pass
+                conn.execute("PRAGMA user_version = 2")
+
+    def purge_old(self, days: int = 90) -> dict[str, int]:
+        """Delete completed workflow data older than *days* days.
+
+        Returns counts of deleted rows per table.
+        """
+        cutoff = f"-{days} days"
+        result: dict[str, int] = {}
+        with self._connect() as conn:
+            result["workflow_jobs"] = conn.execute(
+                "DELETE FROM workflow_jobs WHERE status = 'done' AND updated_at < datetime('now', ?)",
+                (cutoff,),
+            ).rowcount
+            result["session_state_transitions"] = conn.execute(
+                "DELETE FROM session_state_transitions WHERE created_at < datetime('now', ?)",
+                (cutoff,),
+            ).rowcount
+            result["sla_events"] = conn.execute(
+                "DELETE FROM sla_events WHERE created_at < datetime('now', ?)",
+                (cutoff,),
+            ).rowcount
+            conn.commit()
+        return result
 
     def ensure_session(self, session: dict[str, Any]) -> None:
         session_id = str(session.get("session_id", ""))

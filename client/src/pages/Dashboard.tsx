@@ -490,8 +490,8 @@ const Dashboard = () => {
             {[
               { label: '今日询盘', value: stats.inquiries ?? 0, icon: MessageCircle, color: 'bg-violet-50', iconColor: 'text-violet-500' },
               { label: '回复率', value: `${stats.reply_rate_pct ?? 0}%`, icon: BarChart3, color: 'bg-cyan-50', iconColor: 'text-cyan-500' },
-              { label: '成交量', value: stats.paid_order_count ?? '--', icon: Package, color: 'bg-amber-50', iconColor: 'text-amber-500' },
-              { label: '转化率', value: stats.conversion_rate_pct != null ? `${stats.conversion_rate_pct}%` : '--', icon: TrendingUp, color: 'bg-emerald-50', iconColor: 'text-emerald-500' },
+              { label: '成交量', value: stats.paid_order_count ?? 0, icon: Package, color: 'bg-amber-50', iconColor: 'text-amber-500' },
+              { label: '转化率', value: stats.conversion_rate_pct != null ? `${stats.conversion_rate_pct}%` : '0%', icon: TrendingUp, color: 'bg-emerald-50', iconColor: 'text-emerald-500' },
             ].map(card => (
               <div key={card.label} className="xy-card p-5">
                 <div className="flex items-center justify-between mb-3">
