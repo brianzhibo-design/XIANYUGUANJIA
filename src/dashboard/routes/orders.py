@@ -305,7 +305,9 @@ def handle_auto_price_diagnose(ctx: RouteContext) -> None:
     poller = get_price_poller()
     result: dict = {
         "config_enabled": bool(apm_cfg.get("enabled")),
-        "poller_running": poller is not None and poller._thread is not None and poller._thread.is_alive() if poller else False,
+        "poller_running": poller is not None and poller._thread is not None and poller._thread.is_alive()
+        if poller
+        else False,
         "poller_interval": int(apm_cfg.get("poll_interval_seconds", 15)),
         "max_quote_age_seconds": int(apm_cfg.get("max_quote_age_seconds", 7200)),
         "fallback_action": apm_cfg.get("fallback_action", "skip"),
@@ -346,6 +348,7 @@ def handle_auto_price_diagnose(ctx: RouteContext) -> None:
             orders = data
 
         from src.modules.quote.ledger import get_quote_ledger
+
         ledger = get_quote_ledger()
         max_age = int(apm_cfg.get("max_quote_age_seconds", 7200))
         processed_set = set(poller._processed.keys()) if poller else set()
@@ -385,9 +388,7 @@ def handle_auto_price_diagnose(ctx: RouteContext) -> None:
                 result["pending_orders"].append(diag)
                 continue
 
-            quote = ledger.find_by_buyer(
-                buyer_nick, item_id=item_id, max_age_seconds=max_age, sender_user_id=buyer_eid
-            )
+            quote = ledger.find_by_buyer(buyer_nick, item_id=item_id, max_age_seconds=max_age, sender_user_id=buyer_eid)
             if not quote:
                 diag["reason"] = "no_quote_in_ledger"
                 result["pending_orders"].append(diag)
@@ -489,11 +490,18 @@ def handle_auto_price_test_modify(ctx: RouteContext) -> None:
         quote = ledger.find_by_buyer(buyer_nick, item_id=item_id, max_age_seconds=max_age, sender_user_id=buyer_eid)
 
         if not quote:
-            ctx.send_json({
-                "ok": False,
-                "error": f"未找到报价记录 (buyer={buyer_nick}, eid={buyer_eid}, item={item_id})",
-                "order_detail": {"buyer_nick": buyer_nick, "buyer_eid": buyer_eid, "item_id": item_id, "total_amount": total_amount},
-            })
+            ctx.send_json(
+                {
+                    "ok": False,
+                    "error": f"未找到报价记录 (buyer={buyer_nick}, eid={buyer_eid}, item={item_id})",
+                    "order_detail": {
+                        "buyer_nick": buyer_nick,
+                        "buyer_eid": buyer_eid,
+                        "item_id": item_id,
+                        "total_amount": total_amount,
+                    },
+                }
+            )
             return
 
         quote_rows = quote.get("quote_rows", [])
@@ -517,35 +525,41 @@ def handle_auto_price_test_modify(ctx: RouteContext) -> None:
         express_fee_cents = int(float(apm_cfg.get("default_express_fee", 0)) * 100)
 
         if target_cents == total_amount and total_amount > 0:
-            ctx.send_json({
-                "ok": True,
-                "modified": False,
-                "reason": "price_already_correct",
-                "total_amount": total_amount,
-                "target_cents": target_cents,
-            })
+            ctx.send_json(
+                {
+                    "ok": True,
+                    "modified": False,
+                    "reason": "price_already_correct",
+                    "total_amount": total_amount,
+                    "target_cents": target_cents,
+                }
+            )
             return
 
-        modify_resp = client.modify_order_price({
-            "order_no": order_no,
-            "order_price": target_cents,
-            "express_fee": express_fee_cents,
-        })
+        modify_resp = client.modify_order_price(
+            {
+                "order_no": order_no,
+                "order_price": target_cents,
+                "express_fee": express_fee_cents,
+            }
+        )
 
-        ctx.send_json({
-            "ok": modify_resp.ok,
-            "modified": modify_resp.ok,
-            "order_no": order_no,
-            "from_cents": total_amount,
-            "to_cents": target_cents,
-            "express_fee_cents": express_fee_cents,
-            "courier_choice": courier_choice or "(auto-min)",
-            "api_response": {
+        ctx.send_json(
+            {
                 "ok": modify_resp.ok,
-                "error_message": modify_resp.error_message if not modify_resp.ok else None,
-                "error_code": modify_resp.error_code if not modify_resp.ok else None,
-            },
-        })
+                "modified": modify_resp.ok,
+                "order_no": order_no,
+                "from_cents": total_amount,
+                "to_cents": target_cents,
+                "express_fee_cents": express_fee_cents,
+                "courier_choice": courier_choice or "(auto-min)",
+                "api_response": {
+                    "ok": modify_resp.ok,
+                    "error_message": modify_resp.error_message if not modify_resp.ok else None,
+                    "error_code": modify_resp.error_code if not modify_resp.ok else None,
+                },
+            }
+        )
 
     except Exception as exc:
         logger.error("auto-price test-modify error: %s", exc, exc_info=True)
