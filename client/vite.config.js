@@ -10,6 +10,14 @@ export default defineConfig({
         target: 'http://localhost:8091',
         changeOrigin: true,
       },
+      '/healthz': {
+        target: 'http://localhost:8091',
+        changeOrigin: true,
+      },
+      '/cookie-cloud': {
+        target: 'http://localhost:8091',
+        changeOrigin: true,
+      },
     },
   }
 })

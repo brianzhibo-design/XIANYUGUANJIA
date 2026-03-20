@@ -146,6 +146,10 @@ export default function UpdateBanner() {
   const startReconnecting = useCallback(() => {
     if (reconnectRef.current) clearInterval(reconnectRef.current);
     reconnectAttemptsRef.current = 0;
+
+    const backendOrigin = window.location.protocol + '//' + window.location.hostname + ':8091';
+    const isDevProxy = window.location.port !== '8091';
+
     reconnectRef.current = setInterval(async () => {
       reconnectAttemptsRef.current++;
       try {
@@ -154,12 +158,30 @@ export default function UpdateBanner() {
         setPhase('done');
         localStorage.removeItem(CACHE_KEY);
         setTimeout(() => window.location.reload(), 1500);
-      } catch {
-        if (reconnectAttemptsRef.current > 90) {
-          if (reconnectRef.current) clearInterval(reconnectRef.current);
-          setPhase('error');
-          setErrorMsg('服务重启超时，请手动刷新页面');
-        }
+        return;
+      } catch { /* current origin unreachable */ }
+
+      if (isDevProxy) {
+        try {
+          const res = await fetch(backendOrigin + '/healthz', { mode: 'cors' });
+          if (res.ok) {
+            if (reconnectRef.current) clearInterval(reconnectRef.current);
+            setPhase('done');
+            localStorage.removeItem(CACHE_KEY);
+            setTimeout(() => { window.location.href = backendOrigin; }, 1500);
+            return;
+          }
+        } catch { /* backend also unreachable */ }
+      }
+
+      if (reconnectAttemptsRef.current > 90) {
+        if (reconnectRef.current) clearInterval(reconnectRef.current);
+        setPhase('error');
+        setErrorMsg(
+          isDevProxy
+            ? `服务重启超时，请手动访问 ${backendOrigin}`
+            : '服务重启超时，请手动刷新页面',
+        );
       }
     }, 2000);
   }, []);
