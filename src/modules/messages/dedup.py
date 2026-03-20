@@ -53,8 +53,17 @@ class MessageDedup:
                     count        INTEGER DEFAULT 1
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS reply_dedup (
+                    reply_hash TEXT PRIMARY KEY,
+                    chat_id    TEXT NOT NULL,
+                    reply      TEXT NOT NULL,
+                    sent_at    TEXT DEFAULT (datetime('now'))
+                )
+            """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mr_chat ON message_replies (chat_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cr_chat ON content_replies (chat_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_rd_chat ON reply_dedup (chat_id)")
             conn.commit()
         finally:
             conn.close()
@@ -135,6 +144,40 @@ class MessageDedup:
         finally:
             conn.close()
 
+    def _reply_hash(self, chat_id: str, reply: str) -> str:
+        return self._hash(f"reply:{chat_id}:{self._normalize(reply)}")
+
+    def is_reply_duplicate(self, chat_id: str, reply_text: str, window_seconds: int = 120) -> bool:
+        """同一会话短时间窗口内是否发送过相同回复。"""
+        h = self._reply_hash(chat_id, reply_text)
+        conn = sqlite3.connect(self.db_path)
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM reply_dedup WHERE reply_hash = ? AND sent_at > datetime('now', ?)",
+                (h, f"-{window_seconds} seconds"),
+            ).fetchone()
+            return row is not None
+        except Exception:
+            return False
+        finally:
+            conn.close()
+
+    def mark_reply_sent(self, chat_id: str, reply_text: str) -> None:
+        """记录已发送的回复。"""
+        h = self._reply_hash(chat_id, reply_text)
+        now = datetime.utcnow().isoformat()
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                "INSERT OR REPLACE INTO reply_dedup (reply_hash, chat_id, reply, sent_at) VALUES (?,?,?,?)",
+                (h, chat_id, self._normalize(reply_text), now),
+            )
+            conn.commit()
+        except Exception as exc:
+            logger.warning(f"[dedup] mark_reply_sent error: {exc}")
+        finally:
+            conn.close()
+
     def cleanup(self, days: int = 30) -> int:
         """清理超过指定天数的去重记录。"""
         conn = sqlite3.connect(self.db_path)
@@ -145,8 +188,11 @@ class MessageDedup:
             c2 = conn.execute(
                 "DELETE FROM content_replies WHERE last_at < datetime('now', ?)", (f"-{days} days",)
             ).rowcount
+            c3 = conn.execute(
+                "DELETE FROM reply_dedup WHERE sent_at < datetime('now', ?)", (f"-{days} days",)
+            ).rowcount
             conn.commit()
-            total = c1 + c2
+            total = c1 + c2 + c3
             if total:
                 logger.info(f"[dedup] cleanup: removed {total} records older than {days} days")
             return total

@@ -695,13 +695,20 @@ class QuoteMessageParser:
             "service_level": self.extract_service_level(message_text),
             "max_dimension_cm": self.extract_max_dimension_cm(message_text),
         }
+        _msg_has_weight_signal = bool(
+            re.search(r"\d", message_text or "")
+            and re.search(r"kg|公斤|千克|斤|g|克", message_text or "", re.IGNORECASE)
+        ) or bool(re.search(r"[一二两三四五六七八九十半]+\s*(?:kg|公斤|千克|斤|g|克)", message_text or ""))
+
         has_missing = not origin or not destination or weight is None
         if has_missing and self.ai_extract_enabled:
             ai_fields = self.ai_extract_quote_fields(message_text, chat_history=chat_history)
             if ai_fields:
-                for key in ("origin", "destination", "weight"):
+                for key in ("origin", "destination"):
                     if not fields.get(key) and ai_fields.get(key):
                         fields[key] = ai_fields[key]
+                if not fields.get("weight") and ai_fields.get("weight") and _msg_has_weight_signal:
+                    fields["weight"] = ai_fields["weight"]
                 if ai_fields.get("origin") or ai_fields.get("destination"):
                     _logger.info(
                         "geo_extract: ai_补充 origin=%s dest=%s weight=%s",
@@ -726,8 +733,7 @@ class QuoteMessageParser:
                             fields.get("item_name"),
                             fields.get("estimated_weight"),
                         )
-        # 物品重量推断：所有方式都失败后，尝试从物品名称推断
-        if fields.get("weight") is None and item_title:
+        if fields.get("weight") is None and item_title and self.has_item_signal(message_text):
             item_weight = self.infer_weight_from_item(item_title)
             if item_weight is not None:
                 fields["weight"] = item_weight

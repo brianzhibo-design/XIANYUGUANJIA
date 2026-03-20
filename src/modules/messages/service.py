@@ -690,6 +690,10 @@ class MessagesService:
         if any(keyword in text for keyword in self.quote_intent_keywords):
             return True
 
+        origin, dest = self._extract_locations(text)
+        if origin and dest:
+            return True
+
         has_weight = bool(re.search(r"\d+(?:\.\d+)?\s*(?:kg|公斤|千克|斤|g|克)(?![a-zA-Z])", text, flags=re.IGNORECASE))
         if not has_weight:
             has_weight = bool(re.search(r"[一二两三四五六七八九十半]+\s*(?:kg|公斤|千克|斤|g|克)", text))
@@ -743,7 +747,8 @@ class MessagesService:
         r"\d+\s*(?:kg|公斤|千克|斤|g|克)(?![a-zA-Z])"
         r"|[\u4e00-\u9fa5]{2,6}(?:省|市|区|县|镇)"
         r"|[\u4e00-\u9fa5]{2,10}\s*(?:到|寄到|发到)\s*[\u4e00-\u9fa5]{2,10}"
-        r"|[\u4e00-\u9fa5]{2,10}\s*[~～\-\u2013\u2014\u2015→➔>＞]+\s*[\u4e00-\u9fa5]{2,10}",
+        r"|[\u4e00-\u9fa5]{2,10}\s*[~～\-\u2013\u2014\u2015→➔>＞]+\s*[\u4e00-\u9fa5]{2,10}"
+        r"|[\u4e00-\u9fa5]{2,4}\s*(?:寄(?![了的个件给过到着快包邮顺])|发(?![了的个件给过货到着快包邮顺]))\s*[\u4e00-\u9fa5]{2,4}",
         flags=re.IGNORECASE,
     )
 
@@ -1239,7 +1244,16 @@ class MessagesService:
             }
 
         if courier_choice and not has_quote_rows:
-            if self._is_courier_in_cost_table(courier_choice):
+            ctx_origin = context_after.get("origin")
+            ctx_dest = context_after.get("destination")
+            ctx_weight = context_after.get("weight")
+            try:
+                ctx_weight_ok = ctx_weight is not None and float(ctx_weight) > 0
+            except (TypeError, ValueError):
+                ctx_weight_ok = False
+            if ctx_origin and ctx_dest and ctx_weight_ok:
+                pass  # fall through to quote engine below
+            elif self._is_courier_in_cost_table(courier_choice):
                 return self._sanitize_reply(f"我们有{courier_choice}哦~ 告诉我寄件城市、收件城市和重量，帮您查价~"), {
                     "is_quote": False,
                     "phase": "presale",
@@ -1474,6 +1488,13 @@ class MessagesService:
                     "is_quote": False,
                     "session_phase": session_phase,
                     "aftersale_fallback": True,
+                    "quote_context_enabled": bool(self.context_memory_enabled),
+                }
+            if is_default and self.reply_engine.category == "express":
+                reply = "您好~ 告诉我寄件城市、收件城市和重量，帮您查最优价~"
+                return self._sanitize_reply(reply), {
+                    "is_quote": False,
+                    "express_default_override": True,
                     "quote_context_enabled": bool(self.context_memory_enabled),
                 }
             if is_default and self._ai_reply_enabled:
@@ -1944,7 +1965,16 @@ class MessagesService:
             sent = True
         elif quote_meta.get("skipped") or not (reply_text or "").strip():
             sent = False
-        elif session_id:
+        elif session_id and self._dedup and reply_text:
+            try:
+                if self._dedup.is_reply_duplicate(session_id, reply_text):
+                    self.logger.info(f"reply_dedup hit: session={session_id}, reply={reply_text[:40]}")
+                    sent = False
+                    quote_meta["skipped"] = True
+                    quote_meta["reason"] = "reply_dedup"
+            except Exception:
+                pass
+        if not blocked_by_policy and not dry_run and not quote_meta.get("skipped") and (reply_text or "").strip() and session_id:
             segments = quote_meta.get("reply_segments")
             if segments and len(segments) > 1:
                 all_ok = True
@@ -1974,9 +2004,12 @@ class MessagesService:
             if not sent:
                 self.logger.warning(f"reply_to_session returned False for session={session_id}")
 
-        if sent and msg and session_id and self._dedup and create_time:
+        if sent and msg and session_id and self._dedup:
             try:
-                self._dedup.mark_replied(session_id, create_time, msg, reply_text or "")
+                if create_time:
+                    self._dedup.mark_replied(session_id, create_time, msg, reply_text or "")
+                if reply_text:
+                    self._dedup.mark_reply_sent(session_id, reply_text)
             except Exception:
                 pass
 
