@@ -102,6 +102,12 @@ class Logger:
         """
         logger.error(message, *args, **kwargs)
 
+    def exception(self, message: str, *args, **kwargs) -> None:
+        """
+        Error级别日志，附带当前异常的完整 traceback
+        """
+        logger.exception(message, *args, **kwargs)
+
     def success(self, message: str, **kwargs) -> None:
         """
         Success级别日志（自定义）
