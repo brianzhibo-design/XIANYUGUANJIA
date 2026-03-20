@@ -466,7 +466,7 @@ class QuoteMessageParser:
                 return _validate_geo_return(o, d)
 
         compact = re.search(
-            r"([\u4e00-\u9fa5]{2,20})\s*[~～\-\u2013\u2014\u2015→➔>＞]+\s*([\u4e00-\u9fa5]{2,20})", text
+            r"([\u4e00-\u9fa5]{2,20})\s*[~～\-_\u2013\u2014\u2015→➔>＞]+\s*([\u4e00-\u9fa5]{2,20})", text
         )
         if compact:
             o = QuoteMessageParser._normalize_location_for_geo(compact.group(1))
