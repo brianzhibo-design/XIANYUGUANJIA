@@ -1516,11 +1516,15 @@ class MessagesService:
                 "quote_context_hit": bool(memory_hit),
             }
 
+        _QUOTE_TIMEOUT_SECONDS = 15
+
         start = perf_counter()
         try:
             multi_quote_rows: list[tuple[str, QuoteResult]] = []
             if self.quote_reply_all_couriers:
-                multi_quote_rows = await self._quote_all_couriers(request)
+                multi_quote_rows = await asyncio.wait_for(
+                    self._quote_all_couriers(request), timeout=_QUOTE_TIMEOUT_SECONDS
+                )
 
             if multi_quote_rows:
                 best_courier, best_result = multi_quote_rows[0]
@@ -1584,7 +1588,9 @@ class MessagesService:
                     "reply_segments": [self._sanitize_reply(s) for s in segments],
                 }
 
-            result = await self.quote_engine.get_quote(request)
+            result = await asyncio.wait_for(
+                self.quote_engine.get_quote(request), timeout=_QUOTE_TIMEOUT_SECONDS
+            )
             latency_ms = int((perf_counter() - start) * 1000)
             explain = result.explain if isinstance(result.explain, dict) else {}
             selected_template = self._select_quote_reply_template(explain)
@@ -1625,7 +1631,7 @@ class MessagesService:
                 "quote_context_hit": bool(memory_hit),
                 "quote_context_fields": extracted_fields,
             }
-        except QuoteProviderError:
+        except (QuoteProviderError, asyncio.TimeoutError):
             return self._sanitize_reply(self.quote_failed_template), {
                 "is_quote": True,
                 "quote_need_info": False,

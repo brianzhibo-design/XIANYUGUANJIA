@@ -443,13 +443,15 @@ class CostTableRepository:
                 deduped.append(record)
         return deduped
 
+    _ROUTE_SIMILARITY_MAX_POOL = 50_000
+
     def _rank_by_route_similarity(
         self,
         records: list[CostRecord],
         origin_norm: str,
         destination_norm: str,
     ) -> list[CostRecord]:
-        if not records:
+        if not records or len(records) > self._ROUTE_SIMILARITY_MAX_POOL:
             return []
 
         ranked: list[tuple[int, int, CostRecord]] = []
