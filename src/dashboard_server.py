@@ -846,7 +846,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
 
     def _watchdog_loop() -> None:
         nonlocal _wd_restart_count, _wd_last_restart_at
-        shutdown_event.wait(60)
+        shutdown_event.wait(30)
         while not shutdown_event.is_set():
             shutdown_event.wait(_WD_INTERVAL)
             if shutdown_event.is_set():
@@ -983,6 +983,27 @@ def run_server(host: str = "127.0.0.1", port: int = 8091, db_path: str | None = 
 
     hk_thread = threading.Thread(target=_housekeeping_loop, daemon=True, name="housekeeping")
     hk_thread.start()
+
+    # -- presales 快速拉起（一次性，后续由 watchdog 接管） --
+    def _presales_kickstart() -> None:
+        shutdown_event.wait(10)
+        if shutdown_event.is_set():
+            return
+        try:
+            st = module_console.status(window_minutes=1, limit=1)
+            modules = st.get("modules") or {}
+            presales_info = modules.get("presales", {}) if isinstance(modules, dict) else {}
+            proc = presales_info.get("process", {}) if isinstance(presales_info, dict) else {}
+            if not proc.get("alive", False):
+                logger.info("Kickstart: presales 未运行，主动启动...")
+                module_console.control(action="start", target="presales")
+                logger.info("Kickstart: presales 启动完成")
+            else:
+                logger.info("Kickstart: presales 已在运行，跳过")
+        except Exception as e:
+            logger.warning("Kickstart: presales 启动失败: %s", e)
+
+    threading.Thread(target=_presales_kickstart, daemon=True, name="presales-kickstart").start()
 
     from loguru import logger as _loguru
 
