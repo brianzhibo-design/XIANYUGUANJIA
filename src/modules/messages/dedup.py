@@ -188,9 +188,7 @@ class MessageDedup:
             c2 = conn.execute(
                 "DELETE FROM content_replies WHERE last_at < datetime('now', ?)", (f"-{days} days",)
             ).rowcount
-            c3 = conn.execute(
-                "DELETE FROM reply_dedup WHERE sent_at < datetime('now', ?)", (f"-{days} days",)
-            ).rowcount
+            c3 = conn.execute("DELETE FROM reply_dedup WHERE sent_at < datetime('now', ?)", (f"-{days} days",)).rowcount
             conn.commit()
             total = c1 + c2 + c3
             if total:

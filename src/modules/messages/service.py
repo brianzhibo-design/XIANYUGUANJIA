@@ -1609,9 +1609,7 @@ class MessagesService:
                     "reply_segments": [self._sanitize_reply(s) for s in segments],
                 }
 
-            result = await asyncio.wait_for(
-                self.quote_engine.get_quote(request), timeout=_QUOTE_TIMEOUT_SECONDS
-            )
+            result = await asyncio.wait_for(self.quote_engine.get_quote(request), timeout=_QUOTE_TIMEOUT_SECONDS)
             latency_ms = int((perf_counter() - start) * 1000)
             explain = result.explain if isinstance(result.explain, dict) else {}
             selected_template = self._select_quote_reply_template(explain)
@@ -1974,7 +1972,13 @@ class MessagesService:
                     quote_meta["reason"] = "reply_dedup"
             except Exception:
                 pass
-        if not blocked_by_policy and not dry_run and not quote_meta.get("skipped") and (reply_text or "").strip() and session_id:
+        if (
+            not blocked_by_policy
+            and not dry_run
+            and not quote_meta.get("skipped")
+            and (reply_text or "").strip()
+            and session_id
+        ):
             segments = quote_meta.get("reply_segments")
             if segments and len(segments) > 1:
                 all_ok = True
