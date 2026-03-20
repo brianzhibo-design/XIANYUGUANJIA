@@ -171,7 +171,7 @@ echo [^>^>] 等待健康检查...
 set "_HEALTH_OK=0"
 for /L %%i in (1,1,30) do (
     if !_HEALTH_OK! equ 0 (
-        curl -sf http://127.0.0.1:8091/api/health >nul 2>&1
+        curl -sf http://127.0.0.1:8091/healthz >nul 2>&1
         if !errorlevel! equ 0 (
             set "_HEALTH_OK=1"
         ) else (

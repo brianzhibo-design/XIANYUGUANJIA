@@ -41,8 +41,13 @@ def invalidate_health_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /healthz
+# GET /healthz, GET /api/health
 # ---------------------------------------------------------------------------
+
+
+@get("/api/health")
+def handle_health_simple(ctx: RouteContext) -> None:
+    ctx.send_json({"status": "ok"})
 
 
 @get("/healthz")
