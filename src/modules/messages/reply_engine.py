@@ -49,6 +49,7 @@ DEFAULT_VIRTUAL_PRODUCT_KEYWORDS = [
 _DEFAULT_XIAOCHENGXU_REPLACEMENT = "小丞虚"
 _DEFAULT_MINIAPP_NAME = "商达人快递上门取件"
 _DEFAULT_MINIAPP_SHORT = "商达人"
+_DEFAULT_MINIAPP_LINK = ""
 
 
 def get_word_replacements() -> dict[str, str]:
@@ -73,6 +74,17 @@ def get_word_replacements() -> dict[str, str]:
         if short != miniapp_name:
             result[_DEFAULT_MINIAPP_SHORT] = short
     return result
+
+
+def get_miniapp_link() -> str:
+    """从 system_config.json 读取小程序直达链接。"""
+    try:
+        from src.dashboard.config_service import read_system_config
+
+        cfg = read_system_config()
+        return str(cfg.get("sensitive_words", {}).get("miniapp_link", "") or "").strip()
+    except Exception:
+        return _DEFAULT_MINIAPP_LINK
 
 
 DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
@@ -269,8 +281,8 @@ DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
     },
     {
         "name": "express_cant_order",
-        "keywords": ["下不了单", "没法下单", "发不了", "没法发", "寄不出", "用不了", "没法发一单"],
-        "reply": "亲，遇到什么问题了呢？截图给我看一下~ 也可以在小程序点击「联系客服」获取帮助哦~",
+        "keywords": ["下不了单", "没法下单", "发不了", "没法发", "寄不出", "用不了", "没法发一单", "兑换不了", "兑不了"],
+        "reply": "亲，遇到什么问题了呢？截图给我看一下~ 也可以在小程序点击「联系客服」获取帮助哦~{miniapp_link}",
         "priority": 48,
         "categories": ["express"],
         "needs_human": True,
@@ -400,8 +412,15 @@ DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
             "在哪搜",
             "找不到小程序",
             "微信搜不到",
+            "哪里下单",
+            "在哪下单",
+            "在哪里下单",
+            "去哪下单",
+            "怎么进",
+            "进不去",
+            "打不开",
         ],
-        "reply": "小程序就是搜索「商达人快递上门取件」的小程序哦~ 付款后系统自动发兑换码给您，用兑换码在小程序兑换余额，然后填地址选快递下单就行~",
+        "reply": "小程序就是搜索「商达人快递上门取件」的小程序哦~ 付款后系统自动发兑换码给您，用兑换码在小程序兑换余额，然后填地址选快递下单就行~{miniapp_link}",
         "priority": 50,
         "categories": ["express"],
         "phase": "presale",
@@ -444,7 +463,7 @@ DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
             "下一步",
             "拿到码",
         ],
-        "reply": "在小程序搜索「商达人快递上门取件」→ 右下角「我的」→「兑换优惠」输入兑换码 → 返回首页填写地址选快递 → 用余额支付下单~",
+        "reply": "在小程序搜索「商达人快递上门取件」→ 右下角「我的」→「兑换优惠」输入兑换码 → 返回首页填写地址选快递 → 用余额支付下单~{miniapp_link}",
         "priority": 49,
         "categories": ["express"],
         "phase": "presale",
@@ -812,7 +831,7 @@ DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
     {
         "name": "express_post_payment",
         "keywords": ["付了", "付款了", "付完了", "交钱了", "付好了", "已经付了", "付过了"],
-        "reply": "付款后兑换码会自动发到聊天消息里~ 收到后打开小程序搜索「商达人快递上门取件」→「我的」→「兑换优惠」输入兑换码 → 返回首页填地址选快递 → 用余额支付下单~",
+        "reply": "付款后兑换码会自动发到聊天消息里~ 收到后打开小程序搜索「商达人快递上门取件」→「我的」→「兑换优惠」输入兑换码 → 返回首页填地址选快递 → 用余额支付下单~{miniapp_link}",
         "priority": 49,
         "categories": ["express"],
         "phase": "checkout",
@@ -1274,6 +1293,12 @@ class ReplyStrategyEngine:
         """检查回复内容是否包含敏感词，有则替换为安全版本。"""
         for forbidden, safe in get_word_replacements().items():
             reply_text = reply_text.replace(forbidden, safe)
+
+        link = get_miniapp_link()
+        if link:
+            reply_text = reply_text.replace("{miniapp_link}", f"\n{link}")
+        else:
+            reply_text = reply_text.replace("{miniapp_link}", "")
 
         guard = self._get_compliance_guard()
         if not guard:

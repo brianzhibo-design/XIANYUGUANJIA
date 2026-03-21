@@ -1785,6 +1785,19 @@ export default function SystemConfig() {
                       对接不同小程序时修改此项。所有话术中的「商达人快递上门取件」和「商达人」会自动替换为此处设置的名称。留空则使用默认值。
                     </p>
                   </div>
+                  <div className="mt-4">
+                    <label className="xy-label">小程序链接</label>
+                    <input
+                      type="text"
+                      className="xy-input px-3 py-2"
+                      placeholder="#小程序://商达人快递上门取丨退货无忧/cTNEYlSCRd56oma"
+                      value={config.sensitive_words?.miniapp_link || ''}
+                      onChange={e => handleChange('sensitive_words', 'miniapp_link', e.target.value)}
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      小程序直达链接，会自动附在引导下单的回复末尾。买家可复制到微信任意对话框直接点击打开小程序。留空则不发送链接。
+                    </p>
+                  </div>
                 </div>
               </CollapsibleSection>
             </div>
