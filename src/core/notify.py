@@ -24,6 +24,7 @@ _EVENT_TOGGLE_MAP: dict[str, str] = {
     "after_sales": "notify_after_sales",
     "ship_fail": "notify_ship_fail",
     "manual_takeover": "notify_manual_takeover",
+    "heavy_quote_alert": "notify_heavy_quote",
 }
 
 _CONFIG_PATH = Path(__file__).resolve().parents[2] / "data" / "system_config.json"

@@ -283,6 +283,14 @@ quote:
   api_fallback_to_table_parallel: true
   api_prefer_max_wait_seconds: 1.2
   volume_divisor_default: 8000
+  # 多快递比价时的重量分流（与「小件/大件」业务一致，可改）
+  freight_hide_below_kg: 20
+  express_hide_above_kg: 30
+  # 计费重 >= 该值时飞书告警（策略 B：特大特重才打扰运营）
+  heavy_quote_alert_kg: 60
+  # 可选文案（留空则用代码默认）
+  heavy_freight_only_tip: ""
+  heavy_freight_express_fallback_tip: ""
   markup_rules:
     default:
       normal_first_add: 0.5

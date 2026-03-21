@@ -32,8 +32,18 @@ class QuoteReplyComposer:
         self.quote_reply_max_couriers = quote_reply_max_couriers
         self.logger = _logger
         self._freight_needs_city = False
+        self._express_fallback_no_freight = False
+        self._freight_only_large_weight = False
+        self._low_weight_freight_fallback = False
         self.freight_courier_priority: list[str] = list(quote_config.get("freight_courier_priority") or [])
         self.volume_divisor_default: float = float(quote_config.get("volume_divisor_default") or 8000)
+
+    @staticmethod
+    def _is_freight_result(result: QuoteResult) -> bool:
+        return (result.explain or {}).get("service_type") == "freight"
+
+    def _is_freight_pair(self, pair: tuple[str, QuoteResult]) -> bool:
+        return self._is_freight_result(pair[1])
 
     @staticmethod
     def format_eta_days(minutes: int | float | None) -> str:
@@ -116,16 +126,53 @@ class QuoteReplyComposer:
             ok_pairs.append((courier_name, result))
 
         self._freight_needs_city = False
-        if ok_pairs:
-            first_exp = ok_pairs[0][1].explain if isinstance(ok_pairs[0][1].explain, dict) else {}
-            billing_w = float(first_exp.get("billing_weight_kg") or request.weight or 0)
-            if billing_w < 20:
-                ok_pairs = [p for p in ok_pairs if (p[1].explain or {}).get("service_type") != "freight"]
+        self._express_fallback_no_freight = False
+        self._freight_only_large_weight = False
+        self._low_weight_freight_fallback = False
+
+        if not ok_pairs:
+            return []
+
+        full_pairs = list(ok_pairs)
+        first_exp = ok_pairs[0][1].explain if isinstance(ok_pairs[0][1].explain, dict) else {}
+        billing_w = float(first_exp.get("billing_weight_kg") or request.weight or 0)
+
+        freight_below = float(self.quote_config.get("freight_hide_below_kg", 20))
+        express_above = float(self.quote_config.get("express_hide_above_kg", 30))
+        if freight_below >= express_above:
+            self.logger.warning(
+                "quote: freight_hide_below_kg (%.1f) >= express_hide_above_kg (%.1f); using 20/30",
+                freight_below,
+                express_above,
+            )
+            freight_below, express_above = 20.0, 30.0
+
+        if billing_w < freight_below:
+            ok_pairs = [p for p in ok_pairs if not self._is_freight_pair(p)]
+        else:
+            geo = GeoResolver()
+            if geo.is_province_level(request.origin) or geo.is_province_level(request.destination):
+                ok_pairs = [p for p in ok_pairs if not self._is_freight_pair(p)]
+                self._freight_needs_city = True
+
+        if not ok_pairs:
+            ok_pairs = list(full_pairs)
+            self._low_weight_freight_fallback = True
+
+        before_high = list(ok_pairs)
+
+        if billing_w > express_above:
+            freight_only = [p for p in ok_pairs if self._is_freight_pair(p)]
+            if freight_only:
+                ok_pairs = freight_only
+                self._freight_only_large_weight = True
             else:
-                geo = GeoResolver()
-                if geo.is_province_level(request.origin) or geo.is_province_level(request.destination):
-                    ok_pairs = [p for p in ok_pairs if (p[1].explain or {}).get("service_type") != "freight"]
-                    self._freight_needs_city = True
+                self._express_fallback_no_freight = True
+
+        if not ok_pairs:
+            ok_pairs = list(before_high) if before_high else list(full_pairs)
+            self._express_fallback_no_freight = True
+            self._freight_only_large_weight = False
 
         ok_pairs.sort(key=lambda item: (float(item[1].total_fee), str(item[0])))
         return ok_pairs
@@ -246,7 +293,8 @@ class QuoteReplyComposer:
 
         if len(quote_rows) == 1:
             single_courier = quote_rows[0][0]
-            seg1_lines.append(f"您这个路线目前 {single_courier} 快递最优惠，其他快递暂无报价或价格偏高~")
+            _svc = "快运" if self._is_freight_result(quote_rows[0][1]) else "快递"
+            seg1_lines.append(f"您这个路线目前 {single_courier} {_svc}最优惠，其他线路暂无报价或价格偏高~")
 
         segments: list[str] = ["\n".join(seg1_lines)]
 
@@ -281,6 +329,25 @@ class QuoteReplyComposer:
 
         if self._freight_needs_city:
             tips_lines.append("大件快运报价需精确到市-市，麻烦提供具体城市帮您查快运价~")
+
+        cfg = self.quote_config
+        if self._express_fallback_no_freight:
+            tip_fb = (cfg.get("heavy_freight_express_fallback_tip") or "").strip()
+            if not tip_fb:
+                tip_fb = "本路线暂无快运参考价，以下为快递估算仅供参考；大件请发长宽高，便于核对体积重与渠道/后台价~"
+            tips_lines.append(tip_fb)
+
+        if self._freight_only_large_weight:
+            tip_lo = (cfg.get("heavy_freight_only_tip") or "").strip()
+            if not tip_lo:
+                kg_line = int(float(cfg.get("express_hide_above_kg", 30)))
+                tip_lo = (
+                    f"超过约{kg_line}kg 按大件快运报价，快递标快不适用；请发长宽高核对体积重，最终以网点/后台核实为准~"
+                )
+            tips_lines.append(tip_lo)
+
+        if self._low_weight_freight_fallback:
+            tips_lines.append("小件以快递为主；若下列含快运参考，请以快递方案优先~")
 
         if tips_lines:
             segments.append("\n".join(tips_lines))

@@ -1582,6 +1582,24 @@ class MessagesService:
                             for courier_name, result in multi_quote_rows
                         ],
                     )
+                try:
+                    _exp0 = best_result.explain if isinstance(best_result.explain, dict) else {}
+                    _bw_alert = float(_exp0.get("billing_weight_kg") or request.weight or 0)
+                    _thr = float(self.quote_config.get("heavy_quote_alert_kg", 60))
+                    if _bw_alert >= _thr:
+                        from src.core.notify import send_system_notification
+
+                        send_system_notification(
+                            "[特大特重报价告警]\n"
+                            f"计费重约 {_bw_alert:.1f}kg（告警阈值≥{_thr:.0f}kg）\n"
+                            f"路线: {request.origin} -> {request.destination}\n"
+                            f"session: {session_id or '(none)'}\n"
+                            "建议人工核对：体积重、渠道差异、线下/后台价。",
+                            event="heavy_quote_alert",
+                        )
+                except Exception:
+                    pass
+
                 return self._sanitize_reply(reply), {
                     "is_quote": True,
                     "quote_need_info": False,
