@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import random
 from abc import ABC, abstractmethod
@@ -175,7 +176,7 @@ class CostTableMarkupQuoteProvider(IQuoteProvider):
             explicit_volume_weight=float(request.volume_weight or 0.0),
             divisor=divisor,
         )
-        billing_weight = max(actual_weight, volume_weight)
+        billing_weight = math.ceil(max(actual_weight, volume_weight))
 
         # 使用 base_weight 而非硬编码 1.0
         extra_weight = max(0.0, billing_weight - row.base_weight)
@@ -319,10 +320,12 @@ class ApiCostMarkupQuoteProvider(IQuoteProvider):
             divisor=divisor,
         )
         api_billable_weight = _to_float(parsed.get("billable_weight"))
-        billing_weight = max(
-            float(request.weight or 0.0),
-            float(api_billable_weight or 0.0),
-            float(volume_weight or 0.0),
+        billing_weight = math.ceil(
+            max(
+                float(request.weight or 0.0),
+                float(api_billable_weight or 0.0),
+                float(volume_weight or 0.0),
+            )
         )
         base_weight = 30.0 if is_freight else 1.0
         extra_weight = max(0.0, billing_weight - base_weight)
