@@ -30,6 +30,13 @@ fi
 
 DASH_PORT="${XIANYU_DASHBOARD_PORT:-8091}"
 
+EXISTING_PID=$(lsof -ti :"$DASH_PORT" 2>/dev/null || true)
+if [ -n "$EXISTING_PID" ]; then
+  echo "[!!] 端口 ${DASH_PORT} 已被占用 (PID: $EXISTING_PID)，跳过启动"
+  echo "[!!] 如需重启，请先执行: kill $EXISTING_PID"
+  exit 0
+fi
+
 echo "[>>] 启动 Dashboard (端口 ${DASH_PORT})..."
 echo "     使用: $PY -m src.dashboard_server"
 "$PY" -m src.dashboard_server --port "$DASH_PORT" >> logs/backend.log 2>&1 &

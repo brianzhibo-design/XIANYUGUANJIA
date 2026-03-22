@@ -124,6 +124,13 @@ for %%F in (requirements.txt start.sh start.bat quick-start.sh quick-start.bat) 
 echo [OK] 源码覆盖完成
 rmdir /S /Q "%TEMP_UPDATE%" 2>nul
 
+REM Clean __pycache__ to avoid stale bytecode
+for /d /r "%PROJECT_ROOT%\src" %%D in (__pycache__) do (
+    if exist "%%D" rmdir /S /Q "%%D" 2>nul
+)
+del /S /Q "%PROJECT_ROOT%\src\*.pyc" 2>nul
+echo [OK] 已清理 Python 字节码缓存
+
 REM ═══════════════ 4. 更新依赖 ═══════════════
 echo [^>^>] [4/5] 检查依赖更新...
 call :write_status "installing_deps" ""
@@ -166,10 +173,10 @@ if exist "start.bat" (
     goto :eof
 )
 
-REM Health check (30s timeout)
-echo [^>^>] 等待健康检查...
+REM Health check (60s timeout)
+echo [^>^>] 等待健康检查 (最多 60s)...
 set "_HEALTH_OK=0"
-for /L %%i in (1,1,30) do (
+for /L %%i in (1,1,60) do (
     if !_HEALTH_OK! equ 0 (
         curl -sf http://127.0.0.1:8091/healthz >nul 2>&1
         if !errorlevel! equ 0 (
@@ -188,7 +195,7 @@ if !_HEALTH_OK! equ 1 (
     echo [OK] 更新完成!
     echo [^>^>] =========================================
 ) else (
-    echo [ERR] 服务未通过健康检查，触发回滚
+    echo [ERR] 服务未通过健康检查 (60s 超时)，触发回滚
     goto :rollback
 )
 goto :eof

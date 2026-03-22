@@ -18,6 +18,9 @@ PACKAGE_PATH="${1:-}"
 PROJECT_ROOT="${2:-$(cd "$(dirname "$0")/.." && pwd)}"
 STATUS_FILE="$PROJECT_ROOT/data/update-status.json"
 
+LAUNCHD_LABEL="com.xianyu-guanjia"
+LAUNCHD_MANAGED=false
+
 write_status() {
   local status="$1"
   shift
@@ -31,6 +34,16 @@ write_status() {
 EOJSON
 }
 
+detect_launchd() {
+  if [ "$(uname)" != "Darwin" ]; then
+    return
+  fi
+  if launchctl list "$LAUNCHD_LABEL" >/dev/null 2>&1; then
+    LAUNCHD_MANAGED=true
+    ok "检测到 launchd 服务: $LAUNCHD_LABEL"
+  fi
+}
+
 cleanup_on_error() {
   local backup_tar="$1"
   fail "更新失败，正在回滚..."
@@ -41,11 +54,64 @@ cleanup_on_error() {
   fi
   write_status "error" "\"message\": \"更新失败已回滚\""
   info "正在重新启动服务..."
-  cd "$PROJECT_ROOT"
-  if [ -f "start.sh" ]; then
-    nohup bash start.sh > logs/start.log 2>&1 &
-  fi
+  _start_service
   exit 1
+}
+
+_stop_service() {
+  if [ "$LAUNCHD_MANAGED" = true ]; then
+    info "通过 launchctl 停止服务..."
+    launchctl stop "$LAUNCHD_LABEL" 2>/dev/null || true
+    sleep 2
+    for port in 8091 5173; do
+      PIDS=$(lsof -ti :"$port" 2>/dev/null || true)
+      if [ -n "$PIDS" ]; then
+        echo "$PIDS" | xargs kill -9 2>/dev/null || true
+        warn "launchctl stop 后端口 $port 仍有残留进程，已强制终止"
+      fi
+    done
+  else
+    for port in 8091 5173; do
+      PIDS=$(lsof -ti :"$port" 2>/dev/null || true)
+      if [ -n "$PIDS" ]; then
+        echo "$PIDS" | xargs kill -TERM 2>/dev/null || true
+        ok "已向端口 $port 发送 SIGTERM"
+      fi
+    done
+    sleep 3
+    for port in 8091 5173; do
+      PIDS=$(lsof -ti :"$port" 2>/dev/null || true)
+      if [ -n "$PIDS" ]; then
+        echo "$PIDS" | xargs kill -9 2>/dev/null || true
+        warn "端口 $port 强制终止 (SIGKILL)"
+      fi
+    done
+    sleep 1
+  fi
+}
+
+_start_service() {
+  cd "$PROJECT_ROOT"
+  if [ "$LAUNCHD_MANAGED" = true ]; then
+    info "通过 launchctl 启动服务..."
+    local PLIST_DEST="$HOME/Library/LaunchAgents/${LAUNCHD_LABEL}.plist"
+    if [ -f "$PLIST_DEST" ]; then
+      launchctl unload "$PLIST_DEST" 2>/dev/null || true
+      sleep 1
+      launchctl load "$PLIST_DEST" 2>/dev/null || true
+      launchctl start "$LAUNCHD_LABEL" 2>/dev/null || true
+      ok "launchctl 服务已重新加载并启动"
+    else
+      warn "launchd plist 不存在，回退到 start.sh"
+      LAUNCHD_MANAGED=false
+      _start_service
+    fi
+  elif [ -f "start.sh" ]; then
+    nohup bash start.sh > logs/start.log 2>&1 &
+    ok "服务启动中 (PID: $!)"
+  else
+    warn "未找到 start.sh，请手动启动服务"
+  fi
 }
 
 if [ -z "$PACKAGE_PATH" ]; then
@@ -69,6 +135,8 @@ info "更新包: $PACKAGE_PATH"
 info "项目目录: $PROJECT_ROOT"
 echo ""
 
+detect_launchd
+
 # ═══════════════ 1. 备份 ═══════════════
 info "[1/5] 创建备份..."
 write_status "backing_up"
@@ -86,7 +154,6 @@ if [ -n "$BACKUP_ITEMS" ]; then
   tar czf "$BACKUP_TAR" $BACKUP_ITEMS 2>/dev/null
   BACKUP_SIZE=$(du -sh "$BACKUP_TAR" | cut -f1)
   ok "备份完成: $BACKUP_SIZE -> data/backups/pre-update-${TIMESTAMP}.tar.gz"
-  # Keep only the 3 most recent backups
   ls -t "$PROJECT_ROOT/data/backups/pre-update-"*.tar.gz 2>/dev/null | tail -n +4 | xargs rm -f 2>/dev/null || true
 else
   warn "没有找到需要备份的文件"
@@ -96,23 +163,7 @@ fi
 # ═══════════════ 2. 停止服务 ═══════════════
 info "[2/5] 停止运行中的服务..."
 write_status "stopping"
-
-for port in 8091 5173; do
-  PIDS=$(lsof -ti :"$port" 2>/dev/null || true)
-  if [ -n "$PIDS" ]; then
-    echo "$PIDS" | xargs kill -TERM 2>/dev/null || true
-    ok "已向端口 $port 发送 SIGTERM"
-  fi
-done
-sleep 3
-for port in 8091 5173; do
-  PIDS=$(lsof -ti :"$port" 2>/dev/null || true)
-  if [ -n "$PIDS" ]; then
-    echo "$PIDS" | xargs kill -9 2>/dev/null || true
-    warn "端口 $port 强制终止 (SIGKILL)"
-  fi
-done
-sleep 1
+_stop_service
 
 # ═══════════════ 3. 解压覆盖 ═══════════════
 info "[3/5] 解压并覆盖源码..."
@@ -161,6 +212,11 @@ done
 
 ok "源码覆盖完成"
 rm -rf "$TEMP_DIR"
+
+# 清理 __pycache__，确保新代码不被旧字节码干扰
+find "$PROJECT_ROOT/src" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$PROJECT_ROOT/src" -name "*.pyc" -delete 2>/dev/null || true
+ok "已清理 Python 字节码缓存"
 
 # ═══════════════ 4. 更新依赖 ═══════════════
 info "[4/5] 检查依赖更新..."
@@ -212,21 +268,18 @@ if [ -f "$PROJECT_ROOT/src/__init__.py" ]; then
   [ -z "$NEW_VERSION" ] && NEW_VERSION="unknown"
 fi
 
-cd "$PROJECT_ROOT"
-if [ -f "start.sh" ]; then
-  nohup bash start.sh > logs/start.log 2>&1 &
-  ok "服务启动中..."
-else
-  warn "未找到 start.sh，请手动启动服务"
+_start_service
+
+if ! [ -f "start.sh" ] && [ "$LAUNCHD_MANAGED" = false ]; then
   write_status "done" "\"version\": \"$NEW_VERSION\", \"message\": \"更新完成（需手动启动）\""
   rm -f "$PACKAGE_PATH" 2>/dev/null || true
   exit 0
 fi
 
 # ═══════════════ 5.1 健康检查 ═══════════════
-info "等待健康检查..."
+info "等待健康检查 (最多 60s)..."
 HEALTH_OK=false
-for i in $(seq 1 30); do
+for i in $(seq 1 60); do
   if curl -sf http://127.0.0.1:8091/healthz >/dev/null 2>&1; then
     HEALTH_OK=true
     break
@@ -235,6 +288,25 @@ for i in $(seq 1 30); do
 done
 
 if [ "$HEALTH_OK" = true ]; then
+  # 验证新版本是否生效
+  RUNNING_VER=$(curl -sf http://127.0.0.1:8091/api/version 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  if [ -n "$RUNNING_VER" ] && [ "$RUNNING_VER" != "$NEW_VERSION" ]; then
+    warn "运行版本 ($RUNNING_VER) 与目标版本 ($NEW_VERSION) 不一致，可能存在旧进程"
+    for port in 8091; do
+      PIDS=$(lsof -ti :"$port" 2>/dev/null || true)
+      if [ -n "$PIDS" ]; then
+        echo "$PIDS" | xargs kill -9 2>/dev/null || true
+      fi
+    done
+    sleep 2
+    _start_service
+    for j in $(seq 1 30); do
+      if curl -sf http://127.0.0.1:8091/healthz >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+  fi
   write_status "done" "\"version\": \"$NEW_VERSION\", \"message\": \"更新完成\""
   rm -f "$PACKAGE_PATH" 2>/dev/null || true
   echo ""
@@ -242,6 +314,6 @@ if [ "$HEALTH_OK" = true ]; then
   ok "更新完成! 新版本: v${NEW_VERSION}"
   info "========================================="
 else
-  fail "服务未通过健康检查 (30s 超时)，触发回滚"
+  fail "服务未通过健康检查 (60s 超时)，触发回滚"
   cleanup_on_error "${BACKUP_TAR:-/dev/null}"
 fi
