@@ -22,6 +22,7 @@ from src.core.config import get_config
 from src.core.error_handler import BrowserError
 from src.core.logger import get_logger
 from src.modules.compliance.center import ComplianceCenter
+from src.modules.messages.bargain_tracker import BargainTracker
 from src.modules.messages.manual_mode import ManualModeStore
 from src.modules.messages.quote_composer import QuoteReplyComposer
 from src.modules.messages.quote_context import QuoteContextStore
@@ -116,12 +117,13 @@ DEFAULT_NON_EMPTY_REPLY_FALLBACK = (
 )
 DEFAULT_COURIER_LOCK_TEMPLATE = (
     "好的，已为您锁定 {courier}（{price}）~\n"
-    "下单流程：\n"
-    "1. 先拍下链接，先不要付款；\n"
-    "2. 我改价后您再付款；\n"
-    "3. 付款后系统自动发兑换码，到小程序下单即可。\n"
-    "地址和手机号在小程序填写就好，这边不需要提供哦~\n"
-    "新用户福利：以上为首单优惠价（每个手机号限一次）~ 若已使用过小程序，后续可直接在小程序下单，正常价也比自寄便宜5折起"
+    "直接拍下链接就行，先不付款哦~ 拍完告诉我一声~"
+)
+
+DEFAULT_CHECKOUT_FOLLOWUP_TEMPLATE = (
+    "收到~ 我马上帮您改价，改好了您再付款~\n"
+    "付款后自动发兑换码给您，用兑换码到小程序下单就行~\n"
+    "地址和手机号在小程序填就好，这边不需要提供哦~"
 )
 
 
@@ -132,6 +134,15 @@ class MessagesService:
     """闲鱼会话自动回复服务。"""
 
     _MANUAL_CHECK_GRACE_SECONDS = 60.0
+
+    _AVAILABILITY_VARIANTS = [
+        "在的亲~ 您是从哪里寄到哪里呢？告诉我城市和重量帮您查最优价~",
+        "在的~ 寄快递是吧？告诉我从哪到哪、多重，马上给你报价~",
+        "你好~ 寄东西找我就对了~ 说下路线和重量我帮你查~",
+        "在呢~ 告诉我从哪寄到哪、多重，帮你查最便宜的~",
+        "在的~ 发我 寄件城市-收件城市-重量 马上帮您报价~",
+        "您好~ 寄快递比自己去快递站便宜一半哦~ 告诉我路线和重量帮您查~",
+    ]
 
     def __init__(self, controller=None, config: dict[str, Any] | None = None):
         global _active_service
@@ -263,6 +274,7 @@ class MessagesService:
         )
 
         self.quote_engine = AutoQuoteEngine(self.quote_config)
+        self._bargain_tracker = BargainTracker()
         default_quote_keywords = [
             "报价",
             "多少钱",
@@ -275,6 +287,7 @@ class MessagesService:
             "送到",
             "怎么寄",
             "怎么收费",
+            "咋收费",
             "多钱",
             "啥价",
             "咋卖",
@@ -1100,6 +1113,24 @@ class MessagesService:
             return "麻烦先发一下路线和重量（如：xx省 - xx省 - 重量kg），我帮您查最优渠道~"
         return f"可选渠道：{'、'.join(couriers)}，回复“选XX快递”帮您锁定哦~"
 
+    @staticmethod
+    def _build_decline_reply(context: dict[str, Any], has_quote_rows: bool) -> str:
+        """根据用户所处阶段返回差异化挽留话术。"""
+        courier_choice = context.get("courier_choice")
+        if courier_choice and has_quote_rows:
+            return "价格帮您锁着不变~ 想寄的时候直接拍下就好，不着急~"
+        if has_quote_rows:
+            rows = context.get("last_quote_rows") or []
+            if rows:
+                try:
+                    cheapest = min(rows, key=lambda r: float(r.get("total_fee", 9999)))
+                    price = f"{float(cheapest.get('total_fee', 0)):.0f}"
+                    return f"没关系~ 报价帮您留着，随时回来选就行~ 最低{price}元起~"
+                except (TypeError, ValueError, KeyError):
+                    pass
+            return "没关系~ 报价帮您留着，随时回来选就行~"
+        return "好的~ 有需要随时问我~ 我们价格比自寄便宜一半哦~"
+
     def _build_courier_lock_reply(self, context: dict[str, Any]) -> tuple[str, bool]:
         courier = str(context.get("courier_choice") or "已选渠道").strip() or "已选渠道"
         row = self._find_quote_row_by_courier(context, courier)
@@ -1402,6 +1433,16 @@ class MessagesService:
 
             if use_rule_reply:
                 reply = pre_matched.reply
+
+                if pre_matched.name == "express_availability":
+                    reply = random.choice(self._AVAILABILITY_VARIANTS)
+
+                if pre_matched.name == "price_bargain" and session_id:
+                    reply = self._bargain_tracker.get_dynamic_reply(session_id)
+
+                if pre_matched.name == "buyer_decline" and session_id:
+                    reply = self._build_decline_reply(context_after, has_quote_rows)
+
                 if item_title and not item_title.isdigit() and not pre_matched.categories:
                     reply = f"关于「{item_title}」，{reply}"
                 if self.reply_engine.compliance_enabled:
@@ -1416,11 +1457,12 @@ class MessagesService:
 
         if has_checkout_context and has_quote_rows and self._is_checkout_followup(message_text):
             selected_courier = str(context_after.get("courier_choice") or "已选渠道")
-            lock_reply, matched = self._build_courier_lock_reply(context_after)
-            return self._sanitize_reply(lock_reply), {
+            checkout_reply = DEFAULT_CHECKOUT_FOLLOWUP_TEMPLATE
+            return self._sanitize_reply(checkout_reply), {
                 "is_quote": False,
-                "courier_locked": bool(matched),
+                "courier_locked": True,
                 "selected_courier": selected_courier,
+                "checkout_step": "post_order",
             }
 
         if has_checkout_context and has_quote_rows and is_quote_intent and courier_choice is None:
