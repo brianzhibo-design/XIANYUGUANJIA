@@ -92,12 +92,15 @@ class MessageDedup:
         finally:
             conn.close()
 
-    def is_content_duplicate(self, chat_id: str, content: str) -> bool:
-        """Layer 2: 同一会话中相同内容的询问是否已回复过。"""
+    def is_content_duplicate(self, chat_id: str, content: str, window_seconds: int = 600) -> bool:
+        """Layer 2: 同一会话中相同内容的询问在 window_seconds 内是否已回复过。"""
         h = self._content_hash(chat_id, content)
         conn = sqlite3.connect(self.db_path)
         try:
-            row = conn.execute("SELECT 1 FROM content_replies WHERE content_hash = ?", (h,)).fetchone()
+            row = conn.execute(
+                "SELECT 1 FROM content_replies WHERE content_hash = ? AND last_at > datetime('now', ?)",
+                (h, f"-{window_seconds} seconds"),
+            ).fetchone()
             return row is not None
         finally:
             conn.close()

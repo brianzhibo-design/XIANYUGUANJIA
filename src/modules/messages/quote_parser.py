@@ -299,9 +299,36 @@ class QuoteMessageParser:
     @staticmethod
     def extract_weight_kg(message_text: str) -> float | None:
         text = message_text or ""
-        m = re.search(r"(\d+(?:\.\d+)?)\s*(kg|公斤|千克|斤|g|克)", text, flags=re.IGNORECASE)
+
+        # Fix-Q: compound weight "3斤半" / "三斤半" / "3公斤半"
+        m_comp = re.search(r"(\d+(?:\.\d+)?)\s*(斤|公斤|千克|kg)\s*半", text, flags=re.IGNORECASE)
+        if m_comp:
+            value = float(m_comp.group(1)) + 0.5
+            unit = m_comp.group(2).lower()
+            if unit in {"斤"}:
+                return round(value * 0.5, 3)
+            return round(value, 3)
+
+        m_cn_comp = re.search(r"([一二两三四五六七八九十]+)\s*(斤|公斤|千克|kg)\s*半", text, flags=re.IGNORECASE)
+        if m_cn_comp:
+            cn_str = m_cn_comp.group(1)
+            unit = m_cn_comp.group(2).lower()
+            value = 0.0
+            if len(cn_str) == 1:
+                value = QuoteMessageParser._CN_NUM_MAP.get(cn_str, 0)
+            else:
+                for ch in cn_str:
+                    value += QuoteMessageParser._CN_NUM_MAP.get(ch, 0)
+            if value > 0:
+                value += 0.5
+                if unit in {"斤"}:
+                    return round(value * 0.5, 3)
+                return round(value, 3)
+
+        # Fix-S: "两" unit support (1两=50g=0.05kg)
+        m = re.search(r"(\d+(?:\.\d+)?)\s*(kg|公斤|千克|斤|两|g|克)", text, flags=re.IGNORECASE)
         if not m:
-            cn = re.search(r"([零一二两三四五六七八九十半]+)\s*(kg|公斤|千克|斤|g|克)", text)
+            cn = re.search(r"([零一二两三四五六七八九十半]+)\s*(kg|公斤|千克|斤|两|g|克)", text)
             if not cn:
                 return None
             cn_str = cn.group(1)
@@ -320,6 +347,8 @@ class QuoteMessageParser:
                 return None
             if unit in {"斤"}:
                 return round(value * 0.5, 3)
+            if unit in {"两"}:
+                return round(value * 0.05, 3)
             if unit in {"g", "克"}:
                 return round(value / 1000, 3)
             return round(value, 3)
@@ -327,6 +356,8 @@ class QuoteMessageParser:
         unit = m.group(2).lower()
         if unit in {"斤"}:
             return round(value * 0.5, 3)
+        if unit in {"两"}:
+            return round(value * 0.05, 3)
         if unit in {"g", "克"}:
             return round(value / 1000, 3)
         return round(value, 3)
@@ -420,7 +451,11 @@ class QuoteMessageParser:
         if province_city:
             return province_city.group(1) + "市"
         city_match = re.search(r"([\u4e00-\u9fa5]{2,6})市", s)
-        for suffix in ("特别行政区", "自治区", "自治州", "地区", "省", "市", "县", "区"):
+        for suffix in (
+            "特别行政区", "自治区", "自治州", "地区", "省内",
+            "省", "市", "县", "区",
+            "老家", "这边", "那边", "这里", "那里",
+        ):
             if s.endswith(suffix):
                 s = s[: -len(suffix)]
                 break
@@ -434,10 +469,12 @@ class QuoteMessageParser:
     def extract_locations(message_text: str) -> tuple[str | None, str | None]:
         text = _normalize_chinese(message_text or "")
 
-        province_internal = re.search(r"([\u4e00-\u9fa5]{2,6}?)(?:省)?内", text)
+        province_internal = re.search(r"([\u4e00-\u9fa5]{2,6}?)(?:省)?内(?![蒙江乡丘黄])", text)
         if province_internal:
             province = province_internal.group(1)
-            if province and len(province) >= 2:
+            rest = text[province_internal.end():]
+            has_destination = re.search(r"(?:到|寄|发)\s*[\u4e00-\u9fa5]{2,}", rest)
+            if province and len(province) >= 2 and not has_destination:
                 return _validate_geo_return(province, province)
 
         # 寄件人/收件人、发货地/收货地 等标签格式
@@ -466,7 +503,9 @@ class QuoteMessageParser:
                 return _validate_geo_return(o, d)
 
         compact = re.search(
-            r"([\u4e00-\u9fa5]{2,20})\s*[~～\-_\u2013\u2014\u2015→➔>＞]+\s*([\u4e00-\u9fa5]{2,20})", text
+            r"([\u4e00-\u9fa5]{2,20})\s*"
+            r"[~～\-_\u2013\u2014\u2015\u2192\u2794\u27a1\u25b6\u25ba\u2b95>＞\u23e9→➔\ufe0f]+\s*"
+            r"([\u4e00-\u9fa5]{2,20})", text
         )
         if compact:
             o = QuoteMessageParser._normalize_location_for_geo(compact.group(1))
@@ -476,10 +515,10 @@ class QuoteMessageParser:
         patterns = [
             (
                 r"(?:从|由)\s*([\u4e00-\u9fa5]{2,20}?)\s*"
-                r"(?:寄到|发到|送到|寄往|发往|到)\s*"
+                r"(?:寄到|发到|送到|寄往|发往|寄回|邮到|邮回|到)\s*"
                 r"([\u4e00-\u9fa5]{2,20}(?:省|市|区|县|自治区|特别行政区|自治州|地区)?)"
             ),
-            r"([\u4e00-\u9fa5]{2,20}?)\s*(?:寄到|发到|送到|寄往|发往|到)\s*([\u4e00-\u9fa5]{2,20})",
+            r"([\u4e00-\u9fa5]{2,20}?)\s*(?:寄到|发到|送到|寄往|发往|寄回|邮到|邮回|到)\s*([\u4e00-\u9fa5]{2,20})",
             r"([\u4e00-\u9fa5]{2,4})\s*(?:发(?![了的个件给过货到着快包邮顺])|寄(?![了的个件给过到着快包邮顺]))\s*([\u4e00-\u9fa5]{2,4})",
             r"([\u4e00-\u9fa5]{2,4})\s*([\u4e00-\u9fa5]{2,4})\s*\d+(?:\.\d+)?\s*(?:kg|公斤|斤|g|克)",
         ]

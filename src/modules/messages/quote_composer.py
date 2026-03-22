@@ -183,9 +183,9 @@ class QuoteReplyComposer:
         "{origin}到{dest} {weight}kg 价格如下~",
     ]
     _PICK_COURIER_VARIANTS = [
-        "回复\u201c选XX快递\u201d锁定价格~",
-        "看中哪个回复我就行~",
-        "选好快递告诉我一声~",
+        "回复\u201c选XX快递\u201d锁定价格~ 大部分人选1~",
+        "看中哪个回复我就行~ 选1性价比最高~",
+        "选好快递告诉我一声~ 推荐选1最划算~",
     ]
     _ORDER_GUIDE_VARIANTS = [
         "下单流程：拍下不付款→我改价→付款自动发码→到小程序下单即可~\n首单有优惠，正常价也比自寄便宜5折起~",
@@ -232,24 +232,10 @@ class QuoteReplyComposer:
                     div_int = int(float(divisor))
                     seg1_lines.append(f"体积重公式：长×宽×高(cm)/{div_int}，本次按体积重计费~")
 
-        def _format_courier_line(index: int, courier_name: str, result: QuoteResult) -> str:
-            exp = result.explain if isinstance(result.explain, dict) else {}
-            bw = float(exp.get("billing_weight_kg") or billing_w or 0)
-            base_w = float(exp.get("base_weight", 1.0))
-            extra_w = max(0.0, bw - base_w)
-            xianyu_extra = exp.get("xianyu_extra")
+        def _format_courier_line(index: int, courier_name: str, result: QuoteResult, *, is_cheapest: bool = False) -> str:
             price_str = f"{float(result.total_fee):.2f}元"
-            if xianyu_extra is not None and extra_w > 0:
-                if base_w > 1:
-                    price_str += f"（首重{base_w:.0f}kg {float(result.base_fee):.2f} + 续重{extra_w:.1f}kg×{float(xianyu_extra):.2f}）"
-                else:
-                    price_str += f"（首重{float(result.base_fee):.2f} + 续重{extra_w:.1f}kg×{float(xianyu_extra):.2f}）"
-            elif extra_w > 0:
-                first_cost = exp.get("cost_first")
-                extra_cost = exp.get("cost_extra")
-                if first_cost is not None and extra_cost is not None:
-                    price_str += f"（首重{float(first_cost):.2f} + 续重{extra_w:.1f}kg×{float(extra_cost):.2f}）"
-            return f"{index}. {courier_name}：{price_str}"
+            prefix = "【推荐】" if is_cheapest else ""
+            return f"{prefix}{index}. {courier_name}：{price_str}"
 
         express_rows = [(n, r) for n, r in quote_rows if (r.explain or {}).get("service_type") != "freight"]
         freight_rows = [(n, r) for n, r in quote_rows if (r.explain or {}).get("service_type") == "freight"]
@@ -266,7 +252,7 @@ class QuoteReplyComposer:
         if express_rows and freight_rows:
             seg1_lines.append("快递方案：")
             for i, (name, result) in enumerate(express_rows, 1):
-                seg1_lines.append(_format_courier_line(i, name, result))
+                seg1_lines.append(_format_courier_line(i, name, result, is_cheapest=(i == 1)))
 
             bw_val = float(billing_w or 0)
             cheapest_freight = freight_rows[0][1]
@@ -278,7 +264,7 @@ class QuoteReplyComposer:
             )
             seg1_lines.append(freight_header)
             for i, (name, result) in enumerate(freight_rows, 1):
-                seg1_lines.append(_format_courier_line(i, name, result))
+                seg1_lines.append(_format_courier_line(i, name, result, is_cheapest=(i == 1)))
 
             cheapest_express_fee = float(express_rows[0][1].total_fee) if express_rows else 0
             cheapest_freight_fee = float(cheapest_freight.total_fee)
@@ -287,7 +273,7 @@ class QuoteReplyComposer:
                 seg1_lines.append(f"推荐：大件快运比快递便宜{saving:.0f}元，越重越划算~")
         else:
             for i, (name, result) in enumerate(quote_rows, 1):
-                seg1_lines.append(_format_courier_line(i, name, result))
+                seg1_lines.append(_format_courier_line(i, name, result, is_cheapest=(i == 1)))
 
         seg1_lines.append(random.choice(self._PICK_COURIER_VARIANTS))
 

@@ -123,6 +123,28 @@ class BargainTracker:
             return f"买家已议价{count}次，可以考虑小幅度让步或赠品策略。"
         return f"买家已议价{count}次（高频议价），请坚守底价，引导下单。"
 
+    def get_dynamic_reply(self, chat_id: str) -> str:
+        """根据议价轮次返回差异化回复话术。"""
+        count = self.record_if_bargain(chat_id, "bargain")
+        if count <= 1:
+            return (
+                "理解~ 这个价已经比自寄省一半了，而且上门取件不用跑快递站~ "
+                "发我路线和重量帮您查具体能省多少~"
+            )
+        if count == 2:
+            return (
+                "确实想给您更优惠~ 首单价已经是最低了，后续在小程序下单也有折扣哦~ "
+                "发我路线和重量查一下~"
+            )
+        if count == 3:
+            return (
+                "亲，要不我帮您看看走别的快递？可能还能再省几块~ "
+                "告诉我路线和重量帮您对比~"
+            )
+        return (
+            "亲，这个真的到底了~ 您要是犹豫的话可以先拍下不付款，价格帮您留着，随时可以付~"
+        )
+
     def reset(self, chat_id: str) -> None:
         conn = sqlite3.connect(self.db_path)
         try:
