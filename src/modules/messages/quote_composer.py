@@ -232,9 +232,7 @@ class QuoteReplyComposer:
                     div_int = int(float(divisor))
                     seg1_lines.append(f"体积重公式：长×宽×高(cm)/{div_int}，本次按体积重计费~")
 
-        def _format_courier_line(
-            index: int, courier_name: str, result: QuoteResult, *, is_cheapest: bool = False
-        ) -> str:
+        def _format_courier_line(index: int, courier_name: str, result: QuoteResult, *, is_cheapest: bool = False) -> str:
             price_str = f"{float(result.total_fee):.2f}元"
             prefix = "【推荐】" if is_cheapest else ""
             return f"{prefix}{index}. {courier_name}：{price_str}"

@@ -146,6 +146,7 @@ class MessagesService:
     ]
 
     _MAX_SESSION_LOCKS = 2000
+    _SESSION_REPLY_COOLDOWN_S = 3.0
 
     def __init__(self, controller=None, config: dict[str, Any] | None = None):
         global _active_service
@@ -154,6 +155,7 @@ class MessagesService:
         self.logger = get_logger()
         self._init_ts = time.time()
         self._session_locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
+        self._session_last_reply_ts: dict[str, float] = {}
 
         app_config = get_config()
         self.config = config or app_config.get_section("messages", {})
@@ -1006,6 +1008,16 @@ class MessagesService:
 
     _BARE_NUMBER_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*$")
 
+    _SYSTEM_DEFAULT_REPLIES = frozenset(
+        {
+            "你好，请问需要寄什么快递？请发送 寄件城市-收件城市-重量（kg），我帮你查最优价格。",
+            "您好~ 告诉我寄件城市、收件城市和重量，帮您查最优价~",
+            "在的，虚拟商品拍下后系统会自动处理。如需改价请先联系我。",
+        }
+    )
+
+    _PUNCTUATION_ONLY_RE = re.compile(r"^[\s?？!！.。,，~～…\u200b]+$")
+
     def _is_quote_followup_candidate(self, message_text: str) -> bool:
         text = (message_text or "").strip()
         if not text:
@@ -1307,6 +1319,13 @@ class MessagesService:
     ) -> tuple[str, dict[str, Any]]:
         if session_id and message_text:
             self._append_chat_history(session_id, "buyer", message_text)
+
+        if self._PUNCTUATION_ONLY_RE.match(message_text or ""):
+            return self._sanitize_reply("在的亲，请问有什么可以帮您？"), {
+                "is_quote": False,
+                "punctuation_only": True,
+            }
+
         context_before = self._get_quote_context(session_id) if session_id else {}
         session_phase = self._detect_and_update_phase(message_text, session_id, context_before)
 
@@ -1314,6 +1333,10 @@ class MessagesService:
         followup_quote = bool(
             session_id and self._has_quote_context(session_id) and self._is_quote_followup_candidate(message_text)
         )
+        if followup_quote and self._BARE_NUMBER_RE.match((message_text or "").strip()):
+            ctx = self._get_quote_context(session_id) if session_id else {}
+            if not (ctx.get("origin") or ctx.get("destination")):
+                followup_quote = False
         is_quote_intent = self._is_quote_request(message_text) or followup_quote
 
         courier_choice = self._detect_courier_choice(message_text)
@@ -1640,12 +1663,13 @@ class MessagesService:
                     "quote_context_enabled": bool(self.context_memory_enabled),
                 }
             if is_default and self.reply_engine.category == "express":
-                reply = "您好~ 告诉我寄件城市、收件城市和重量，帮您查最优价~"
-                return self._sanitize_reply(reply), {
-                    "is_quote": False,
-                    "express_default_override": True,
-                    "quote_context_enabled": bool(self.context_memory_enabled),
-                }
+                if self.default_reply in self._SYSTEM_DEFAULT_REPLIES or not self.default_reply.strip():
+                    reply = "您好~ 告诉我寄件城市、收件城市和重量，帮您查最优价~"
+                    return self._sanitize_reply(reply), {
+                        "is_quote": False,
+                        "express_default_override": True,
+                        "quote_context_enabled": bool(self.context_memory_enabled),
+                    }
             if is_default and self._ai_reply_enabled:
                 ai_reply = self._ai_generate_express_reply(message_text, context=context_before or None)
                 if ai_reply:
@@ -2133,6 +2157,12 @@ class MessagesService:
             except Exception:
                 pass
 
+        if session_id:
+            last_ts = self._session_last_reply_ts.get(session_id, 0)
+            if time.monotonic() - last_ts < self._SESSION_REPLY_COOLDOWN_S:
+                self.logger.debug(f"process_session cooldown hit: session={session_id}")
+                return {"skipped": True, "reason": "reply_cooldown", "session_id": session_id}
+
         reply_text, quote_meta = await self._generate_reply_with_quote(
             msg,
             item_title=item_title,
@@ -2215,6 +2245,7 @@ class MessagesService:
 
         if sent and session_id and reply_text:
             self._append_chat_history(session_id, "bot", reply_text)
+            self._session_last_reply_ts[session_id] = time.monotonic()
         if sent and msg and session_id and self._dedup:
             try:
                 if create_time:

@@ -452,20 +452,9 @@ class QuoteMessageParser:
             return province_city.group(1) + "市"
         city_match = re.search(r"([\u4e00-\u9fa5]{2,6})市", s)
         for suffix in (
-            "特别行政区",
-            "自治区",
-            "自治州",
-            "地区",
-            "省内",
-            "省",
-            "市",
-            "县",
-            "区",
-            "老家",
-            "这边",
-            "那边",
-            "这里",
-            "那里",
+            "特别行政区", "自治区", "自治州", "地区", "省内",
+            "省", "市", "县", "区",
+            "老家", "这边", "那边", "这里", "那里",
         ):
             if s.endswith(suffix):
                 s = s[: -len(suffix)]
@@ -483,7 +472,7 @@ class QuoteMessageParser:
         province_internal = re.search(r"([\u4e00-\u9fa5]{2,6}?)(?:省)?内(?![蒙江乡丘黄])", text)
         if province_internal:
             province = province_internal.group(1)
-            rest = text[province_internal.end() :]
+            rest = text[province_internal.end():]
             has_destination = re.search(r"(?:到|寄|发)\s*[\u4e00-\u9fa5]{2,}", rest)
             if province and len(province) >= 2 and not has_destination:
                 return _validate_geo_return(province, province)
@@ -516,8 +505,7 @@ class QuoteMessageParser:
         compact = re.search(
             r"([\u4e00-\u9fa5]{2,20})\s*"
             r"[~～\-_\u2013\u2014\u2015\u2192\u2794\u27a1\u25b6\u25ba\u2b95>＞\u23e9→➔\ufe0f]+\s*"
-            r"([\u4e00-\u9fa5]{2,20})",
-            text,
+            r"([\u4e00-\u9fa5]{2,20})", text
         )
         if compact:
             o = QuoteMessageParser._normalize_location_for_geo(compact.group(1))

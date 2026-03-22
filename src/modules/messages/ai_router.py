@@ -15,18 +15,16 @@ from src.core.logger import get_logger
 
 _logger = get_logger()
 
-_SYSTEM_MSG_PATTERNS = frozenset(
-    {
-        "交易成功",
-        "交易关闭",
-        "已发货",
-        "已签收",
-        "退款成功",
-        "订单已取消",
-        "系统消息",
-        "自动回复",
-    }
-)
+_SYSTEM_MSG_PATTERNS = frozenset({
+    "交易成功",
+    "交易关闭",
+    "已发货",
+    "已签收",
+    "退款成功",
+    "订单已取消",
+    "系统消息",
+    "自动回复",
+})
 
 
 class AIIntentRouter:
@@ -98,7 +96,9 @@ class AIIntentRouter:
             _logger.debug("ai_router: rate limit exceeded")
             return None
 
-        ctx_hash = hashlib.md5(json.dumps(context or {}, sort_keys=True, default=str).encode()).hexdigest()[:8]
+        ctx_hash = hashlib.md5(
+            json.dumps(context or {}, sort_keys=True, default=str).encode()
+        ).hexdigest()[:8]
         cache_key = self._cache_key(message_text, ctx_hash)
         cached = self._get_cached(cache_key)
         if cached:

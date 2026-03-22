@@ -331,7 +331,7 @@ DEFAULT_INTENT_RULES: list[dict[str, Any]] = [
     },
     {
         "name": "express_balance_issue",
-        "keywords": ["余额不够", "抵扣不了", "不够支付"],
+        "keywords": ["余额不够", "余额不足", "余额不够用", "抵扣不了", "不够支付", "支付不了", "付不了款"],
         "reply": "亲，可能是因为该手机号之前已用过首单优惠，这次按正常价出的余额。可以试试选其他快递公司，或在小程序点击「联系客服」帮您看看~",
         "priority": 48,
         "categories": ["express"],
