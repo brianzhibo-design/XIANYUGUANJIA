@@ -65,9 +65,7 @@ class QuoteContextStore:
                     created_at REAL NOT NULL
                 )
             """)
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_ctx_updated ON session_context(updated_at)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_ctx_updated ON session_context(updated_at)")
             conn.commit()
         finally:
             conn.close()
@@ -177,9 +175,7 @@ class QuoteContextStore:
                 cutoff = now_ts - self.context_memory_ttl_seconds
                 conn = sqlite3.connect(self._db_path)
                 try:
-                    conn.execute(
-                        "DELETE FROM session_context WHERE updated_at < ?", (cutoff,)
-                    )
+                    conn.execute("DELETE FROM session_context WHERE updated_at < ?", (cutoff,))
                     conn.commit()
                 finally:
                     conn.close()

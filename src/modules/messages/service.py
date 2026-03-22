@@ -48,7 +48,7 @@ def _is_known_geo(location: str | None) -> bool:
         provinces = set(GeoResolver.normalize(p) for p in (geo._province_aliases or {}))
         _geo_known_cache = cities | provinces | _PROVINCE_SHORT_ALIASES
     n = GeoResolver.normalize(location)
-    if n and re.search(r'[寄发到送去来走]$', n):
+    if n and re.search(r"[寄发到送去来走]$", n):
         return False
     if n in _geo_known_cache:
         return True
@@ -119,10 +119,7 @@ DEFAULT_VOLUME_REPLY_TEMPLATE = (
 DEFAULT_NON_EMPTY_REPLY_FALLBACK = (
     "您好！发送 寄件城市 - 收件城市 - 重量 就能帮您查最优价格哦~\n示例：广东省 - 浙江省 - 3kg"
 )
-DEFAULT_COURIER_LOCK_TEMPLATE = (
-    "好的，已为您锁定 {courier}（{price}）~\n"
-    "直接拍下链接就行，先不付款哦~ 拍完告诉我一声~"
-)
+DEFAULT_COURIER_LOCK_TEMPLATE = "好的，已为您锁定 {courier}（{price}）~\n直接拍下链接就行，先不付款哦~ 拍完告诉我一声~"
 
 DEFAULT_CHECKOUT_FOLLOWUP_TEMPLATE = (
     "收到~ 我马上帮您改价，改好了您再付款~\n"
@@ -1114,7 +1111,7 @@ class MessagesService:
 
         for name in sorted(all_names, key=len, reverse=True):
             if stripped.startswith(name):
-                remaining = stripped[len(name):]
+                remaining = stripped[len(name) :]
                 if not remaining or all(c in _SUFFIX_CHARS for c in remaining):
                     return self._COURIER_ALIASES.get(name, name)
 
@@ -1616,9 +1613,7 @@ class MessagesService:
                     content_service_getter=self._get_content_service,
                 )
                 if ai_result and ai_result.get("confidence", 0) >= self._ai_router.confidence_threshold:
-                    ai_reply = self._ai_generate_express_reply(
-                        message_text, context=context_before or None
-                    )
+                    ai_reply = self._ai_generate_express_reply(message_text, context=context_before or None)
                     if ai_reply:
                         if self.reply_engine.compliance_enabled:
                             ai_reply = self.reply_engine._check_compliance(ai_reply)
@@ -2086,8 +2081,11 @@ class MessagesService:
             await lock.acquire()
         try:
             return await self._process_session_inner(
-                session, dry_run=dry_run, page_id=page_id,
-                account_id=account_id, actor=actor,
+                session,
+                dry_run=dry_run,
+                page_id=page_id,
+                account_id=account_id,
+                actor=actor,
                 session_start=session_start,
             )
         finally:
