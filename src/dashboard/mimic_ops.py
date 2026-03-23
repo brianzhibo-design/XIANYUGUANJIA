@@ -3155,6 +3155,28 @@ class MimicOps:
             "markup_rules": normalized,
         }
 
+    @staticmethod
+    def _normalize_volume_divisor_keys(raw: Any) -> dict[str, Any]:
+        """将 volume_divisors 中的英文 key 规范化为中文 key。"""
+        if not isinstance(raw, dict):
+            return {}
+        _norm = {
+            "express": "线上快递",
+            "express_offline": "线下快递",
+            "freight": "线上快运",
+            "freight_offline": "线下快运",
+        }
+        result: dict[str, Any] = {}
+        for k, v in raw.items():
+            norm_key = _norm.get(str(k).strip(), str(k).strip())
+            if isinstance(v, dict):
+                existing = result.get(norm_key, {})
+                existing.update(v)
+                result[norm_key] = existing
+            else:
+                result[norm_key] = v
+        return result
+
     def get_pricing_config(self) -> dict[str, Any]:
         """读取 YAML 中的 markup_categories、xianyu_discount、抛比和大件运力优先级。"""
         setup = QuoteSetupService(config_path=str(self.config_path))
@@ -3165,7 +3187,7 @@ class MimicOps:
             "markup_categories": quote_cfg.get("markup_categories", {}),
             "xianyu_discount": quote_cfg.get("xianyu_discount", {}),
             "volume_divisor_default": quote_cfg.get("volume_divisor_default", 8000),
-            "volume_divisors": quote_cfg.get("volume_divisors", {}),
+            "volume_divisors": self._normalize_volume_divisor_keys(quote_cfg.get("volume_divisors", {})),
             "freight_courier_priority": quote_cfg.get("freight_courier_priority", []),
             "service_categories": [
                 "线上快递",
@@ -3208,6 +3230,12 @@ class MimicOps:
             except (TypeError, ValueError):
                 pass
         if isinstance(volume_divisors, dict):
+            _vd_key_norm: dict[str, str] = {
+                "express": "线上快递",
+                "express_offline": "线下快递",
+                "freight": "线上快运",
+                "freight_offline": "线下快运",
+            }
             normalized: dict[str, Any] = {}
             for cat, courier_cfg in volume_divisors.items():
                 if not isinstance(courier_cfg, dict):
@@ -3221,7 +3249,11 @@ class MimicOps:
                     except (TypeError, ValueError):
                         pass
                 if inner:
-                    normalized[str(cat).strip()] = inner
+                    cat_key = _vd_key_norm.get(str(cat).strip(), str(cat).strip())
+                    if cat_key in normalized:
+                        normalized[cat_key].update(inner)
+                    else:
+                        normalized[cat_key] = inner
             quote_cfg["volume_divisors"] = normalized
         if isinstance(freight_courier_priority, list):
             quote_cfg["freight_courier_priority"] = [str(c).strip() for c in freight_courier_priority if str(c).strip()]

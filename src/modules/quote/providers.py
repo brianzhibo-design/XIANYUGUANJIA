@@ -170,7 +170,7 @@ class CostTableMarkupQuoteProvider(IQuoteProvider):
         courier_divisor = _resolve_volume_divisor(
             self.volume_divisors, category, row.courier, self.volume_divisor_default
         )
-        divisor = _first_positive(row.throw_ratio, courier_divisor, self.volume_divisor_default)
+        divisor = _first_positive(courier_divisor, self.volume_divisor_default, row.throw_ratio)
         volume_weight = _derive_volume_weight_kg(
             volume_cm3=float(request.volume or 0.0),
             explicit_volume_weight=float(request.volume_weight or 0.0),
@@ -707,13 +707,22 @@ def _normalize_xianyu_discount(raw: dict[str, Any]) -> dict[str, dict[str, dict[
     return result
 
 
+def _resolve_category_rules(rules: dict[str, Any], category: str) -> dict[str, Any]:
+    """按 category 查找规则，支持英文/中文 key 别名 fallback。"""
+    cat_rules = rules.get(category)
+    if not cat_rules:
+        alias = _CATEGORY_KEY_ALIASES.get(category, "")
+        cat_rules = rules.get(alias) if alias else None
+    return cat_rules if isinstance(cat_rules, dict) else {}
+
+
 def _resolve_category_markup(
     rules: dict[str, dict[str, dict[str, float]]],
     category: str,
     courier: str,
 ) -> tuple[float, float]:
     """根据服务类别和运力查找加价值，返回 (first_add, extra_add)。"""
-    cat_rules = rules.get(category, {})
+    cat_rules = _resolve_category_rules(rules, category)
     courier_rule = cat_rules.get(courier) or cat_rules.get("default") or {}
     return (
         float(courier_rule.get("first_add", 0.0)),
@@ -727,7 +736,7 @@ def _resolve_xianyu_discount_value(
     courier: str,
 ) -> tuple[float, float]:
     """根据服务类别和运力查找让利值，返回 (first_discount, extra_discount)。"""
-    cat_rules = rules.get(category, {})
+    cat_rules = _resolve_category_rules(rules, category)
     courier_rule = cat_rules.get(courier) or cat_rules.get("default") or {}
     return (
         float(courier_rule.get("first_discount", 0.0)),
@@ -743,6 +752,18 @@ def _first_positive(*values: Any) -> float:
     return 0.0
 
 
+_CATEGORY_KEY_ALIASES: dict[str, str] = {
+    "线上快递": "express",
+    "线下快递": "express_offline",
+    "线上快运": "freight",
+    "线下快运": "freight_offline",
+    "express": "线上快递",
+    "express_offline": "线下快递",
+    "freight": "线上快运",
+    "freight_offline": "线下快运",
+}
+
+
 def _resolve_volume_divisor(
     volume_divisors: dict[str, Any],
     category: str,
@@ -751,6 +772,9 @@ def _resolve_volume_divisor(
 ) -> float:
     """解析抛比：per-courier > 类别 default > 全局 default。"""
     cat_cfg = volume_divisors.get(category) if isinstance(volume_divisors, dict) else None
+    if not isinstance(cat_cfg, dict):
+        alias = _CATEGORY_KEY_ALIASES.get(category, "")
+        cat_cfg = volume_divisors.get(alias) if alias else None
     if not isinstance(cat_cfg, dict):
         return float(global_default or 0.0) or 0.0
     v = _to_float(cat_cfg.get(courier))

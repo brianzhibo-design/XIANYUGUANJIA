@@ -436,6 +436,11 @@ class MessagesService:
             **self.config.get("quote", {}),
         }
         self.quote_engine = AutoQuoteEngine(self.quote_config)
+        self._quote_composer = QuoteReplyComposer(
+            quote_engine=self.quote_engine,
+            quote_config=self.quote_config,
+            quote_reply_max_couriers=self.quote_reply_max_couriers,
+        )
         self.logger.info("Quote engine hot-reloaded (mode=%s)", self.quote_engine.mode)
 
     @staticmethod

@@ -28,6 +28,22 @@ const CATEGORY_DEFAULT_COURIERS: Record<string, string[]> = {
   '线下快运': FREIGHT_COURIERS,
 };
 
+const VD_KEY_NORMALIZE: Record<string, string> = {
+  express: '线上快递',
+  express_offline: '线下快递',
+  freight: '线上快运',
+  freight_offline: '线下快运',
+};
+
+function normalizeVolumeDivisors(raw: Record<string, Record<string, number>>): Record<string, Record<string, number>> {
+  const result: Record<string, Record<string, number>> = {};
+  for (const [key, val] of Object.entries(raw)) {
+    const nk = VD_KEY_NORMALIZE[key] || key;
+    result[nk] = { ...(result[nk] || {}), ...val };
+  }
+  return result;
+}
+
 const DEFAULT_MARKUP: Record<string, CategoryMarkup> = {
   '线上快递': {
     default: { first_add: 0.90, extra_add: 0.70 },
@@ -181,7 +197,7 @@ export default function ProductList() {
       }
       setMarkupCategories(merged);
       if (configRes.data?.xianyu_discount) setXianyuDiscount(configRes.data.xianyu_discount);
-      if (configRes.data?.volume_divisors && typeof configRes.data.volume_divisors === 'object') setVolumeDivisors(configRes.data.volume_divisors);
+      if (configRes.data?.volume_divisors && typeof configRes.data.volume_divisors === 'object') setVolumeDivisors(normalizeVolumeDivisors(configRes.data.volume_divisors));
       if (Array.isArray(configRes.data?.freight_courier_priority)) setFreightPriority(configRes.data.freight_courier_priority);
       if (costRes.data?.couriers) setCostSummary(costRes.data.couriers);
     } catch { toast.error('加载定价配置失败'); }

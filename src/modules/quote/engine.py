@@ -41,7 +41,7 @@ class AutoQuoteEngine:
         self.circuit_open_seconds = int(cfg.get("circuit_open_seconds", 30))
         self.api_fallback_to_table_parallel = bool(cfg.get("api_fallback_to_table_parallel", True))
         self.api_prefer_max_wait_seconds = max(0.05, float(cfg.get("api_prefer_max_wait_seconds", 1.2)))
-        self.volume_divisor_default = float(cfg.get("volume_divisor_default", 0.0) or 0.0)
+        self.volume_divisor_default = float(cfg.get("volume_divisor_default") or 8000)
         self._remote_failures = 0
         self._circuit_open_until = 0.0
 
