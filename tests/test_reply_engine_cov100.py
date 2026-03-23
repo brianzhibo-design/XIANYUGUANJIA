@@ -214,33 +214,27 @@ class TestGenerateReply:
         reply, skip = engine.generate_reply("在吗？")
         assert reply.startswith("[BOT] ")
 
-    def test_compliance_blocks(self):
-        # 合规拦截：命中关键词被剥离后若为空则回退为默认回复
+    def test_compliance_moved_to_service(self):
+        # v9.5.0: 合规检查已移至 service._sanitize_reply, generate_reply 不再处理合规
         engine = _make_engine(
             compliance_enabled=True,
             intent_rules=[{"name": "greet", "keywords": ["合规测试词"], "reply": "敏感词"}],
         )
-        mock_guard = MagicMock()
-        mock_guard.evaluate_content.return_value = {"blocked": True, "hits": ["敏感词"]}
-        engine._compliance_guard = mock_guard
         reply, skip = engine.generate_reply("合规测试词")
-        assert reply == "默认回复"
+        assert reply == "敏感词"  # raw reply, compliance handled at service layer
 
-    def test_compliance_passes(self):
+    def test_compliance_flag_ignored(self):
         engine = _make_engine(compliance_enabled=True, category="express")
-        mock_guard = MagicMock()
-        mock_guard.evaluate_content.return_value = {"blocked": False}
-        engine._compliance_guard = mock_guard
         reply, skip = engine.generate_reply("在吗？")
         assert "在的" in reply
 
-    def test_compliance_exception(self):
+    def test_compliance_guard_not_called(self):
         engine = _make_engine(compliance_enabled=True, category="express")
         mock_guard = MagicMock()
-        mock_guard.evaluate_content.side_effect = Exception("guard error")
         engine._compliance_guard = mock_guard
         reply, skip = engine.generate_reply("在吗？")
         assert "在的" in reply
+        mock_guard.evaluate_content.assert_not_called()
 
     def test_no_guard_returns_text(self):
         engine = _make_engine(compliance_enabled=True)
@@ -280,13 +274,15 @@ class TestParseRule:
 
     def test_full_rule(self):
         engine = _make_engine()
-        rule = engine._parse_rule({
-            "name": "r1",
-            "reply": "Hi",
-            "keywords": ["hello"],
-            "patterns": [r"\d+"],
-            "priority": 50,
-        })
+        rule = engine._parse_rule(
+            {
+                "name": "r1",
+                "reply": "Hi",
+                "keywords": ["hello"],
+                "patterns": [r"\d+"],
+                "priority": 50,
+            }
+        )
         assert rule.name == "r1"
         assert rule.priority == 50
 
