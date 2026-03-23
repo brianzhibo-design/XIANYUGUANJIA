@@ -1264,9 +1264,6 @@ class ReplyStrategyEngine:
                 break
 
         if not reply:
-            if self.ai_intent_enabled:
-                self._ai_classify_intent(message_text, item_title)
-
             if self.category != "express" and self._is_virtual_context(normalized, item_title):
                 reply = self.virtual_default_reply
             else:
@@ -1277,9 +1274,6 @@ class ReplyStrategyEngine:
 
         if self.reply_prefix:
             reply = f"{self.reply_prefix}{reply}"
-
-        if self.compliance_enabled:
-            reply = self._check_compliance(reply)
 
         return reply, False
 

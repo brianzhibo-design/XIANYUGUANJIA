@@ -1270,7 +1270,13 @@ class MessagesService:
         if not text and self.force_non_empty_reply:
             text = self.non_empty_reply_fallback
 
-        from src.modules.messages.reply_engine import get_word_replacements
+        from src.modules.messages.reply_engine import get_miniapp_link, get_word_replacements
+
+        link = get_miniapp_link()
+        if link and "{miniapp_link}" in text:
+            text = text.replace("{miniapp_link}", f"\n{link}")
+        else:
+            text = text.replace("{miniapp_link}", "")
 
         for forbidden, safe in get_word_replacements().items():
             text = text.replace(forbidden, safe)
@@ -1401,164 +1407,18 @@ class MessagesService:
 
         pre_matched = self.reply_engine.find_matching_rule(message_text, item_title)
         if pre_matched:
-            if pre_matched.skip_reply:
-                return "", {
-                    "is_quote": False,
-                    "skipped": True,
-                    "reason": "system_notification",
-                    "rule_matched": pre_matched.name,
-                }
-
-            _greeting_rules = frozenset({"express_availability", "express_first_weight"})
-            if pre_matched.name in _greeting_rules:
-                origin, dest = self._extract_locations(message_text)
-                if not origin and session_id:
-                    origin = context_before.get("origin") or None
-                if not dest and session_id:
-                    dest = context_before.get("destination") or None
-                if origin or dest:
-                    _weight = self._extract_weight_kg(message_text)
-                    if _weight is None and session_id:
-                        ctx_w = context_before.get("weight")
-                        if ctx_w is not None:
-                            try:
-                                ctx_w = float(ctx_w)
-                                if ctx_w > 0:
-                                    _weight = ctx_w
-                            except (TypeError, ValueError):
-                                pass
-                    if _weight is None and self._BARE_NUMBER_RE.match((message_text or "").strip()):
-                        try:
-                            bv = float(self._BARE_NUMBER_RE.match(message_text.strip()).group(1))
-                            if 0 < bv < 10000:
-                                _weight = bv
-                        except (TypeError, ValueError):
-                            pass
-                    if _weight is None and re.search(r"首重", message_text or ""):
-                        _weight = 1.0
-                    if _weight is None and re.search(r"续重", message_text or ""):
-                        _weight = 2.0
-                    if origin and dest and _weight is not None and _weight > 0:
-                        pass  # all fields present, fall through to quote engine
-                    else:
-                        if session_id:
-                            self._update_quote_context(session_id, origin=origin, destination=dest)
-                        parts = []
-                        sf_kw = re.search(r"顺丰|京东", message_text or "")
-                        if sf_kw:
-                            parts.append(
-                                "闲鱼特价渠道暂时没有顺丰/京东，小程序内可直接下单且价格更优~ 这边有韵达/圆通/中通/申通可选"
-                            )
-                        else:
-                            parts.append("在的亲")
-                        route_str = f"{origin} -> {dest}" if origin and dest else (origin or dest or "")
-                        if route_str:
-                            parts.append(f"已收到路线 {route_str}")
-                        parts.append("告诉我包裹重量（kg）马上帮您查价~")
-                        return self._sanitize_reply("，".join(parts)), {
-                            "is_quote": True,
-                            "quote_need_info": True,
-                            "quote_missing_fields": ["weight"],
-                            "rule_matched": pre_matched.name,
-                        }
-
-            _QUOTE_YIELDABLE_RULES = frozenset(
-                {
-                    "express_availability",
-                    "express_large",
-                    "express_volume",
-                    "express_remote_area",
-                    "express_first_weight",
-                    "express_sf_jd",
-                    "express_food_liquid",
-                    "express_luggage",
-                    "express_prohibited",
-                }
+            rule_result = self._try_rule_match(
+                pre_matched,
+                message_text,
+                item_title,
+                session_id,
+                is_quote_intent,
+                context_before,
+                context_after,
+                has_quote_rows,
             )
-            use_rule_reply = True
-            if is_quote_intent and pre_matched.name in _QUOTE_YIELDABLE_RULES:
-                _origin, _dest = self._extract_locations(message_text)
-                _weight = self._extract_weight_kg(message_text)
-                if _weight is None and self._BARE_NUMBER_RE.match((message_text or "").strip()):
-                    try:
-                        bv = float(self._BARE_NUMBER_RE.match(message_text.strip()).group(1))
-                        if 0 < bv < 10000:
-                            _weight = bv
-                    except (TypeError, ValueError):
-                        pass
-                if _weight is None and re.search(r"首重", message_text or ""):
-                    _weight = 1.0
-                if _weight is None and re.search(r"续重", message_text or ""):
-                    _weight = 2.0
-                if not _origin and session_id:
-                    _origin = context_before.get("origin") or None
-                if not _dest and session_id:
-                    _dest = context_before.get("destination") or None
-                if _origin and _dest and _weight is not None and _weight > 0:
-                    use_rule_reply = False
-                    self.logger.info(
-                        "[quote_override] Rule '%s' yielded to quote engine (buyer has quote intent + complete info)",
-                        pre_matched.name,
-                    )
-                else:
-                    has_partial = _origin or _dest or (_weight is not None and _weight > 0)
-                    if has_partial and session_id:
-                        if _origin is not None or _dest is not None:
-                            self._update_quote_context(
-                                session_id,
-                                origin=_origin or context_before.get("origin"),
-                                destination=_dest or context_before.get("destination"),
-                            )
-                        if _weight is not None and _weight > 0:
-                            self._update_quote_context(session_id, weight=_weight)
-                        ctx_merged = self._get_quote_context(session_id)
-                        missing = []
-                        if not ctx_merged.get("origin"):
-                            missing.append("origin")
-                        if not ctx_merged.get("destination"):
-                            missing.append("destination")
-                        w = ctx_merged.get("weight")
-                        if w is None or (isinstance(w, (int, float)) and float(w) <= 0):
-                            missing.append("weight")
-                        if missing:
-                            extracted_fields = {
-                                "origin": ctx_merged.get("origin") or "",
-                                "destination": ctx_merged.get("destination") or "",
-                                "weight": ctx_merged.get("weight"),
-                            }
-                            prompt = self._build_natural_missing_prompt(missing, extracted_fields)
-                            return self._sanitize_reply(prompt), {
-                                "is_quote": True,
-                                "quote_need_info": True,
-                                "quote_missing_fields": missing,
-                                "rule_matched": pre_matched.name,
-                            }
-                        else:
-                            use_rule_reply = False
-
-            if use_rule_reply:
-                reply = pre_matched.reply
-
-                if pre_matched.name == "express_availability":
-                    reply = random.choice(self._AVAILABILITY_VARIANTS)
-
-                if pre_matched.name == "price_bargain" and session_id:
-                    reply = self._bargain_tracker.get_dynamic_reply(session_id)
-
-                if pre_matched.name == "buyer_decline" and session_id:
-                    reply = self._build_decline_reply(context_after, has_quote_rows)
-
-                if item_title and not item_title.isdigit() and not pre_matched.categories:
-                    reply = f"关于「{item_title}」，{reply}"
-                if self.reply_engine.compliance_enabled:
-                    reply = self.reply_engine._check_compliance(reply)
-                return self._sanitize_reply(reply), {
-                    "is_quote": False,
-                    "rule_matched": pre_matched.name,
-                    "needs_human": pre_matched.needs_human,
-                    "human_reason": pre_matched.human_reason,
-                    "phase": pre_matched.phase,
-                }
+            if rule_result is not None:
+                return rule_result
 
         if has_checkout_context and has_quote_rows and self._is_checkout_followup(message_text):
             selected_courier = str(context_after.get("courier_choice") or "已选渠道")
@@ -1616,81 +1476,15 @@ class MessagesService:
         aftersale_fallback = "亲，有任何问题随时问我~ 如需修改订单或其他帮助，可以在小程序联系客服哦~"
 
         if not is_quote_intent:
-            if is_post_order:
-                return "", {
-                    "is_quote": False,
-                    "skipped": True,
-                    "reason": "post_order_notification",
-                }
-            reply, skip = self.reply_engine.generate_reply(message_text=message_text, item_title=item_title)
-            if skip:
-                return "", {
-                    "is_quote": False,
-                    "skipped": True,
-                    "reason": "system_notification",
-                }
-            is_default = reply == self.reply_engine.default_reply
-
-            if is_default and self._ai_router.should_use_ai(message_text, rule_matched=False):
-                corrected_text, ai_result = self._ai_router.route_or_correct(
-                    message_text,
-                    context=context_before or None,
-                    chat_history=(context_before or {}).get("chat_history"),
-                    content_service_getter=self._get_content_service,
-                )
-                if ai_result and ai_result.get("confidence", 0) >= self._ai_router.confidence_threshold:
-                    ai_reply = self._ai_generate_express_reply(message_text, context=context_before or None)
-                    if ai_reply:
-                        if self.reply_engine.compliance_enabled:
-                            ai_reply = self.reply_engine._check_compliance(ai_reply)
-                        return self._sanitize_reply(ai_reply), {
-                            "is_quote": False,
-                            "ai_generated": True,
-                            "ai_intent": ai_result.get("intent"),
-                            "ai_confidence": ai_result.get("confidence"),
-                            "quote_context_enabled": bool(self.context_memory_enabled),
-                        }
-                elif corrected_text and corrected_text != message_text:
-                    retry_reply, retry_skip = self.reply_engine.generate_reply(
-                        message_text=corrected_text, item_title=item_title
-                    )
-                    if not retry_skip and retry_reply != self.reply_engine.default_reply:
-                        reply = retry_reply
-                        is_default = False
-
-            if is_default and session_phase in ("checkout", "aftersale"):
-                return self._sanitize_reply(aftersale_fallback), {
-                    "is_quote": False,
-                    "session_phase": session_phase,
-                    "aftersale_fallback": True,
-                    "quote_context_enabled": bool(self.context_memory_enabled),
-                }
-            if is_default and self.reply_engine.category == "express":
-                if self.default_reply in self._SYSTEM_DEFAULT_REPLIES or not self.default_reply.strip():
-                    reply = "您好~ 告诉我寄件城市、收件城市和重量，帮您查最优价~"
-                    return self._sanitize_reply(reply), {
-                        "is_quote": False,
-                        "express_default_override": True,
-                        "quote_context_enabled": bool(self.context_memory_enabled),
-                    }
-            if is_default and self._ai_reply_enabled:
-                ai_reply = self._ai_generate_express_reply(message_text, context=context_before or None)
-                if ai_reply:
-                    if self.reply_engine.compliance_enabled:
-                        ai_reply = self.reply_engine._check_compliance(ai_reply)
-                    return self._sanitize_reply(ai_reply), {
-                        "is_quote": False,
-                        "ai_generated": True,
-                        "quote_context_enabled": bool(self.context_memory_enabled),
-                    }
-                self._log_unmatched_message(message_text, session_id=session_id or None, item_title=item_title or None)
-            elif is_default:
-                self._log_unmatched_message(message_text, session_id=session_id or None, item_title=item_title or None)
-            return self._sanitize_reply(reply), {
-                "is_quote": False,
-                "quote_context_enabled": bool(self.context_memory_enabled),
-                "quote_context_present": bool(context_before),
-            }
+            return self._handle_non_quote(
+                message_text,
+                item_title,
+                session_id,
+                is_post_order,
+                session_phase,
+                context_before,
+                aftersale_fallback,
+            )
 
         if request is None:
             if session_phase in ("checkout", "aftersale"):
@@ -1713,8 +1507,275 @@ class MessagesService:
                 "quote_context_hit": bool(memory_hit),
             }
 
-        _QUOTE_TIMEOUT_SECONDS = 15
+        return await self._execute_quote_engine(
+            request,
+            message_text,
+            session_id,
+            extracted_fields,
+            memory_hit,
+        )
 
+    # ---- Extracted sub-methods of _generate_reply_with_quote ----
+
+    def _try_rule_match(
+        self,
+        pre_matched: Any,
+        message_text: str,
+        item_title: str,
+        session_id: str,
+        is_quote_intent: bool,
+        context_before: dict[str, Any],
+        context_after: dict[str, Any],
+        has_quote_rows: bool,
+    ) -> tuple[str, dict[str, Any]] | None:
+        """Handle rule matching + quote-yieldable logic. Returns None to fall through."""
+        if pre_matched.skip_reply:
+            return "", {
+                "is_quote": False,
+                "skipped": True,
+                "reason": "system_notification",
+                "rule_matched": pre_matched.name,
+            }
+
+        _greeting_rules = frozenset({"express_availability", "express_first_weight"})
+        if pre_matched.name in _greeting_rules:
+            origin, dest = self._extract_locations(message_text)
+            if not origin and session_id:
+                origin = context_before.get("origin") or None
+            if not dest and session_id:
+                dest = context_before.get("destination") or None
+            if origin or dest:
+                _weight = self._extract_weight_kg(message_text)
+                if _weight is None and session_id:
+                    ctx_w = context_before.get("weight")
+                    if ctx_w is not None:
+                        try:
+                            ctx_w = float(ctx_w)
+                            if ctx_w > 0:
+                                _weight = ctx_w
+                        except (TypeError, ValueError):
+                            pass
+                if _weight is None and self._BARE_NUMBER_RE.match((message_text or "").strip()):
+                    try:
+                        bv = float(self._BARE_NUMBER_RE.match(message_text.strip()).group(1))
+                        if 0 < bv < 10000:
+                            _weight = bv
+                    except (TypeError, ValueError):
+                        pass
+                if _weight is None and re.search(r"首重", message_text or ""):
+                    _weight = 1.0
+                if _weight is None and re.search(r"续重", message_text or ""):
+                    _weight = 2.0
+                if origin and dest and _weight is not None and _weight > 0:
+                    return None  # all fields present, fall through to quote engine
+                if session_id:
+                    self._update_quote_context(session_id, origin=origin, destination=dest)
+                parts = []
+                sf_kw = re.search(r"顺丰|京东", message_text or "")
+                if sf_kw:
+                    parts.append(
+                        "闲鱼特价渠道暂时没有顺丰/京东，小程序内可直接下单且价格更优~ 这边有韵达/圆通/中通/申通可选"
+                    )
+                else:
+                    parts.append("在的亲")
+                route_str = f"{origin} -> {dest}" if origin and dest else (origin or dest or "")
+                if route_str:
+                    parts.append(f"已收到路线 {route_str}")
+                parts.append("告诉我包裹重量（kg）马上帮您查价~")
+                return self._sanitize_reply("，".join(parts)), {
+                    "is_quote": True,
+                    "quote_need_info": True,
+                    "quote_missing_fields": ["weight"],
+                    "rule_matched": pre_matched.name,
+                }
+
+        _QUOTE_YIELDABLE_RULES = frozenset(
+            {
+                "express_availability",
+                "express_large",
+                "express_volume",
+                "express_remote_area",
+                "express_first_weight",
+                "express_sf_jd",
+                "express_food_liquid",
+                "express_luggage",
+                "express_prohibited",
+            }
+        )
+        use_rule_reply = True
+        if is_quote_intent and pre_matched.name in _QUOTE_YIELDABLE_RULES:
+            _origin, _dest = self._extract_locations(message_text)
+            _weight = self._extract_weight_kg(message_text)
+            if _weight is None and self._BARE_NUMBER_RE.match((message_text or "").strip()):
+                try:
+                    bv = float(self._BARE_NUMBER_RE.match(message_text.strip()).group(1))
+                    if 0 < bv < 10000:
+                        _weight = bv
+                except (TypeError, ValueError):
+                    pass
+            if _weight is None and re.search(r"首重", message_text or ""):
+                _weight = 1.0
+            if _weight is None and re.search(r"续重", message_text or ""):
+                _weight = 2.0
+            if not _origin and session_id:
+                _origin = context_before.get("origin") or None
+            if not _dest and session_id:
+                _dest = context_before.get("destination") or None
+            if _origin and _dest and _weight is not None and _weight > 0:
+                use_rule_reply = False
+                self.logger.info(
+                    "[quote_override] Rule '%s' yielded to quote engine (buyer has quote intent + complete info)",
+                    pre_matched.name,
+                )
+            else:
+                has_partial = _origin or _dest or (_weight is not None and _weight > 0)
+                if has_partial and session_id:
+                    if _origin is not None or _dest is not None:
+                        self._update_quote_context(
+                            session_id,
+                            origin=_origin or context_before.get("origin"),
+                            destination=_dest or context_before.get("destination"),
+                        )
+                    if _weight is not None and _weight > 0:
+                        self._update_quote_context(session_id, weight=_weight)
+                    ctx_merged = self._get_quote_context(session_id)
+                    missing: list[str] = []
+                    if not ctx_merged.get("origin"):
+                        missing.append("origin")
+                    if not ctx_merged.get("destination"):
+                        missing.append("destination")
+                    w = ctx_merged.get("weight")
+                    if w is None or (isinstance(w, (int, float)) and float(w) <= 0):
+                        missing.append("weight")
+                    if missing:
+                        extracted_fields = {
+                            "origin": ctx_merged.get("origin") or "",
+                            "destination": ctx_merged.get("destination") or "",
+                            "weight": ctx_merged.get("weight"),
+                        }
+                        prompt = self._build_natural_missing_prompt(missing, extracted_fields)
+                        return self._sanitize_reply(prompt), {
+                            "is_quote": True,
+                            "quote_need_info": True,
+                            "quote_missing_fields": missing,
+                            "rule_matched": pre_matched.name,
+                        }
+                    else:
+                        use_rule_reply = False
+
+        if use_rule_reply:
+            reply = pre_matched.reply
+            if pre_matched.name == "express_availability":
+                reply = random.choice(self._AVAILABILITY_VARIANTS)
+            if pre_matched.name == "price_bargain" and session_id:
+                reply = self._bargain_tracker.get_dynamic_reply(session_id)
+            if pre_matched.name == "buyer_decline" and session_id:
+                reply = self._build_decline_reply(context_after, has_quote_rows)
+            if item_title and not item_title.isdigit() and not pre_matched.categories:
+                reply = f"关于「{item_title}」，{reply}"
+            return self._sanitize_reply(reply), {
+                "is_quote": False,
+                "rule_matched": pre_matched.name,
+                "needs_human": pre_matched.needs_human,
+                "human_reason": pre_matched.human_reason,
+                "phase": pre_matched.phase,
+            }
+
+        return None  # rule yielded to quote engine
+
+    def _handle_non_quote(
+        self,
+        message_text: str,
+        item_title: str,
+        session_id: str,
+        is_post_order: bool,
+        session_phase: str | None,
+        context_before: dict[str, Any],
+        aftersale_fallback: str,
+    ) -> tuple[str, dict[str, Any]]:
+        """Handle non-quote intent: rule reply, AI, default, aftersale fallback."""
+        if is_post_order:
+            return "", {
+                "is_quote": False,
+                "skipped": True,
+                "reason": "post_order_notification",
+            }
+        reply, skip = self.reply_engine.generate_reply(message_text=message_text, item_title=item_title)
+        if skip:
+            return "", {
+                "is_quote": False,
+                "skipped": True,
+                "reason": "system_notification",
+            }
+        is_default = reply == self.reply_engine.default_reply
+
+        if is_default and self._ai_router.should_use_ai(message_text, rule_matched=False):
+            corrected_text, ai_result = self._ai_router.route_or_correct(
+                message_text,
+                context=context_before or None,
+                chat_history=(context_before or {}).get("chat_history"),
+                content_service_getter=self._get_content_service,
+            )
+            if ai_result and ai_result.get("confidence", 0) >= self._ai_router.confidence_threshold:
+                ai_reply = self._ai_generate_express_reply(message_text, context=context_before or None)
+                if ai_reply:
+                    return self._sanitize_reply(ai_reply), {
+                        "is_quote": False,
+                        "ai_generated": True,
+                        "ai_intent": ai_result.get("intent"),
+                        "ai_confidence": ai_result.get("confidence"),
+                        "quote_context_enabled": bool(self.context_memory_enabled),
+                    }
+            elif corrected_text and corrected_text != message_text:
+                retry_reply, retry_skip = self.reply_engine.generate_reply(
+                    message_text=corrected_text, item_title=item_title
+                )
+                if not retry_skip and retry_reply != self.reply_engine.default_reply:
+                    reply = retry_reply
+                    is_default = False
+
+        if is_default and session_phase in ("checkout", "aftersale"):
+            return self._sanitize_reply(aftersale_fallback), {
+                "is_quote": False,
+                "session_phase": session_phase,
+                "aftersale_fallback": True,
+                "quote_context_enabled": bool(self.context_memory_enabled),
+            }
+        if is_default and self.reply_engine.category == "express":
+            if self.default_reply in self._SYSTEM_DEFAULT_REPLIES or not self.default_reply.strip():
+                reply = "您好~ 告诉我寄件城市、收件城市和重量，帮您查最优价~"
+                return self._sanitize_reply(reply), {
+                    "is_quote": False,
+                    "express_default_override": True,
+                    "quote_context_enabled": bool(self.context_memory_enabled),
+                }
+        if is_default and self._ai_reply_enabled:
+            ai_reply = self._ai_generate_express_reply(message_text, context=context_before or None)
+            if ai_reply:
+                return self._sanitize_reply(ai_reply), {
+                    "is_quote": False,
+                    "ai_generated": True,
+                    "quote_context_enabled": bool(self.context_memory_enabled),
+                }
+            self._log_unmatched_message(message_text, session_id=session_id or None, item_title=item_title or None)
+        elif is_default:
+            self._log_unmatched_message(message_text, session_id=session_id or None, item_title=item_title or None)
+        return self._sanitize_reply(reply), {
+            "is_quote": False,
+            "quote_context_enabled": bool(self.context_memory_enabled),
+            "quote_context_present": bool(context_before),
+        }
+
+    async def _execute_quote_engine(
+        self,
+        request: Any,
+        message_text: str,
+        session_id: str,
+        extracted_fields: dict[str, Any],
+        memory_hit: bool,
+    ) -> tuple[str, dict[str, Any]]:
+        """Execute quote engine (multi-courier or single) and return reply."""
+        _QUOTE_TIMEOUT_SECONDS = 15
         start = perf_counter()
         try:
             multi_quote_rows: list[tuple[str, QuoteResult]] = []
@@ -1902,22 +1963,6 @@ class MessagesService:
             quote_meta=quote_meta,
             get_context=self._get_quote_context,
         )
-
-    _ORDER_TRIGGER_PATTERNS = re.compile(r"拍了|拍下|已拍|已下单|下单了|付款|已买|改价|改个价|帮我改|拍好了|我拍了")
-
-    def _check_order_trigger(self, msg: str) -> None:
-        """If buyer message hints at placing an order, wake up the price poller."""
-        if not self._ORDER_TRIGGER_PATTERNS.search(msg):
-            return
-        try:
-            from src.modules.orders.auto_price_poller import get_price_poller
-
-            poller = get_price_poller()
-            if poller:
-                poller.trigger_now()
-                self.logger.debug("Order trigger: woke up price poller for msg=%s", msg[:30])
-        except Exception:
-            pass
 
     def generate_reply(self, message_text: str, item_title: str = "") -> str:
         """按策略引擎生成回复（兼容旧调用）。"""
@@ -2238,28 +2283,8 @@ class MessagesService:
             sent = True
         elif quote_meta.get("skipped") or not (reply_text or "").strip():
             sent = False
-        elif session_id and self._dedup and reply_text:
-            try:
-                rule_name = quote_meta.get("rule_matched")
-                if rule_name:
-                    rule_dedup_key = f"__rule__:{rule_name}"
-                    if self._dedup.is_reply_duplicate(session_id, rule_dedup_key):
-                        self.logger.info(
-                            "rule_dedup hit: session=%s, rule=%s, reply=%s",
-                            session_id,
-                            rule_name,
-                            reply_text[:40],
-                        )
-                        sent = False
-                        quote_meta["skipped"] = True
-                        quote_meta["reason"] = "rule_dedup"
-                if not quote_meta.get("skipped") and self._dedup.is_reply_duplicate(session_id, reply_text):
-                    self.logger.info(f"reply_dedup hit: session={session_id}, reply={reply_text[:40]}")
-                    sent = False
-                    quote_meta["skipped"] = True
-                    quote_meta["reason"] = "reply_dedup"
-            except Exception:
-                pass
+        elif not (reply_text or "").strip():
+            sent = False
         if (
             not blocked_by_policy
             and not dry_run
@@ -2305,14 +2330,8 @@ class MessagesService:
                 self._dedup.mark_replied(session_id, effective_ct, msg, reply_text or "")
                 if reply_text:
                     self._dedup.mark_reply_sent(session_id, reply_text)
-                rule_name = quote_meta.get("rule_matched")
-                if rule_name:
-                    self._dedup.mark_reply_sent(session_id, f"__rule__:{rule_name}")
             except Exception:
                 pass
-
-        if msg:
-            self._check_order_trigger(msg)
 
         latency_seconds = perf_counter() - session_start
         within_target = latency_seconds <= self.reply_target_seconds
