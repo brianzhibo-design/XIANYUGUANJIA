@@ -130,6 +130,15 @@ from src.modules.quote.geo_resolver import GeoResolver  # noqa: E402
 _PROVINCE_SHORT_ALIASES = frozenset({"新疆", "宁夏", "广西", "内蒙", "香港", "澳门", "台湾"})
 _geo_known_cache: set[str] | None = None
 
+_GEO_SUFFIX_STRIP_RE = re.compile(r"(?:多少|吗|呢|啊|哦|嘛|了|的|么|不|几|块|钱)+$")
+
+
+def _clean_geo_suffix(name: str | None) -> str | None:
+    if not name:
+        return name
+    cleaned = _GEO_SUFFIX_STRIP_RE.sub("", name).strip()
+    return cleaned or name
+
 
 def _is_known_geo(location: str | None) -> bool:
     if not location:
@@ -150,12 +159,14 @@ def _is_known_geo(location: str | None) -> bool:
     for known in _geo_known_cache:
         if len(known) >= 2 and known.startswith(n):
             return True
-        if len(n) >= 2 and n.startswith(known):
+        if len(n) >= 2 and n.startswith(known) and len(n) <= len(known) + 1:
             return True
     return False
 
 
 def _validate_geo_return(origin: str | None, dest: str | None) -> tuple[str | None, str | None]:
+    origin = _clean_geo_suffix(origin)
+    dest = _clean_geo_suffix(dest)
     if origin and not _is_known_geo(origin):
         _logger.info("geo_extract: rejected origin=%s dest=%s reason=origin_unknown", origin, dest)
         return None, None

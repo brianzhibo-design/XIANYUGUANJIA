@@ -146,7 +146,7 @@ class MessagesService:
     ]
 
     _MAX_SESSION_LOCKS = 2000
-    _SESSION_REPLY_COOLDOWN_S = 3.0
+    _SESSION_REPLY_COOLDOWN_S = 5.0
 
     def __init__(self, controller=None, config: dict[str, Any] | None = None):
         global _active_service
@@ -681,8 +681,6 @@ class MessagesService:
                     self.logger.warning("WebSocket unread pull unavailable, fallback to DOM session scan")
                     return await self._get_unread_sessions_dom(limit=limit)
                 return ws_result
-            if self.transport_mode == "auto":
-                return await self._get_unread_sessions_dom(limit=limit)
             return ws_result
 
         return await self._get_unread_sessions_dom(limit=limit)
@@ -2149,11 +2147,16 @@ class MessagesService:
         sender_user_id = str(session.get("sender_user_id", ""))
         create_time = int(session.get("create_time", 0) or 0)
 
-        if msg and session_id and self._dedup and create_time:
+        if msg and session_id and self._dedup:
             try:
-                if self._dedup.is_replied(session_id, create_time, msg):
-                    self.logger.debug(f"process_session dedup hit: session={session_id}, msg={msg[:30]}")
-                    return {"skipped": True, "reason": "dedup", "session_id": session_id}
+                if create_time:
+                    if self._dedup.is_replied(session_id, create_time, msg):
+                        self.logger.debug("process_session dedup hit: session=%s, msg=%s", session_id, msg[:30])
+                        return {"skipped": True, "reason": "dedup", "session_id": session_id}
+                else:
+                    if self._dedup.is_content_duplicate(session_id, msg):
+                        self.logger.debug("process_session content_dedup hit: session=%s, msg=%s", session_id, msg[:30])
+                        return {"skipped": True, "reason": "content_dedup", "session_id": session_id}
             except Exception:
                 pass
 
