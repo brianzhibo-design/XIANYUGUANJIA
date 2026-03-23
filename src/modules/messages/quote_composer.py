@@ -59,11 +59,13 @@ class QuoteReplyComposer:
             return f"{round(rounded)}天"
         return f"{rounded:.1f}天"
 
+    _DEFAULT_COURIERS = ["圆通", "中通", "申通", "韵达", "极兔", "德邦"]
+
     def resolve_candidate_couriers(self, request: QuoteRequest) -> list[str]:
         couriers: list[str] = []
         seen: set[str] = set()
 
-        preferred = self.quote_config.get("preferred_couriers", [])
+        preferred = self.quote_config.get("preferred_couriers") or self._DEFAULT_COURIERS
         if isinstance(preferred, list):
             for item in preferred:
                 name = str(item or "").strip()
