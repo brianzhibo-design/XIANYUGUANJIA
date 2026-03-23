@@ -92,6 +92,14 @@ class QuoteReplyComposer:
             except Exception as exc:
                 self.logger.warning("Resolve candidate couriers failed: %s", exc)
 
+        if not couriers:
+            self.logger.warning(
+                "resolve_candidate_couriers: empty! preferred_count=%d, repo=%s, origin=%s, dest=%s",
+                len(preferred) if isinstance(preferred, list) else -1,
+                "ok" if repo is not None else "None",
+                request.origin,
+                request.destination,
+            )
         return couriers[: self.quote_reply_max_couriers]
 
     async def quote_all_couriers(self, request: QuoteRequest) -> list[tuple[str, QuoteResult]]:
@@ -115,7 +123,8 @@ class QuoteReplyComposer:
             try:
                 result = await self.quote_engine.get_quote(sub_request)
                 return courier_name, result
-            except Exception:
+            except Exception as exc:
+                self.logger.debug("quote_all_couriers: courier=%s failed: %s", courier_name, exc)
                 return courier_name, None
 
         pairs = await asyncio.gather(*[_one(name) for name in couriers])
@@ -131,6 +140,8 @@ class QuoteReplyComposer:
         self._low_weight_freight_fallback = False
 
         if not ok_pairs:
+            failed = [n for n, r in pairs if r is None]
+            self.logger.warning("quote_all_couriers: all %d couriers failed: %s", len(couriers), failed)
             return []
 
         full_pairs = list(ok_pairs)

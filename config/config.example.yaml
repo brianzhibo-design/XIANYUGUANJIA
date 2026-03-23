@@ -366,6 +366,13 @@ quote:
       default:
         first_discount: 0.0
         extra_discount: 0.0
+  preferred_couriers:
+  - 圆通
+  - 中通
+  - 申通
+  - 韵达
+  - 极兔
+  - 德邦
   providers:
     remote:
       enabled: false

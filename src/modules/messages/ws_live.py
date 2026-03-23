@@ -263,9 +263,13 @@ def extract_chat_event(message: Any) -> dict[str, Any] | None:
     if not text or not sender_user_id or not chat_id:
         return None
 
-    create_time = int(time.time() * 1000)
+    create_time = 0
     try:
-        create_time = int(_pick(body, "5", 5, "createTime") or create_time)
+        raw_ct = _pick(body, "5", 5, "createTime")
+        if raw_ct is not None:
+            ct_val = int(raw_ct)
+            if ct_val > 0:
+                create_time = ct_val
     except Exception:
         pass
 
@@ -348,6 +352,7 @@ class GoofishWsTransport:
         self._peer_to_session: dict[str, str] = {}
         self._nick_to_session: dict[str, str] = {}
         self._seen_event: dict[str, float] = {}
+        self._SEEN_EVENT_KEEP_S = 300.0
 
         self._ws: Any | None = None
         self._stop_event: asyncio.Event = asyncio.Event()
@@ -421,7 +426,7 @@ class GoofishWsTransport:
             if changed:
                 # 清理映射，避免新登录账号复用旧会话的对端映射
                 self._session_peer.clear()
-                self._seen_event.clear()
+                self._trim_seen_event()
             return changed
         except Exception as exc:
             self.logger.warning(f"WS cookie reload ignored ({reason}): {exc}")
@@ -574,7 +579,7 @@ class GoofishWsTransport:
 
                 save_cookie(cookie, persist=True, source="cookiecloud_poll")
                 self._session_peer.clear()
-                self._seen_event.clear()
+                self._trim_seen_event()
                 self.logger.info("CookieCloud poll: new cookie applied")
             return changed
         except Exception as exc:
@@ -620,7 +625,7 @@ class GoofishWsTransport:
 
             save_cookie(merged, persist=True, source="goofish_im")
             self._session_peer.clear()
-            self._seen_event.clear()
+            self._trim_seen_event()
             ttl = result.get("m_h5_tk_ttl")
             ttl_str = f", _m_h5_tk TTL={ttl:.0f}s" if ttl else ""
             self.logger.info(f"goofish_im refresh succeeded{ttl_str}")
@@ -656,7 +661,7 @@ class GoofishWsTransport:
 
                 save_cookie(new_cookie, persist=True, source="active_refresh")
                 self._session_peer.clear()
-                self._seen_event.clear()
+                self._trim_seen_event()
                 self.logger.info("Active cookie refresh succeeded, new cookie applied")
             return changed
         except Exception as exc:
@@ -783,7 +788,7 @@ class GoofishWsTransport:
 
             save_cookie(merged, persist=True, source="bitbrowser_cdp")
             self._session_peer.clear()
-            self._seen_event.clear()
+            self._trim_seen_event()
             self.logger.info(
                 f"BitBrowser CDP cookie refresh succeeded (merged {len(cdp_keys)} CDP fields into existing)"
             )
@@ -933,7 +938,7 @@ class GoofishWsTransport:
 
                 save_cookie(merged, persist=True, source="slider_recovery")
                 self._session_peer.clear()
-                self._seen_event.clear()
+                self._trim_seen_event()
                 self.logger.info(f"Slider recovery: merged {len(cookie_keys)} browser fields into existing cookie")
                 try:
                     from src.core.notify import send_system_notification
@@ -1285,6 +1290,13 @@ class GoofishWsTransport:
                 ack["headers"][key] = headers[key]
         await self._ws.send(json.dumps(ack, ensure_ascii=False))
 
+    def _trim_seen_event(self, keep_seconds: float | None = None) -> None:
+        """Remove old entries instead of clearing all, preserving recent dedup keys."""
+        cutoff = time.time() - (keep_seconds or self._SEEN_EVENT_KEEP_S)
+        dead = [k for k, ts in self._seen_event.items() if ts < cutoff]
+        for k in dead:
+            self._seen_event.pop(k, None)
+
     def _cleanup_seen(self) -> None:
         now = time.time()
         expire = max(120.0, self.event_expire_ms / 1000.0 * 2.0)
@@ -1373,7 +1385,11 @@ class GoofishWsTransport:
         chat_id = str(event.get("chat_id", "") or "")
         sender_id = str(event.get("sender_user_id", "") or "")
         text = str(event.get("text", "") or "")
-        create_time = int(event.get("create_time", int(time.time() * 1000)) or int(time.time() * 1000))
+        raw_ct = event.get("create_time", 0)
+        try:
+            create_time = int(raw_ct) if raw_ct else 0
+        except (ValueError, TypeError):
+            create_time = 0
 
         # 订单事件快速检测：命中即唤醒改价轮询，不等 process_session
         if text and any(kw in text for kw in self._ORDER_TRIGGER_KEYWORDS):
@@ -1408,10 +1424,14 @@ class GoofishWsTransport:
                     self.logger.warning(f"[人工介入] set_state failed: session={chat_id}, err={exc}")
             return
 
-        if int(time.time() * 1000) - create_time > self.event_expire_ms:
+        if create_time > 0 and int(time.time() * 1000) - create_time > self.event_expire_ms:
             return
 
-        dedupe_key = hashlib.sha1(f"{chat_id}:{create_time}:{text}".encode()).hexdigest()[:20]
+        if create_time > 0:
+            dedupe_seed = f"{chat_id}:{create_time}:{text}"
+        else:
+            dedupe_seed = f"{chat_id}:_notime_:{text}"
+        dedupe_key = hashlib.sha1(dedupe_seed.encode()).hexdigest()[:20]
         if dedupe_key in self._seen_event:
             return
 

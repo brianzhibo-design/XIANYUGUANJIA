@@ -1803,9 +1803,41 @@ class MessagesService:
                     "reply_segments": [self._sanitize_reply(s) for s in segments],
                 }
 
+            if self.quote_reply_all_couriers:
+                self.logger.warning(
+                    "multi_quote_rows empty, falling back to single-quote: origin=%s, dest=%s, weight=%s",
+                    request.origin,
+                    request.destination,
+                    request.weight,
+                )
+
             result = await asyncio.wait_for(self.quote_engine.get_quote(request), timeout=_QUOTE_TIMEOUT_SECONDS)
             latency_ms = int((perf_counter() - start) * 1000)
             explain = result.explain if isinstance(result.explain, dict) else {}
+
+            is_freight = explain.get("service_type") == "freight"
+            billing_w = float(explain.get("billing_weight_kg") or request.weight or 0)
+            freight_hide_below = float(self.quote_config.get("freight_hide_below_kg", 20))
+            if is_freight and billing_w < freight_hide_below:
+                self.logger.warning(
+                    "single_quote_fallback: freight for small pkg (%.1fkg<%.0fkg), route=%s->%s, courier=%s",
+                    billing_w,
+                    freight_hide_below,
+                    request.origin,
+                    request.destination,
+                    explain.get("matched_courier", "?"),
+                )
+                return self._sanitize_reply(
+                    f"亲，{request.origin}到{request.destination}暂无小件快递报价，建议到小程序内查看更多快递选项哦~"
+                ), {
+                    "is_quote": True,
+                    "quote_need_info": False,
+                    "quote_success": False,
+                    "quote_fallback": True,
+                    "quote_freight_filtered": True,
+                    "quote_context_hit": bool(memory_hit),
+                }
+
             selected_template = self._select_quote_reply_template(explain)
             reply = result.compose_reply(
                 validity_minutes=int(self.quote_config.get("validity_minutes", 30)),
@@ -2208,7 +2240,20 @@ class MessagesService:
             sent = False
         elif session_id and self._dedup and reply_text:
             try:
-                if self._dedup.is_reply_duplicate(session_id, reply_text):
+                rule_name = quote_meta.get("rule_matched")
+                if rule_name:
+                    rule_dedup_key = f"__rule__:{rule_name}"
+                    if self._dedup.is_reply_duplicate(session_id, rule_dedup_key):
+                        self.logger.info(
+                            "rule_dedup hit: session=%s, rule=%s, reply=%s",
+                            session_id,
+                            rule_name,
+                            reply_text[:40],
+                        )
+                        sent = False
+                        quote_meta["skipped"] = True
+                        quote_meta["reason"] = "rule_dedup"
+                if not quote_meta.get("skipped") and self._dedup.is_reply_duplicate(session_id, reply_text):
                     self.logger.info(f"reply_dedup hit: session={session_id}, reply={reply_text[:40]}")
                     sent = False
                     quote_meta["skipped"] = True
@@ -2256,10 +2301,13 @@ class MessagesService:
             self._session_last_reply_ts[session_id] = time.monotonic()
         if sent and msg and session_id and self._dedup:
             try:
-                if create_time:
-                    self._dedup.mark_replied(session_id, create_time, msg, reply_text or "")
+                effective_ct = create_time or int(time.time() * 1000)
+                self._dedup.mark_replied(session_id, effective_ct, msg, reply_text or "")
                 if reply_text:
                     self._dedup.mark_reply_sent(session_id, reply_text)
+                rule_name = quote_meta.get("rule_matched")
+                if rule_name:
+                    self._dedup.mark_reply_sent(session_id, f"__rule__:{rule_name}")
             except Exception:
                 pass
 
