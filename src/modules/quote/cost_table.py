@@ -283,13 +283,23 @@ class CostTableRepository:
         courier_norm = normalize_courier_name(courier) if courier else ""
 
         # Level 1 + 2: 精确匹配与省市混配候选
-        for origin_key, destination_key in route_candidates(origin_norm, destination_norm, self.geo_resolver):
-            if courier_norm:
+        if courier_norm:
+            for origin_key, destination_key in route_candidates(origin_norm, destination_norm, self.geo_resolver):
                 exact = self._index_courier_route.get((courier_norm, origin_key, destination_key), [])
-            else:
+                if exact:
+                    return self._sort_candidates(exact, weight=weight)[:limit]
+        else:
+            all_candidates: list[CostRecord] = []
+            seen_courier_keys: set[str] = set()
+            for origin_key, destination_key in route_candidates(origin_norm, destination_norm, self.geo_resolver):
                 exact = self._index_route.get((origin_key, destination_key), [])
-            if exact:
-                return self._sort_candidates(exact, weight=weight)[:limit]
+                for rec in exact:
+                    ck = f"{rec.courier}|{rec.source_sheet}"
+                    if ck not in seen_courier_keys:
+                        seen_courier_keys.add(ck)
+                        all_candidates.append(rec)
+            if all_candidates:
+                return self._sort_candidates(all_candidates, weight=weight)[:limit]
 
         # Level 3: 包含匹配
         if courier_norm:
