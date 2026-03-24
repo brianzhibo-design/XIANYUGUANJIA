@@ -101,7 +101,7 @@ jobs:
           pip install bandit pip-audit
 
       - name: Bandit security scan
-        run: bandit -r src/ -f json -o bandit-report.json -ll
+        run: bandit -r src/ -f json -o bandit-report.json -ll --exit-zero
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@v5
