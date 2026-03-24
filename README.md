@@ -6,10 +6,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/brianzhibo-design/XIANYUGUANJIA/actions/workflows/ci.yml"><img src="https://github.com/brianzhibo-design/XIANYUGUANJIA/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/brianzhibo-design/XIANYUGUANJIA/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/brianzhibo-design/XIANYUGUANJIA/ci.yml?branch=main&label=CI" alt="CI"></a>
   <a href="https://github.com/brianzhibo-design/XIANYUGUANJIA/releases/latest"><img src="https://img.shields.io/github/v/release/brianzhibo-design/XIANYUGUANJIA?label=release" alt="Release"></a>
-  <img src="https://img.shields.io/badge/python-3.12-blue" alt="Python">
-  <img src="https://img.shields.io/badge/react-18-blue" alt="React">
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=yellow" alt="Python"></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/react-18-blue?logo=react&logoColor=61DAFB" alt="React"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 </p>
 
