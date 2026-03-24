@@ -6,11 +6,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/brianzhibo-design/XIANYUGUANJIA/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/brianzhibo-design/XIANYUGUANJIA/ci.yml?branch=main&label=CI" alt="CI"></a>
-  <a href="https://github.com/brianzhibo-design/XIANYUGUANJIA/releases/latest"><img src="https://img.shields.io/github/v/release/brianzhibo-design/XIANYUGUANJIA?label=release" alt="Release"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=yellow" alt="Python"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/react-18-blue?logo=react&logoColor=61DAFB" alt="React"></a>
+  <a href="https://vitejs.dev/"><img src="https://img.shields.io/badge/vite-5.0-blue?logo=vite&logoColor=646CFF" alt="Vite"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/typescript-5.9-blue?logo=typescript&logoColor=3178C6" alt="TypeScript"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
+</p>
+
+<p align="center">
+  <sub>GitHub Actions CI / Release 动态状态 badge 在仓库设为 <strong>Public</strong> 后自动生效：</sub><br>
+  <a href="https://github.com/brianzhibo-design/XIANYUGUANJIA/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/brianzhibo-design/XIANYUGUANJIA/ci.yml?branch=main&label=CI" alt="CI"></a>
+  <a href="https://github.com/brianzhibo-design/XIANYUGUANJIA/releases/latest"><img src="https://img.shields.io/github/v/release/brianzhibo-design/XIANYUGUANJIA?label=release" alt="Release"></a>
 </p>
 
 ---
