@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: ❓ 提问
-    url: https://github.com/G3niusYukki/xianyu-openclaw/discussions
+    url: https://github.com/brianzhibo-design/XIANYUGUANJIA/discussions
     about: 使用 GitHub Discussions 提问
   - name: 📖 文档
-    url: https://github.com/G3niusYukki/xianyu-openclaw#readme
+    url: https://github.com/brianzhibo-design/XIANYUGUANJIA#readme
     about: 查看项目文档

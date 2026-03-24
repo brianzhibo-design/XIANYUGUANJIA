@@ -1,6 +1,32 @@
 [project]
 name = "xianyu-guanjia"
 dynamic = ["version"]
+description = "闲鱼自动化运营平台 — AI 智能客服 · 自动报价 · 订单履约 · 实时监控"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "闲鱼管家项目组", email = "haoyang056@gmail.com"}
+]
+keywords = ["xianyu", "闲鱼", "automation", "chatbot", "ecommerce", "aliexpress"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Office/Business",
+]
+
+[project.urls]
+Homepage = "https://github.com/brianzhibo-design/XIANYUGUANJIA"
+Repository = "https://github.com/brianzhibo-design/XIANYUGUANJIA"
+Documentation = "https://github.com/brianzhibo-design/XIANYUGUANJIA#readme"
+Changelog = "https://github.com/brianzhibo-design/XIANYUGUANJIA/blob/main/CHANGELOG.md"
+"Issue Tracker" = "https://github.com/brianzhibo-design/XIANYUGUANJIA/issues"
 
 [tool.setuptools.dynamic]
 version = {attr = "src.__version__"}
