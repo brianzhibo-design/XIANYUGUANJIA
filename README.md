@@ -13,12 +13,6 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 </p>
 
-<p align="center">
-  <sub>GitHub Actions CI / Release 动态状态 badge 在仓库设为 <strong>Public</strong> 后自动生效：</sub><br>
-  <a href="https://github.com/brianzhibo-design/XIANYUGUANJIA/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/brianzhibo-design/XIANYUGUANJIA/ci.yml?branch=main&label=CI" alt="CI"></a>
-  <a href="https://github.com/brianzhibo-design/XIANYUGUANJIA/releases/latest"><img src="https://img.shields.io/github/v/release/brianzhibo-design/XIANYUGUANJIA?label=release" alt="Release"></a>
-</p>
-
 ---
 
 ## 这是什么
