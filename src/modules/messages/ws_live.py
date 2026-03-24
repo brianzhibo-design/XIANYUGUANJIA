@@ -481,6 +481,9 @@ class GoofishWsTransport:
         wait_start = time.time()
         escalation_notified = False
         escalation_timeout = float(self.config.get("cookie_wait_escalation_timeout_seconds", 10 * 60))
+        slider_retry_after = float(self.config.get("slider_retry_after_seconds", 30 * 60))
+
+        self._last_im_cookie_refresh_at = 0.0
 
         try:
             from src.core.bitbrowser_cdp import get_fp_config
@@ -506,6 +509,13 @@ class GoofishWsTransport:
             if self._maybe_reload_cookie(reason="watch"):
                 return True
             now = time.time()
+
+            if (now - wait_start) >= slider_retry_after:
+                elapsed_min = int((now - wait_start) / 60)
+                self.logger.info(f"Cookie 等待已超 {elapsed_min} 分钟，重置恢复计数并重新进入恢复链路")
+                self._slider_recovery_attempts = 0
+                self._slider_just_recovered = False
+                return True
 
             if not escalation_notified and (now - wait_start) >= escalation_timeout:
                 escalation_notified = True
@@ -1679,14 +1689,24 @@ class GoofishWsTransport:
                             f"退避 {rgv_backoff:.0f}s..."
                         )
 
-                        # 滑块刚成功但 RGV587 仍持续 → 滑块无法解除此次封控，跳过所有自动恢复直接进等待模式
+                        # 滑块刚成功但 RGV587 仍持续 → 滑块本轮无法解除封控，先尝试外部源再进等待
                         if self._slider_just_recovered:
                             self._slider_just_recovered = False
                             self._slider_recovery_attempts = self._SLIDER_MAX_ATTEMPTS_PER_CYCLE
                             self.logger.warning(
-                                "滑块验证已通过但 RGV587 仍持续，滑块无法解除此次封控，"
-                                "切换到 CookieCloud/手动更新等待模式"
+                                "滑块验证已通过但 RGV587 仍持续，滑块无法解除此次封控，尝试外部 Cookie 源后进入等待模式"
                             )
+                            self._last_im_cookie_refresh_at = 0.0
+                            if await self._try_cookiecloud_poll() is True:
+                                self._connect_failures = 0
+                                self._rgv587_consecutive = 0
+                                self.logger.info("滑块后 CookieCloud 提供新 Cookie，立即重试")
+                                continue
+                            if await self._try_goofish_im_refresh(urgent=True):
+                                self._connect_failures = 0
+                                self._rgv587_consecutive = 0
+                                self.logger.info("滑块后 IM 刷新成功，立即重试")
+                                continue
                             # fall through to _wait_for_cookie_update_forever below
 
                         # Step 1: 首次 RGV587 给 1 次 IM 机会（处理瞬时风控）
