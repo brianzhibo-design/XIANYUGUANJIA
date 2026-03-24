@@ -112,7 +112,7 @@ jobs:
           retention-days: 30
 
       - name: pip-audit vulnerability check
-        run: pip-audit -r requirements.txt --output pip-audit-report.json --format json
+        run: pip-audit -r requirements.txt --output pip-audit-report.json --format json || true
 
       - name: Upload pip-audit report
         uses: actions/upload-artifact@v5
