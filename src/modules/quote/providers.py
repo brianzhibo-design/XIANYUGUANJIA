@@ -93,6 +93,13 @@ class RuleTableQuoteProvider(IQuoteProvider):
             surcharges["remote"] = remote_fee
 
         total = base_fee + sum(surcharges.values())
+        actual_weight = float(request.weight or 0.0)
+        volume_weight = float(request.volume_weight or 0.0)
+        if actual_weight <= 0.0 and volume_weight <= 0.0:
+            billing_weight = 0.0
+        else:
+            billing_weight = float(math.ceil(max(actual_weight, volume_weight)))
+        volume_cm3 = float(request.volume or 0.0) if request.volume else 0.0
         return QuoteResult(
             provider="rule_table",
             base_fee=base_fee,
@@ -104,6 +111,10 @@ class RuleTableQuoteProvider(IQuoteProvider):
                 "service_level": service_level,
                 "same_city": same_city,
                 "weight_kg": request.weight,
+                "actual_weight_kg": round(actual_weight, 3),
+                "billing_weight_kg": round(billing_weight, 3),
+                "volume_weight_kg": round(volume_weight, 3),
+                "volume_cm3": round(volume_cm3, 3) if volume_cm3 > 0 else None,
             },
         )
 

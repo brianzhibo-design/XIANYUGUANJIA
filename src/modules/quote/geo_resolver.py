@@ -13,6 +13,41 @@ _SUFFIXES: tuple[str, ...] = tuple(
 
 _logger = logging.getLogger(__name__)
 
+# 省级地名（normalize 后）→ 用于快运/成本表查询的参考城市（省会或直辖市本体）
+_PROVINCE_CAPITAL_CITIES: dict[str, str] = {
+    "北京": "北京",
+    "天津": "天津",
+    "上海": "上海",
+    "重庆": "重庆",
+    "河北": "石家庄",
+    "山西": "太原",
+    "内蒙古": "呼和浩特",
+    "辽宁": "沈阳",
+    "吉林": "长春",
+    "黑龙江": "哈尔滨",
+    "江苏": "南京",
+    "浙江": "杭州",
+    "安徽": "合肥",
+    "福建": "福州",
+    "江西": "南昌",
+    "山东": "济南",
+    "河南": "郑州",
+    "湖北": "武汉",
+    "湖南": "长沙",
+    "广东": "广州",
+    "广西": "南宁",
+    "海南": "海口",
+    "四川": "成都",
+    "贵州": "贵阳",
+    "云南": "昆明",
+    "西藏": "拉萨",
+    "陕西": "西安",
+    "甘肃": "兰州",
+    "青海": "西宁",
+    "宁夏": "银川",
+    "新疆": "乌鲁木齐",
+}
+
 
 class GeoResolver:
     """读取城市-省份映射并提供标准化/混配能力。"""
@@ -93,6 +128,23 @@ class GeoResolver:
         if not normalized:
             return False
         return normalized in self._province_aliases and normalized not in self._city_to_province
+
+    def province_to_capital(self, name: str | None) -> str | None:
+        """若 name 为省级地名，返回用于报价的参考城市（省会/直辖市）；否则返回 None。"""
+        normalized = self.normalize(name)
+        if not normalized:
+            return None
+        return _PROVINCE_CAPITAL_CITIES.get(normalized)
+
+    def resolve_freight_location(self, name: str | None) -> str:
+        """快运报价用：省级自动落到省会参考市，其余保持原样。"""
+        raw = str(name or "").strip()
+        if not raw:
+            return raw
+        if not self.is_province_level(raw):
+            return raw
+        cap = self.province_to_capital(raw)
+        return cap if cap else raw
 
     def expand_city_province_candidates(self, name: str | None) -> list[str]:
         normalized = self.normalize(name)

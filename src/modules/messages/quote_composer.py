@@ -109,10 +109,10 @@ class QuoteReplyComposer:
         if not couriers:
             return []
 
-        async def _one(courier_name: str) -> tuple[str, QuoteResult | None]:
+        async def _quote_one(courier_name: str, origin: str, destination: str) -> tuple[str, QuoteResult | None]:
             sub_request = QuoteRequest(
-                origin=request.origin,
-                destination=request.destination,
+                origin=origin,
+                destination=destination,
                 weight=request.weight,
                 volume=request.volume,
                 volume_weight=request.volume_weight,
@@ -129,7 +129,7 @@ class QuoteReplyComposer:
                 self.logger.debug("quote_all_couriers: courier=%s failed: %s", courier_name, exc)
                 return courier_name, None
 
-        pairs = await asyncio.gather(*[_one(name) for name in couriers])
+        pairs = await asyncio.gather(*[_quote_one(name, request.origin, request.destination) for name in couriers])
         ok_pairs: list[tuple[str, QuoteResult]] = []
         for courier_name, result in pairs:
             if result is None:
@@ -165,8 +165,28 @@ class QuoteReplyComposer:
         else:
             geo = GeoResolver()
             if geo.is_province_level(request.origin) or geo.is_province_level(request.destination):
-                ok_pairs = [p for p in ok_pairs if not self._is_freight_pair(p)]
-                self._freight_needs_city = True
+                origin_f = geo.resolve_freight_location(request.origin)
+                dest_f = geo.resolve_freight_location(request.destination)
+                if (origin_f != request.origin or dest_f != request.destination) and origin_f and dest_f:
+                    fr_pairs = await asyncio.gather(*[_quote_one(name, origin_f, dest_f) for name in couriers])
+                    freight_alt = [(n, r) for n, r in fr_pairs if r is not None and self._is_freight_pair((n, r))]
+                    express_only = [p for p in ok_pairs if not self._is_freight_pair(p)]
+                    if freight_alt:
+                        ok_pairs = express_only + freight_alt
+                        self._freight_needs_city = False
+                        self.logger.info(
+                            "quote_all_couriers: freight via province→capital ref %s->%s (was %s->%s)",
+                            origin_f,
+                            dest_f,
+                            request.origin,
+                            request.destination,
+                        )
+                    else:
+                        ok_pairs = [p for p in ok_pairs if not self._is_freight_pair(p)]
+                        self._freight_needs_city = True
+                else:
+                    ok_pairs = [p for p in ok_pairs if not self._is_freight_pair(p)]
+                    self._freight_needs_city = True
 
         if not ok_pairs:
             ok_pairs = list(full_pairs)
@@ -206,6 +226,27 @@ class QuoteReplyComposer:
         "流程：拍下→我改价→付款出码→小程序下单，很简单~\n首单有优惠哦，正常价也比自寄便宜5折起~",
     ]
 
+    @staticmethod
+    def _explain_weight_triple(explain: dict[str, Any]) -> tuple[Any, Any, Any]:
+        """从单条 explain 取 (actual, volume_w, billing)；兼容 rule_table 的 weight_kg。"""
+        actual_w = explain.get("actual_weight_kg")
+        volume_w = explain.get("volume_weight_kg")
+        billing_w = explain.get("billing_weight_kg")
+        if billing_w is None and actual_w is None:
+            wk = explain.get("weight_kg")
+            if wk is not None:
+                return wk, volume_w, wk
+        return actual_w, volume_w, billing_w
+
+    @staticmethod
+    def _aggregate_weights_from_rows(quote_rows: list[tuple[str, QuoteResult]]) -> tuple[Any, Any, Any]:
+        for _, r in quote_rows:
+            exp = r.explain if isinstance(r.explain, dict) else {}
+            a, v, b = QuoteReplyComposer._explain_weight_triple(exp)
+            if b is not None or a is not None:
+                return a, v, b
+        return None, None, None
+
     def compose_multi_courier_reply_segments(self, quote_rows: list[tuple[str, QuoteResult]]) -> list[str]:
         """组装多快递报价，返回分段消息列表（每个元素是一条独立消息）。"""
         if not quote_rows:
@@ -217,9 +258,9 @@ class QuoteReplyComposer:
             first_explain.get("matched_destination") or first_explain.get("normalized_destination") or "收件地"
         )
 
-        actual_w = first_explain.get("actual_weight_kg")
-        volume_w = first_explain.get("volume_weight_kg")
-        billing_w = first_explain.get("billing_weight_kg")
+        actual_w, volume_w, billing_w = self._aggregate_weights_from_rows(quote_rows)
+        if billing_w is None and actual_w is None:
+            actual_w, volume_w, billing_w = self._explain_weight_triple(first_explain)
 
         # --- Segment 1: header + price list + pick courier ---
         seg1_lines: list[str] = []

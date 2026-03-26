@@ -171,6 +171,10 @@ messages:
   context_memory_enabled: true
   context_memory_ttl_seconds: 3600
   manual_mode_timeout: 600
+  # 报价后催单：若买家在 grace 秒内发过消息则延后发送，避免与用户新消息“撞车”
+  quote_nudge_enabled: true
+  quote_nudge_delay_seconds: 300
+  quote_nudge_skip_if_buyer_active_seconds: 60
   courier_lock_template: '已为你锁定 {courier}（{price}，预计{eta_days}）。
 
     下单流程：

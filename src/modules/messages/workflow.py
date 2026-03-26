@@ -837,6 +837,9 @@ class WorkflowWorker:
         self.quote_nudge_enabled = bool(msg_cfg.get("quote_nudge_enabled", True))
         self.quote_nudge_delay_seconds = max(10, int(msg_cfg.get("quote_nudge_delay_seconds", 300)))
         self.quote_nudge_max_per_session = max(1, int(msg_cfg.get("quote_nudge_max_per_session", 1)))
+        self.quote_nudge_skip_if_buyer_active_seconds = max(
+            0, int(msg_cfg.get("quote_nudge_skip_if_buyer_active_seconds", 60))
+        )
 
         if self._notifier is None and bool(feishu_cfg.get("enabled", False)):
             webhook = str(feishu_cfg.get("webhook", "")).strip()
@@ -860,6 +863,49 @@ class WorkflowWorker:
         if job.session_id in unread_session_ids:
             self.logger.info(f"quote_nudge skipped (buyer replied): session_id={job.session_id}")
             return
+
+        grace_s = int(self.quote_nudge_skip_if_buyer_active_seconds)
+        if grace_s > 0:
+            ws = getattr(self.message_service, "_ws_transport", None)
+            fetch_fn = getattr(ws, "fetch_recent_messages", None) if ws is not None else None
+            my_id = str(getattr(ws, "my_user_id", "") or "") if ws is not None else ""
+            if callable(fetch_fn) and my_id:
+                try:
+                    recent = await fetch_fn(job.session_id, 12)
+                except Exception as exc:
+                    self.logger.debug("quote_nudge fetch_recent_messages failed: %s", exc)
+                    recent = []
+                now_ms = int(time.time() * 1000)
+                window_ms = grace_s * 1000
+                buyer_recent = False
+                for m in recent or []:
+                    sid = str(m.get("sender_id") or "")
+                    if not sid or sid == my_id:
+                        continue
+                    ts = int(m.get("timestamp") or 0)
+                    if ts > 0 and (now_ms - ts) <= window_ms:
+                        buyer_recent = True
+                        break
+                if buyer_recent:
+                    deferrals = int(job.payload.get("nudge_deferrals", 0))
+                    self.logger.info(
+                        "quote_nudge deferred (buyer active within %ds, deferral=%d): session_id=%s",
+                        grace_s,
+                        deferrals,
+                        job.session_id,
+                    )
+                    if not dry_run and deferrals < 3:
+                        delay = max(60, self.quote_nudge_delay_seconds // 2)
+                        self.store.enqueue_delayed_job(
+                            session_id=job.session_id,
+                            stage="quote_nudge",
+                            delay_seconds=delay,
+                            payload={
+                                "session_id": job.session_id,
+                                "nudge_deferrals": deferrals + 1,
+                            },
+                        )
+                    return
 
         session_data = self.store.get_session(job.session_id)
         if session_data:
