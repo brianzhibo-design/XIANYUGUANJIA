@@ -191,3 +191,7 @@ server/
 
 # Temporary diff files
 *.diff
+
+# 本地产物与 AI 助手笔记
+coverage.xml
+MEMORY.md

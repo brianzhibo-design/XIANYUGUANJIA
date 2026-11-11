@@ -2,7 +2,7 @@
 
 - 任务ID：XY-XIANGUANJIA-20260302-K
 - 时间：2026-03-02
-- 工作目录：`/Users/brianzhibo/Documents/New project/xianyu-openclaw`
+- 工作目录：`<项目根目录>`
 - 目标：基于最近提交，梳理“闲管家”可接入能力边界，并给出最小接入架构 + 分阶段落地计划
 
 ---

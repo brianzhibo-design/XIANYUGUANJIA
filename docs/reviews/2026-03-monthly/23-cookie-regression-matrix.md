@@ -2,7 +2,7 @@
 
 - 任务ID：XY-COOKIE-20260302-O
 - 目标：并行准备“自动续期”回归测试矩阵，支持主修后一键/半自动复测
-- 工作目录：`/Users/brianzhibo/Documents/New project/xianyu-openclaw`
+- 工作目录：`<项目根目录>`
 - 产出时间：2026-03-02
 
 ---

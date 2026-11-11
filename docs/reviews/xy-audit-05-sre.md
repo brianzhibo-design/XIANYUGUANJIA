@@ -1,7 +1,7 @@
 # XY-AUDIT-05 SRE发布与运行稳定性审查报告
 
 - 审查时间：2026-03-02（GMT+8）
-- 审查范围：`/Users/brianzhibo/Documents/New project/xianyu-openclaw`
+- 审查范围：`<项目根目录>`
 - 审查方式：只读（代码/文档/脚本/运行日志抽样）
 - 结论级别：**有条件通过（需补齐可观测与30分钟恢复手册）**
 

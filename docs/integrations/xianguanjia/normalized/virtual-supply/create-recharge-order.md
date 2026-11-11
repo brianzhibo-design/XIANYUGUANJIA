@@ -54,4 +54,4 @@
 超时/网络异常可重试3次；避免对同 `biz_order_no` 并发重试。
 
 ## 9. 文档来源(raw_html_path)
-- `raw_html_path`: `/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/1c920d368ea14d7c.html`
+- `raw_html_path`: `docs/external/xianguanjia/fullcrawl/raw/1c920d368ea14d7c.html`

@@ -160,7 +160,7 @@
 
 ## 7. 模块可执行测试清单（可直接复制执行）
 
-> 建议均在项目根目录执行：`/Users/brianzhibo/Documents/New project/xianyu-openclaw`
+> 建议均在项目根目录执行：`<项目根目录>`
 
 ### 7.1 通用门禁
 ```bash

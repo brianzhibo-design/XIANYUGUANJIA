@@ -73,5 +73,5 @@
 - 超过重试上限后转人工排查，并保留请求/响应日志用于对账。
 
 ## 9. 文档来源(raw_html_path)
-- 接口raw：`/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/02ed8480b69042ee.html`
-- 接入说明（签名规则）raw：`/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/47ceb03ae799d64d.html`
+- 接口raw：`docs/external/xianguanjia/fullcrawl/raw/02ed8480b69042ee.html`
+- 接入说明（签名规则）raw：`docs/external/xianguanjia/fullcrawl/raw/47ceb03ae799d64d.html`

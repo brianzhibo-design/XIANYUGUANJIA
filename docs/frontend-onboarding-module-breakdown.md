@@ -20,7 +20,7 @@
 
 ## 2. 已实现的首次引导
 
-当前首次引导由 [client/src/components/SetupGuide.jsx](/Users/peterzhang/xianyu-openclaw/client/src/components/SetupGuide.jsx) 提供，嵌在 [client/src/pages/Dashboard.jsx](/Users/peterzhang/xianyu-openclaw/client/src/pages/Dashboard.jsx)。
+当前首次引导由 [client/src/components/SetupGuide.jsx](../client/src/components/SetupGuide.jsx) 提供，嵌在 [client/src/pages/Dashboard.jsx](../client/src/pages/Dashboard.jsx)。
 
 它会检查 5 项：
 

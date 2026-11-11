@@ -3,7 +3,7 @@
 - 任务ID：XY-LITE-20260302-B（优先级切换后：Cookie续期自动化专项）
 - 执行时间：2026-03-02 14:02 ~ 14:04 (Asia/Shanghai)
 - 执行人：暖羊羊（QA）
-- 环境：`/Users/brianzhibo/Documents/New project/xianyu-openclaw`
+- 环境：`<项目根目录>`
 
 ## 1. 测试目标
 验证以下链路在“Cookie失效”场景下的自动化行为：

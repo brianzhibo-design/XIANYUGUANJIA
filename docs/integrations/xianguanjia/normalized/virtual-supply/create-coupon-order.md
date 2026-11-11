@@ -53,4 +53,4 @@
 仅重试超时/5xx，参数或鉴权错误直接失败。
 
 ## 9. 文档来源(raw_html_path)
-- `raw_html_path`: `/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/3b21f385b9978974.html`
+- `raw_html_path`: `docs/external/xianguanjia/fullcrawl/raw/3b21f385b9978974.html`

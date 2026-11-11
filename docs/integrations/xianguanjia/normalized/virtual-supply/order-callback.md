@@ -55,4 +55,4 @@
 - 回包固定：`{"code":0,"msg":"OK"}`。
 
 ## 9. 文档来源(raw_html_path)
-- `raw_html_path`: `/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/3ab35f4b476f8e42.html`
+- `raw_html_path`: `docs/external/xianguanjia/fullcrawl/raw/3ab35f4b476f8e42.html`

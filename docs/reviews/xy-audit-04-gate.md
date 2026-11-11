@@ -1,7 +1,7 @@
 # XY-AUDIT-04 总验收门禁审查报告（慢羊羊总审）
 
 - 审查时间：2026-03-02（GMT+8）
-- 审查范围：`/Users/brianzhibo/Documents/New project/xianyu-openclaw`
+- 审查范围：`<项目根目录>`
 - 审查方式：只读审查（制度、证据链、自动化可观测性与回滚门禁）
 
 ---
