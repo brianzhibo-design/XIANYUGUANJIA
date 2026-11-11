@@ -98,9 +98,9 @@
 - 列表查询建议短超时+多次快速失败，避免阻塞全量同步流水线。
 
 ## 9. 文档来源(raw_html_path)
-- 接口raw：`/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/f9e712aa600d69b6.html`
-- 接入说明（签名规则）raw：`/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/47ceb03ae799d64d.html`
-- URL映射清单：`/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/meta/manifest.json`
+- 接口raw：`docs/external/xianguanjia/fullcrawl/raw/f9e712aa600d69b6.html`
+- 接入说明（签名规则）raw：`docs/external/xianguanjia/fullcrawl/raw/47ceb03ae799d64d.html`
+- URL映射清单：`docs/external/xianguanjia/fullcrawl/meta/manifest.json`
 
 ## 10. 阻塞标记建议（供 DOC-MAP）
 - 建议值：`status=blocked_raw_missing`

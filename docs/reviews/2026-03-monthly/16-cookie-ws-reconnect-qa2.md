@@ -3,7 +3,7 @@
 - 任务ID：XY-COOKIE-20260302-H
 - 执行时间：2026-03-02 14:23 ~ 14:24 (Asia/Shanghai)
 - 执行人：暖羊羊（QA）
-- 工作目录：`/Users/brianzhibo/Documents/New project/xianyu-openclaw`
+- 工作目录：`<项目根目录>`
 
 ## 1) 复测目标与输入
 基于既有失败证据 `tmp/qa/cookie_renewal_evidence.json` 复用同类注入标记（`qa-injected` / `qa-injected-2`）构造回归场景，验证以下4项：

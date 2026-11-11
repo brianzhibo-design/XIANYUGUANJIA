@@ -1,7 +1,7 @@
 # 编辑商品
 
 ## raw_html_path
-`/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/159ee146ada677e6.html`
+`docs/external/xianguanjia/fullcrawl/raw/159ee146ada677e6.html`
 
 ## method
 `POST`

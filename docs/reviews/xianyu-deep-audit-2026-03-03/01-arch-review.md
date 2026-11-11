@@ -2,7 +2,7 @@
 
 ## 0. 审查范围与证据
 
-- 审查对象：`/Users/brianzhibo/Library/Mobile Documents/com~apple~CloudDocs/Documents/文稿 - brianzhibo的Mac mini/New project/xianyu-openclaw`
+- 审查对象：`<项目根目录>`
 - 重点覆盖：模块边界、依赖耦合、并发/状态一致性、错误恢复、可扩展性、技术债
 - 证据方式：基于源码行号 + 可执行命令输出
 

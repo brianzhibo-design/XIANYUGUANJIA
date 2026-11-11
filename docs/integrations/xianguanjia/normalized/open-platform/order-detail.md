@@ -90,9 +90,9 @@
 - 重试采用指数退避+随机抖动，避免查单风暴。
 
 ## 9. 文档来源(raw_html_path)
-- 接口raw：`/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/ebc0c67812236f8f.html`
-- 接入说明（签名规则）raw：`/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/47ceb03ae799d64d.html`
-- URL映射清单：`/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/meta/manifest.json`
+- 接口raw：`docs/external/xianguanjia/fullcrawl/raw/ebc0c67812236f8f.html`
+- 接入说明（签名规则）raw：`docs/external/xianguanjia/fullcrawl/raw/47ceb03ae799d64d.html`
+- URL映射清单：`docs/external/xianguanjia/fullcrawl/meta/manifest.json`
 
 ## 10. 阻塞标记建议（供 DOC-MAP）
 - 建议值：`status=blocked_raw_missing`

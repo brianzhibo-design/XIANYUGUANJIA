@@ -1,7 +1,7 @@
 # 下架商品
 
 ## raw_html_path
-`/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/cf54d8730915a865.html`
+`docs/external/xianguanjia/fullcrawl/raw/cf54d8730915a865.html`
 
 ## method
 `POST`

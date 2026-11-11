@@ -57,4 +57,4 @@
 - 使用指数退避：1s/2s/4s，最多3次；超限改为查单+等回调。
 
 ## 9. 文档来源(raw_html_path)
-- `raw_html_path`: `/Users/brianzhibo/openclaw/xianyu-openclaw/docs/external/xianguanjia/fullcrawl/raw/7c2913e6930c682c.html`
+- `raw_html_path`: `docs/external/xianguanjia/fullcrawl/raw/7c2913e6930c682c.html`
